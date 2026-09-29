@@ -8,7 +8,7 @@ Definições oficiais: `.claude/agents/*.md` (subagentes do Claude Code) e `.cla
 
 | Agente | Especialização | Escreve em |
 |---|---|---|
-| `art-director` | Direção artística, materiais, ambiente de luz, UI nativa | `src/style/**`, `src/ui/**`, `assets/fonts/**`, `icon.svg`, `icon.png`, `docs/VISUAL_DIRECTION.md` |
+| `art-director` | Direção artística, materiais, ambiente de luz, UI nativa | `src/style/**`, `src/ui/**`, `tests/unit/test_ui_*.gd`, `assets/fonts/**`, `icon.svg`, `icon.png`, `docs/VISUAL_DIRECTION.md` |
 | `game-engineer` | Engenharia de jogos 3D, eventos, mundo, qualidade, build | `project.godot`, `export_presets.cfg`, `scenes/**`, `src/core/**`, `src/events/**`, `src/world/**`, `tools/**`, `tests/integration/**`, `tests/unit/test_event_system.gd`, `tests/unit/test_quality_profiles.gd`, `licenses/**`, `.gitignore`, `.gitattributes`, `.gutconfig.json`, `docs/ARCHITECTURE.md`, `docs/ENGINE.md`, `docs/DEMO_EVENTS.md`, `docs/BUILD.md` |
 | `procedural-modeler` | Modelagem procedural | `src/procedural/**`, `tests/unit/test_procedural_*.gd`, `docs/PROCEDURAL.md` |
 | `animator` | Câmeras, animação por eventos, VFX | `src/animation/**`, `src/entities/**`, `src/fx/**`, `tests/unit/test_animation_*.gd`, `docs/ANIMATION.md` |
@@ -17,7 +17,10 @@ Definições oficiais: `.claude/agents/*.md` (subagentes do Claude Code) e `.cla
 
 Nota operacional: o Claude Code registra os subagentes de `.claude/agents/` no início da sessão.
 Na sessão em que foram criados, as funções foram executadas por subagentes genéricos instruídos a
-seguir integralmente o arquivo do agente (inclusive a proibição de escrita do auditor).
+seguir integralmente o arquivo do agente (inclusive a proibição de escrita do auditor); após o reinício
+do contêiner os tipos nativos (`art-director`, `game-engineer`, `procedural-modeler`, `animator`,
+`technical-auditor`) passaram a ser usados diretamente, cada implementação numa worktree Git isolada
+e integrada por merge pelo coordenador.
 
 Regras: nenhum agente edita área alheia; delegações paralelas só entre áreas disjuntas;
 quem implementa não aprova a própria entrega (o `technical-auditor` aprova).
