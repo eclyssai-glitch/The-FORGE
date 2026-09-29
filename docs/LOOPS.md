@@ -123,4 +123,4 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
 - Retomada: ver o estado das fases abaixo; worktrees de agentes interrompidos sem commits podem ser removidas e
   relançadas a partir do contrato.
 - Estado: Fase A — game-engineer integrado (`e854114`, 217/217, smoke PASS nos dois cenários; ADR-014);
-  art-director integrado (`b90a604`, 231/231); procedural-modeler e sound-designer em andamento.
+  art-director e sound-designer integrados (245/245); procedural-modeler em andamento.

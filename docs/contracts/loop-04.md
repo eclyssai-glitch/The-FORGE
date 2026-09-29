@@ -139,3 +139,8 @@ rótulos diegéticos em destaque.
   seção 4 da bíblia). Céu: atualizar `motion_time` do sky ≤ 5 Hz (radiância). Órbitas/fios: fitas cruzadas ou tubos
   finos. Ressalvas para a Fase B: kintsugi uniforme demais (poucas bordas devem ser ouro), magma inicial com leitura
   de "mancha", planeta herói carregado; crosta distante regular.
+- Fase A · sound-designer integrado: `AudioDirector` (`src/audio/audio_director.gd`), buses em
+  `default_bus_layout.tres`, 15 OGG originais (2,2 MB) em `assets/audio/`, prova em `tools/audio/proof/`.
+  Fase B: `world.gd` compõe o AudioDirector por caminho e registra âncoras `set_anchor(&"planet"|&"miku"|&"hands",
+  node)`; remix contra o timing real; o grave (50–300 Hz) está denso e constante na mix de prova — abrir espaço;
+  investigar "4 resources still in use at exit" observado na gravação de prova.
