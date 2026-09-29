@@ -6,7 +6,21 @@ extends Node3D
 ## while dormant). Levels per story stage (EnvironmentProfile.LIGHT) are blended by
 ## Choreography.light_levels from the world timestamps, so seek/pause are always consistent.
 ## `environment` (set by the world before add_child) receives ambient, exposure and
-## volumetric fog density of the stage. Every light gets EnvironmentProfile.FOG_LIGHT.
+## volumetric fog density of the stage; exposure is scaled per Session mode by
+## EnvironmentProfile.mode_fog(mode)["exposure_scale"]. The Environment is only written when a
+## value changes (a steady stage costs no resource updates). Every light gets
+## EnvironmentProfile.FOG_LIGHT. Key shadow splits follow Quality.profile["shadow_splits"].
+
+## Core light: reach and falloff (the core lights the inner faces of the rings and fades before
+## the outer walls; the key lights the outside), and a low specular so the metal does not show a
+## hot point where the core reflects.
+const CORE_RANGE := 12.0
+const CORE_ATTENUATION := 2.2
+const CORE_SPECULAR := 0.35
+## Key shadow: normal bias and blur keep the rings free of acne and the edges soft.
+const KEY_SHADOW_NORMAL_BIAS := 2.0
+const KEY_SHADOW_BLUR := 1.8
+const KEY_SHADOW_MAX_DISTANCE := 40.0
 
 var environment: Environment
 
@@ -16,6 +30,10 @@ var rim: DirectionalLight3D
 var core: OmniLight3D
 
 var _levels := {}
+## Exposure multiplier of the current Session mode (read on mode change, not per frame).
+var _exposure_scale := 1.0
+## Last values written to the Environment (ambient, exposure, fog density).
+var _env_written := Vector3(-1.0, -1.0, -1.0)
 
 
 func _ready() -> void:
@@ -27,17 +45,17 @@ func _ready() -> void:
 	core = OmniLight3D.new()
 	core.name = "CoreLight"
 	core.light_color = EnvironmentProfile.CORE_COLOR
-	# Short reach: the core lights the inner faces of the rings, the key lights the outside.
-	core.omni_range = 8.0
-	core.omni_attenuation = 1.5
+	core.omni_range = CORE_RANGE
+	core.omni_attenuation = CORE_ATTENUATION
 	core.light_energy = 0.0
-	core.light_specular = 0.6
+	core.light_specular = CORE_SPECULAR
 	core.shadow_enabled = false
 	core.light_volumetric_fog_energy = float(EnvironmentProfile.FOG_LIGHT["core"])
 	add_child(core)
 	Quality.profile_changed.connect(_on_quality)
 	_on_quality(Quality.profile)
-	_update()
+	Session.mode_changed.connect(_on_mode_changed)
+	_on_mode_changed(Session.mode)
 
 
 func _process(_delta: float) -> void:
@@ -55,10 +73,30 @@ func _update() -> void:
 	core.light_energy = float(_levels["core"]) * (0.82 + 0.3 * pulse)
 	core.visible = core.light_energy > 0.001
 	key.visible = key.light_energy > 0.001
-	if environment:
-		environment.ambient_light_energy = _levels["ambient"]
-		environment.tonemap_exposure = _levels["exposure"]
-		environment.volumetric_fog_density = _levels["fog"]
+	if environment == null:
+		return
+	var env_now := Vector3(_levels["ambient"], float(_levels["exposure"]) * _exposure_scale, _levels["fog"])
+	if env_now.is_equal_approx(_env_written):
+		return
+	_env_written = env_now
+	environment.ambient_light_energy = env_now.x
+	environment.tonemap_exposure = env_now.y
+	environment.volumetric_fog_density = env_now.z
+
+
+## Tonemap exposure multiplier of a Session mode (EnvironmentProfile.mode_fog, default 1).
+static func exposure_scale_for(mode: int) -> float:
+	return float(EnvironmentProfile.mode_fog(mode).get("exposure_scale", 1.0))
+
+
+## Last values written to the Environment: (ambient, exposure, volumetric fog density).
+func environment_written() -> Vector3:
+	return _env_written
+
+
+func _on_mode_changed(mode: int) -> void:
+	_exposure_scale = exposure_scale_for(mode)
+	_update()
 
 
 func _directional(n: String, color: Color, dir: Vector3, fog_key: String) -> DirectionalLight3D:
@@ -75,8 +113,20 @@ func _directional(n: String, color: Color, dir: Vector3, fog_key: String) -> Dir
 func _on_quality(profile: Dictionary) -> void:
 	var shadows := bool(profile.get("shadows", true))
 	key.shadow_enabled = shadows
-	key.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	key.directional_shadow_max_distance = 40.0
-	key.shadow_blur = 1.2
+	key.directional_shadow_mode = shadow_mode_for(int(profile.get("shadow_splits", 4)))
+	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DISTANCE
+	key.shadow_normal_bias = KEY_SHADOW_NORMAL_BIAS
+	key.shadow_blur = KEY_SHADOW_BLUR
 	rim.shadow_enabled = false
 	fill.shadow_enabled = false
+
+
+## DirectionalLight3D shadow mode for a number of PSSM splits (1, 2 or 4; anything else -> 4).
+static func shadow_mode_for(splits: int) -> DirectionalLight3D.ShadowMode:
+	match splits:
+		1:
+			return DirectionalLight3D.SHADOW_ORTHOGONAL
+		2:
+			return DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+		_:
+			return DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS

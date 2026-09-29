@@ -52,14 +52,47 @@ func test_forge_framing() -> void:
 	assert_lt(_project(s, far).y, 0.25)
 
 
-func test_universe_is_far_out() -> void:
+func test_universe_is_far_out_and_between_pillars() -> void:
 	var s := CameraShots.mode_shot(Mode.UNIVERSE, _shot())
-	assert_gt(s.distance, 30.0 * 1.4, "dormant seeds at 18–30 units fit around the chamber")
-	# A seed 30 units from the centre, in any horizontal direction, stays in front of the camera.
-	for i in 12:
-		var a := TAU * i / 12.0
-		var p := _project(s, Vector3(sin(a) * 30.0, 0.0, cos(a) * 30.0))
-		assert_gt(p.z, 0.0, "seed direction %d in front of the camera" % i)
+	var lim: Vector2 = CameraShots.DISTANCE_LIMITS[Mode.UNIVERSE]
+	assert_between(s.distance, lim.x, lim.y, "inside the UNIVERSE distance limits")
+	var flat := Vector2(s.position().x, s.position().z).length()
+	assert_gt(flat, ChamberArchitecture.PILLAR_RADIUS + 20.0, "camera stands well outside the pillar ring")
+	# Between pillars: the yaw is at least 40 % of the half gap away from every pillar.
+	var half_gap := PI / float(ChamberArchitecture.PILLAR_COUNT)
+	for p in ChamberArchitecture.PILLAR_COUNT:
+		var d := absf(angle_difference(s.yaw, ChamberArchitecture.pillar_angle(p)))
+		assert_gt(d, half_gap * 0.4, "yaw clear of pillar %d" % p)
+
+
+func test_universe_frames_chamber_among_seeds() -> void:
+	var s := CameraShots.mode_shot(Mode.UNIVERSE, _shot())
+	var chamber := _project(s, Vector3.ZERO)
+	assert_between(chamber.x, -0.15, 0.15, "chamber near the horizontal centre")
+	assert_between(chamber.y, -0.4, 0.1, "chamber in the lower middle")
+	var xs: Array[float] = []
+	for seed_def: Dictionary in Universe.SEEDS:
+		var p := _project(s, Universe.seed_base_position(seed_def))
+		assert_gt(p.z, 0.0, "%s in front of the camera" % seed_def["id"])
+		assert_between(p.x, -0.9, 0.9, "%s inside the frame (x)" % seed_def["id"])
+		assert_between(p.y, chamber.y + 0.05, 0.9, "%s inside the frame, above the chamber" % seed_def["id"])
+		xs.append(p.x)
+	xs.sort()
+	assert_lt(xs[0], chamber.x, "a seed on the left of the chamber")
+	assert_gt(xs[xs.size() - 1], chamber.x, "a seed on the right of the chamber")
+	# No near pillar reaches the structure on screen: every pillar in front of the chamber has its
+	# top below the structure's lower edge (or stays clear of it horizontally).
+	var bottom := _project(s, Vector3(0.0, -_structure_h * 0.5, 0.0)).y
+	# Half width of the structure on screen: a point at the widest ring radius, camera-right.
+	var right := Vector3(cos(s.yaw), 0.0, -sin(s.yaw))
+	var half_w := absf(_project(s, right * 3.2).x - chamber.x)
+	for p in ChamberArchitecture.PILLAR_COUNT:
+		var xf := ChamberArchitecture.pillar_transform(p)
+		var top := _project(s, xf.origin + Vector3(0.0, ChamberArchitecture.PILLAR_SIZE.y * 0.5, 0.0))
+		if top.z >= chamber.z:
+			continue
+		var clear_x := absf(top.x - chamber.x) > half_w
+		assert_true(clear_x or top.y < bottom, "near pillar %d does not cut the structure" % p)
 
 
 func test_observatory_pushes_subject_right() -> void:
