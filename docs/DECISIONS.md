@@ -56,6 +56,14 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
   poeira) usa tempo real e continua durante a pausa. Documentado em `docs/ANIMATION.md`.
 - Consequência: capturas iguais em estado narrativo, com pequenas variações de pixel do movimento ambiente.
 
+## ADR-011 — Transições de câmera no relógio de parede
+- Contexto: o Godot limita o delta por frame (8/60 s); com frames lentos (ex.: renderização por software,
+  ~0,4 s/frame) um `Tween` corria ~3× mais devagar que o tempo real, e o foco não assentava no tempo previsto.
+- Decisão: o CameraDirector mistura planos com a mesma curva (`Tween.interpolate_value`, sine in-out,
+  `Palette.T_CINEMATIC`) avaliada sobre `Time.get_ticks_msec()`. Atualiza a ADR-003 (Camera3D + curvas nativas;
+  o nó Tween continua para a UI).
+- Consequência: duração real idêntica em qualquer máquina; em hardware normal o resultado é o mesmo de um Tween.
+
 ## ADR-007 — Validação do executável Windows
 - Contexto: no contêiner Linux, o Wine disponível (9.0) aborta em qualquer binário Godot 4.7.2 antes
   do `main`: o runtime MinGW chama `VirtualProtect(..., lpflOldProtect=NULL)`, que o Windows
