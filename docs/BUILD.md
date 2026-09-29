@@ -90,6 +90,8 @@ drivers gráficos do Windows, janela) só é validado pelo checklist abaixo, num
 
 ## Builds registradas
 
-| Versão | Commit de origem | Zip | SHA-256 |
-|---|---|---|---|
-| (`.exe` e zip são reproduzíveis por commit — ver *Reprodutibilidade*; hashes registrados por commit de origem) | | | |
+`.exe` e zip são reproduzíveis por commit (ver *Reprodutibilidade*); hashes registrados por commit de origem.
+
+| Versão | Commit de origem | Zip (bytes) | SHA-256 do zip | SHA-256 do `.exe` | Smoke | Reproduzido em checkout limpo |
+|---|---|---|---|---|---|---|
+| 0.1.0 | `214a02a` | `KoriumUniverse-0.1.0-windows-x86_64.zip` (38 716 033) | `26af2ef57f95b72d23f2a066b7f9ffdb36baf136f0330166648855e1a0c1e95f` | `a4fcdc5b4c7d0eaab2029405babe9aa12e9107601745b578eca4d86f27ec6a81` | smoke do pack PASS (modules 9/9, ui=present, selo 3/3) | sim |
