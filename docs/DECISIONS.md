@@ -64,6 +64,15 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
   o nó Tween continua para a UI).
 - Consequência: duração real idêntica em qualquer máquina; em hardware normal o resultado é o mesmo de um Tween.
 
+## ADR-012 — Export Windows determinístico
+- Contexto: com `editor/export/convert_text_resources_to_binary=true` (padrão), o export converte cada `.tscn`
+  em `.scn` gravando IDs de nó aleatórios (as cenas não têm `unique_id=`); dois checkouts limpos do mesmo commit
+  geravam `.exe` diferentes. Um arquivo de licença com CRLF na cópia de trabalho também divergia do commit.
+- Decisão: `project.godot` → `editor/export/convert_text_resources_to_binary=false` (cenas vão ao PCK como texto
+  versionado; scripts continuam como tokens). Cópia de trabalho normalizada para LF (`.gitattributes eol=lf`).
+- Consequência: mesmo commit → `.exe` e zip idênticos byte a byte (verificado em dois checkouts limpos + re-export);
+  o hash do zip depende do horário do commit (timestamps fixos = data do commit); o do `.exe`, não.
+
 ## ADR-007 — Validação do executável Windows
 - Contexto: no contêiner Linux, o Wine disponível (9.0) aborta em qualquer binário Godot 4.7.2 antes
   do `main`: o runtime MinGW chama `VirtualProtect(..., lpflOldProtect=NULL)`, que o Windows
