@@ -51,6 +51,13 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
     `game-engineer` → `src/world` (composição, universo, seleção, qualidade no ambiente).
   - Fase C: integração, capturas de todas as fases, revisão do `art-director`, auditoria do
     `technical-auditor`, correções pelos donos, checkpoint.
-- Retomada: verificar `git log` por commits "loop 02:" de cada área; continuar pela fase seguinte.
+- Progresso:
+  - Fase A concluída e integrada: `procedural-modeler` (89281af — blueprint de 5 anéis/96 segmentos,
+    12 nervuras, builders de malha; 34 testes novos) e `art-director` (1453376 — MaterialLibrary, 5 shaders,
+    EnvironmentProfile com luz por estágio; regra do selo e do núcleo dormente). Suíte: 57/57.
+    Provas visuais revisadas pelo coordenador (estrutura "lanterna" arquitetônica; metal escuro com arcos EMBER finos).
+  - Fase B em andamento: `animator` e `game-engineer` em worktrees paralelas.
+- Retomada: se interrompido, verificar branches `worktree-agent-*` com commits "loop 02:" e fazer merge;
+  depois Fase C (capturas de todas as fases, revisão art-director, auditoria).
 
 ## Loop 3 — Experiência interativa + build Windows · pendente
