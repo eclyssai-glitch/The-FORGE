@@ -13,7 +13,9 @@ extends RefCounted
 ## Composition (docs/VISUAL_DIRECTION.md, docs/ANIMATION.md):
 ## - FORGE: the structure fills ~55 % of the frame height, the core slightly above the optical
 ##   centre, low horizon.
-## - UNIVERSE: far out — the chamber is a warm point among cold dormant seeds 18–30 units away.
+## - UNIVERSE: far out, from outside the pillar ring and between two pillars — the chamber is a
+##   warm point in the lower middle, the cold dormant seeds (src/world/universe.gd SEEDS, 62–70
+##   units beyond the chamber) spread around it higher in the frame.
 ## - OBSERVATORY: high and oblique, subject pushed right (native panel takes ~38 % on the left).
 
 ## Floor of the chamber (world Y) and the minimum camera clearance above it.
@@ -68,6 +70,14 @@ class Shot extends RefCounted:
 
 ## Base yaw of the FORGE shot (a slight three-quarter view reads the rings as volumes).
 const FORGE_YAW := 0.42
+## UNIVERSE shot. Yaw sits exactly between two pillars (pillar p stands at TAU·(p + 0.5)/24, so
+## multiples of TAU/24 fall in the gaps): 2·TAU/24 looks from the gap facing the three seeds.
+## Pitched high enough that the near pillars' tops stay below the structure on screen.
+const UNIVERSE_YAW := TAU * 2.0 / 24.0
+const UNIVERSE_PITCH := 0.42
+const UNIVERSE_DISTANCE := 90.0
+const UNIVERSE_FOV := 40.0
+const UNIVERSE_TARGET := Vector3(0.0, 3.0, 0.0)
 ## Slow orbit while the structure is built (rad/s of sim time), and during the final reveal.
 const BUILD_ORBIT := 0.011
 const FINAL_ORBIT := 0.05
@@ -77,7 +87,7 @@ const FINAL_ORBIT := 0.05
 static func mode_shot(mode: int, out: Shot) -> Shot:
 	match mode:
 		SessionState.Mode.UNIVERSE:
-			return out.setup(Vector3(0.0, 1.0, 0.0), 0.62, 0.38, 52.0, 44.0)
+			return out.setup(UNIVERSE_TARGET, UNIVERSE_YAW, UNIVERSE_PITCH, UNIVERSE_DISTANCE, UNIVERSE_FOV)
 		SessionState.Mode.OBSERVATORY:
 			return out.setup(Vector3(0.0, -0.3, 0.0), -0.62, 0.62, 14.5, 40.0, 0.38)
 		_:

@@ -10,7 +10,9 @@ extends Node3D
 ## a snapshot to the live goal, so moving goals (orbits) stay smooth. After Simulation.seek/reset
 ## (`world_rebuilt`) the camera snaps to the goal without a tween.
 ## Input (unhandled, so the UI consumes first): drag with left/right button = orbit, wheel = zoom,
-## WASD = fly (UNIVERSE), `camera_reset` = back to the mode shot. Input suspends cues for
+## WASD = fly (UNIVERSE), `camera_reset` = back to the mode shot. A press only orbits once its
+## accumulated travel is a drag for InputTuning.is_drag — the same threshold the Picker uses, so
+## a press is either a click or an orbit, never both. Input suspends cues for
 ## USER_HOLD seconds; outside a cue the user's framing stays until reset or mode change.
 ## Group "camera_director": automation calls snap_to_mode_shot() after each seek/mode change.
 
@@ -21,8 +23,6 @@ const USER_HOLD := 6.0
 const ORBIT_PER_PIXEL := 0.0055
 const ZOOM_STEP := 1.1
 const FLY_SPEED := 0.5
-## Mouse travel (px) before a press becomes a drag (a plain click is left to the Picker).
-const DRAG_THRESHOLD := 3.0
 
 var camera: Camera3D
 
@@ -73,6 +73,11 @@ func reset_to_mode_shot() -> void:
 	_begin_transition()
 
 
+## Accumulated pointer travel (px) of the current left/right press; -1 when no press.
+func press_travel() -> float:
+	return _press_travel
+
+
 ## Current rig (read-only use: HUD/debug/tests).
 func rig() -> CameraShots.Shot:
 	return _rig
@@ -109,7 +114,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _press_travel < 0.0 or (mm.button_mask & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT)) == 0:
 			return
 		_press_travel += mm.relative.length()
-		if _press_travel < DRAG_THRESHOLD:
+		if not InputTuning.is_drag(_press_travel):
 			return
 		_take_control()
 		_rig.yaw -= mm.relative.x * ORBIT_PER_PIXEL

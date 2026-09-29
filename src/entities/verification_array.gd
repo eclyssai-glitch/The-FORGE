@@ -11,10 +11,10 @@ extends Node3D
 const ENTITY_ID := &"verification_array"
 ## Radius clears the widest ring (3.05) with room for the band.
 const RADIUS := 3.42
-const BAND_WIDTH := 0.24
+const BAND_WIDTH := 0.16
 const HIGHLIGHT_ENERGY := 0.5
-## The band is the brightest PALE element: capped so the glow stays contained.
-const BAND_LEVEL := 0.7
+## The band is the brightest PALE element: capped so it reads as a calm scan line, not a bloom.
+const BAND_LEVEL := 0.5
 
 var ring: MeshInstance3D
 var band: MeshInstance3D

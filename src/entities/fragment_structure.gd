@@ -73,8 +73,9 @@ func _process(delta: float) -> void:
 	_update(delta)
 
 
-## Last INSTANCE_CUSTOM written for global segment i (r assembly, g flash, b highlight,
-## a build energy). Mirrors the MultiMesh buffer (readable headless, for tests and debug).
+## INSTANCE_CUSTOM of global segment i for the current (world, time) as last written (r assembly,
+## g flash, b highlight, a build energy; all zero before FRAGMENTS_EMITTED). Mirrors the
+## MultiMesh buffer (readable headless, for tests and debug).
 func segment_state(i: int) -> Color:
 	return _custom_cache[i]
 
@@ -229,14 +230,6 @@ func _update_layer(l: int, w: WorldState, t: float, rt: float, delta: float, twi
 		_layer_pick_on[l] = pick_on
 		_layer_shapes[l].set_deferred("disabled", not seated)
 
-	if not emitted:
-		for k in n:
-			var i0 := first + k
-			if _frag_pick_on[i0] != 0:
-				_frag_pick_on[i0] = 0
-				_frag_shapes[i0].set_deferred("disabled", true)
-		return
-
 	var id := OriginChamberScript.layer_entity(l)
 	var hl_target := 1.0 if Session.selected == id else (0.55 if Session.hovered == id else 0.0)
 	_layer_hl[l] = _approach(_layer_hl[l], hl_target, delta)
@@ -247,13 +240,23 @@ func _update_layer(l: int, w: WorldState, t: float, rt: float, delta: float, twi
 
 	for k in n:
 		var i := first + k
-		var a := Choreography.assembly(k, n, layer_at, t)
-		# Field highlight: loose fragments, or the whole construct once nothing is loose.
-		var hl := maxf(_layer_hl[l], _field_hl if (a < 1.0 or not any_loose) else 0.0)
-		var custom := Color(a, flash, hl, Choreography.build_energy(k, n, layer_at, t))
+		# Instance state is written for every (world, time), also before FRAGMENTS_EMITTED
+		# (hidden, all zero), so segment_state() never keeps a value from another instant.
+		var custom := Color(0.0, 0.0, 0.0, 0.0)
+		var a := 0.0
+		if emitted:
+			a = Choreography.assembly(k, n, layer_at, t)
+			# Field highlight: loose fragments, or the whole construct once nothing is loose.
+			var hl := maxf(_layer_hl[l], _field_hl if (a < 1.0 or not any_loose) else 0.0)
+			custom = Color(a, flash, hl, Choreography.build_energy(k, n, layer_at, t))
 		if force or not custom.is_equal_approx(_custom_cache[i]):
 			_custom_cache[i] = custom
 			mm.set_instance_custom_data(k, custom)
+		if not emitted:
+			if _frag_pick_on[i] != 0:
+				_frag_pick_on[i] = 0
+				_frag_shapes[i].set_deferred("disabled", true)
+			continue
 		if a >= 1.0:
 			if twist_changed or _moving[i] != 0:
 				mm.set_instance_transform(k, blueprint.segment_transform(i, twist))

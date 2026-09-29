@@ -5,7 +5,9 @@ extends Node3D
 ## under the structure. Owner: animator (materials from MaterialLibrary). The pillars stand
 ## beyond the FORGE camera limit (CameraShots.DISTANCE_LIMITS) so they never block the view;
 ## depth fog dissolves them. The floor inlay rises with the chamber light (lit stage).
-## Selection: the floor is a StaticBody3D (layer 2), meta entity_id = &"origin_chamber".
+## Selection: the built architecture — pillars and oculus — is one StaticBody3D (layer 2), meta
+## entity_id = &"origin_chamber". The floor is deliberately NOT pickable: it lies under every
+## FORGE view, so a click on empty space must reach nothing and clear the selection.
 
 const ENTITY_ID := &"origin_chamber"
 const FLOOR_Y := CameraShots.FLOOR_Y
@@ -53,9 +55,7 @@ func _ready() -> void:
 	mm.mesh = box
 	mm.instance_count = PILLAR_COUNT
 	for p in PILLAR_COUNT:
-		var a := TAU * (float(p) + 0.5) / float(PILLAR_COUNT)
-		var pos := Vector3(sin(a) * PILLAR_RADIUS, FLOOR_Y + PILLAR_SIZE.y * 0.5, cos(a) * PILLAR_RADIUS)
-		mm.set_instance_transform(p, Transform3D(Basis(Vector3.UP, a), pos))
+		mm.set_instance_transform(p, pillar_transform(p))
 	pillars = MultiMeshInstance3D.new()
 	pillars.name = "Pillars"
 	pillars.multimesh = mm
@@ -85,15 +85,31 @@ func _ready() -> void:
 	body.collision_layer = 2
 	body.collision_mask = 0
 	body.set_meta("entity_id", ENTITY_ID)
-	var shape := CollisionShape3D.new()
-	var slab := CylinderShape3D.new()
-	slab.radius = FLOOR_RADIUS
-	slab.height = 0.2
-	shape.shape = slab
-	shape.position.y = FLOOR_Y - 0.1
-	body.add_child(shape)
+	var pillar_shape := BoxShape3D.new()
+	pillar_shape.size = PILLAR_SIZE
+	for p in PILLAR_COUNT:
+		var shape := CollisionShape3D.new()
+		shape.shape = pillar_shape
+		shape.transform = pillar_transform(p)
+		body.add_child(shape)
+	var ring_shape := CollisionShape3D.new()
+	ring_shape.shape = oculus.mesh.create_trimesh_shape()
+	ring_shape.position = oculus.position
+	body.add_child(ring_shape)
 	add_child(body)
 	_update(0.0)
+
+
+## Pose of pillar p: on the ring of PILLAR_RADIUS at TAU·(p + 0.5)/PILLAR_COUNT, standing on the floor.
+static func pillar_transform(p: int) -> Transform3D:
+	var a := pillar_angle(p)
+	var pos := Vector3(sin(a) * PILLAR_RADIUS, FLOOR_Y + PILLAR_SIZE.y * 0.5, cos(a) * PILLAR_RADIUS)
+	return Transform3D(Basis(Vector3.UP, a), pos)
+
+
+## Yaw of pillar p around +Y from +Z (the CameraShots convention).
+static func pillar_angle(p: int) -> float:
+	return TAU * (float(p) + 0.5) / float(PILLAR_COUNT)
 
 
 func _process(delta: float) -> void:

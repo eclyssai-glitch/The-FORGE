@@ -29,12 +29,7 @@ func _ready() -> void:
 		_dirs.append(Vector3(h * sin(a), z, h * cos(a)))
 		_speeds.append(rng.randf_range(SPEED_MIN, SPEED_MAX))
 		_axes.append(Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized())
-	var mat := MaterialLibrary.particle(Palette.EMBER).duplicate() as StandardMaterial3D
-	# Solid shards: no billboard, colour from the material (the shard's vertex colours are
-	# barycentric facet markers, not albedo).
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_DISABLED
-	mat.vertex_color_use_as_albedo = false
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mat := MaterialLibrary.spark(Palette.EMBER)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = MeshBuilder.shard(SIZE, SEED)
