@@ -47,6 +47,8 @@ a linha `modules=N/M` tem N ≠ M (script de entidade, fx ou câmera ausente/que
 Com UI presente, o jogo aciona `Start`/`Pause`/`Reset` do transporte e exige o selo DEMO visível nos três
 modos. `SMOKE_ALLOW_MISSING_UI=1 tools/smoke_test.sh` passa `--allow-missing-ui` ao jogo e tolera
 apenas `ui=absent` (branches em que a UI ainda não existe); nunca usar para validar uma entrega.
+Argumentos extras chegam ao jogo: `tools/smoke_test.sh --scenario=genesis` joga o cenário GENESIS
+(relatório com `scenario=genesis`, `phase=COMPLETE layers=3/3 moons=2/2`, `mission_objectives=10/10`).
 
 Encerramento robusto (Xvfb + lavapipe às vezes não encerra o Godot após o último quadro):
 

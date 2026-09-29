@@ -21,10 +21,24 @@ func test_script_is_sorted_with_unique_ids() -> void:
 func test_script_uses_only_known_types_and_covers_all() -> void:
 	var seen := {}
 	for e in script_events:
-		assert_has(SimEvent.ALL_TYPES, e.type, "unknown type %s" % e.type)
+		assert_has(SimEvent.ORIGIN_TYPES, e.type, "unknown type %s" % e.type)
 		seen[e.type] = true
-	for t in SimEvent.ALL_TYPES:
+	for t in SimEvent.ORIGIN_TYPES:
 		assert_true(seen.has(t), "type %s never scripted" % t)
+
+
+func test_all_types_is_the_union_of_scenario_types() -> void:
+	var union := {}
+	for t in SimEvent.ORIGIN_TYPES + SimEvent.GENESIS_TYPES:
+		union[t] = true
+	assert_eq(SimEvent.ALL_TYPES.size(), union.size(), "ALL_TYPES lists each type once")
+	for t in SimEvent.ALL_TYPES:
+		assert_true(union.has(t), "%s belongs to a scenario" % t)
+	for t in union:
+		assert_has(SimEvent.ALL_TYPES, t)
+	for t in [SimEvent.SESSION_OPENED, SimEvent.SESSION_COMPLETED]:
+		assert_has(SimEvent.ORIGIN_TYPES, t)
+		assert_has(SimEvent.GENESIS_TYPES, t)
 
 
 func test_script_follows_required_sequence() -> void:
@@ -51,6 +65,17 @@ func test_script_has_one_layer_event_per_layer_and_all_checks() -> void:
 			checks.append(e.payload["check"])
 	assert_eq(layers, range(OriginChamberScript.LAYER_COUNT))
 	assert_eq(checks.size(), OriginChamberScript.CHECKS.size())
+
+
+func test_origin_world_is_a_scenario_state() -> void:
+	var w: ScenarioState = WorldState.new()
+	assert_eq(w.phase_index(), 0)
+	assert_false(w.is_complete())
+	for e in script_events:
+		w.apply(e)
+	assert_eq(w.phase_index(), WorldState.Phase.COMPLETE)
+	assert_true(w.is_complete())
+	assert_eq(w.phase_name(), "COMPLETE")
 
 
 func test_every_scripted_event_is_applied_by_world() -> void:
