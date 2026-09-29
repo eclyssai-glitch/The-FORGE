@@ -93,15 +93,53 @@ futuras), altere as constantes de perfil ou `layer_count` (a soma continua 96).
 |---|---|---|---|
 | `annular_segment(r_in, r_out, height, angle_span, arc_steps := 6)` | setor de coroa: topo, base, parede externa/interna, 2 tampas laterais | topo/base: u ao longo do arco, v radial; paredes: u arco, v vertical; tampas: u radial, v vertical | 8·(steps+1)+8 / 8·steps+4 → **64 / 52** (steps 6) |
 | `icosphere(radius, subdivisions, flat := true)` | casca facetada (flat) ou lisa | flat: por faceta (0,0)(1,0)(0.5,1); lisa: esférica | flat: 60·4^s / 20·4^s (s1: **240/80**, s2: 960/320); lisa s2: 162/320 |
-| `ring(radius, thickness, width, segments := 128)` | anel de seção retangular (thickness radial, width vertical) | u ao redor, v através da face | 8·(seg+1) / 8·seg → **1032 / 1024** |
+| `ring(radius, thickness, width, segments := 128)` | anel de seção retangular (thickness radial, width vertical) | u ao redor, v através da face | 8·(seg+1) / 8·seg → 48: 392/384 · 64: 520/512 · 96: 776/768 · **128: 1032/1024** · **160: 1288/1280** · 192: 1544/1536 |
 | `rib(height, width, depth)` | lâmina vertical afilada (ponta = 0,5 da largura/profundidade no meio, perfil cosseno), dorso +Z plano; x ±w/2, z ∈ [-d/2, d/2] | faces: u através, v vertical | 16·12+8 / 8·12+4 → **200 / 100** |
 | `shard(size, seed)` | bipirâmide triangular irregular (~size em Y, ≤ 0,5·size em XZ) | por faceta | **18 / 6** |
 
 AABB das malhas do blueprint (seed 7): segmento da camada 2 ≈ 0,74 × 0,19 × 0,97 (x × y × z, z de
 2,085 a 3,05); nervura 0,055 × 4,06 × 0,08.
 
-Orçamento da estrutura completa: 96 segmentos × 52 = **4 992 triângulos** + 12 nervuras × 100 = 1 200
-+ núcleo (s1) 80 + anel de verificação 1 024 ≈ **7 300 triângulos**.
+## Orçamento por consumidor (medido)
+
+Levantamento de **todas** as chamadas `MeshBuilder.*` em `src/entities`, `src/fx` e `src/world`,
+medido chamando as próprias funções com os parâmetros reais (script headless, Loop 2, rodada de
+correção). Os parâmetros **não** são repetidos aqui: a fonte é o arquivo/constante citado. As
+contagens só dependem de `segments`/`subdivisions`/`arc_steps`/`RIB_STEPS` (raios e tamanhos não
+mudam triângulos). "inst." = instâncias (MultiMesh ou nós). Cada malha é construída uma vez em
+`_ready`/`_init`.
+
+| consumidor (arquivo: constante / nó) | chamada | v / t por malha | inst. | triângulos |
+|---|---|---|---|---|
+| `fragment_structure.gd`: `Layer0..4` (MultiMesh por camada; parâmetros de `StructureBlueprint.segment_mesh_params`, `ARC_STEPS`) | `annular_segment` | 64 / 52 | 96 (16/20/24/20/16) | 4 992 |
+| `fragment_structure.gd`: `Ribs` (MultiMesh; `rib_mesh_params`, `RIB_STEPS`) | `rib` | 200 / 100 | 12 | 1 200 |
+| `fragment_structure.gd`: `Guide0..4` (literal 96 segmentos) | `ring` | 776 / 768 | 5 | 3 840 |
+| `origin_core.gd`: `Heart` (`HEART_RADIUS`, s2 lisa) | `icosphere` | 162 / 320 | 1 | 320 |
+| `origin_core.gd`: `Shell` (`SHELL_RADIUS`, s1 facetada, `_plated_shell` não muda contagem) | `icosphere` | 240 / 80 | 1 | 80 |
+| `verification_array.gd`: `Ring` (`RADIUS`, literal 160) | `ring` | 1 288 / 1 280 | 1 | 1 280 |
+| `verification_array.gd`: `Band` (`RADIUS`, `BAND_WIDTH`, literal 160) | `ring` | 1 288 / 1 280 | 1 | 1 280 |
+| `chamber_architecture.gd`: `Oculus` (`OCULUS_RADIUS`, literal 128) | `ring` | 1 032 / 1 024 | 1 | 1 024 |
+| `chamber_architecture.gd`: `Inlay` (`INLAY_RADIUS`, literal 128) | `ring` | 1 032 / 1 024 | 1 | 1 024 |
+| `emission_sparks.gd`: `Sparks` (MultiMesh; `SIZE`, `SEED`, `MAX_SPARKS`) | `shard` | 18 / 6 | 72 | 432 |
+| `activation_pulse.gd`: `Wave` (`WAVE_SECTION`, literal 160) | `ring` | 1 288 / 1 280 | 1 | 1 280 |
+| `activation_pulse.gd`: `FinalHalo` (`HALO_RADIUS`, literal 192) | `ring` | 1 544 / 1 536 | 1 | 1 536 |
+| `universe.gd`: `SEEDS` forma `orb` (corpo s1 + 1 anel de 96) | `icosphere` + `ring` | 240/80 + 776/768 | 1 + 1 | 848 |
+| `universe.gd`: `SEEDS` forma `spindle` (corpo s0 + 2 anéis de 96) | `icosphere` + `ring` | 60/20 + 776/768 | 1 + 2 | 1 556 |
+| `universe.gd`: `SEEDS` forma `armillary` (corpo s0 + 2 anéis de 96) | `icosphere` + `ring` | 60/20 + 776/768 | 1 + 2 | 1 556 |
+| **total renderizado por `MeshBuilder`** (pior caso: tudo visível) | | | | **≈ 22 250** |
+
+- Estrutura completa (segmentos + nervuras): 6 192 t; as guias (3 840 t) só aparecem durante a
+  construção. Núcleo 400 t; verificação 2 560 t (a banda só durante a varredura); pulso de ativação
+  2 816 t (onda e halo não ficam visíveis juntos o tempo todo); sementes 3 960 t.
+- Se a forma `armillary` perder o anel vertical (pedido P2-14 ao `game-engineer`), as sementes caem
+  768 t (total ≈ 21 480).
+- Fora do `MeshBuilder` (primitivas do Godot, medidas pelo mesmo script): piso `CylinderMesh`
+  (`chamber_architecture.gd`: `FLOOR_RADIUS`, 128 segmentos radiais) 768 t; pilares `BoxMesh`
+  12 t × `PILLAR_COUNT` = 288 t; poeira `QuadMesh` 2 t × `dust_field.gd`: `MAX_AMOUNT`.
+- **Colisão (não renderizada, só picking):** `fragment_structure.gd` `PickLayer0..4` `ring`(48) →
+  5 × 384 = 1 920 t; `verification_array.gd` `Pick` `ring`(64) → 512 t. Formas trimesh, criadas uma vez.
+- A fórmula de triângulos do `ring` para 128 e 160 segmentos (e o padrão 128) é verificada em
+  `test_procedural_meshes.gd::test_ring_triangle_formula_for_budget_segment_counts`.
 
 ## Verificação
 

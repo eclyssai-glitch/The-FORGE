@@ -155,6 +155,20 @@ func test_ring_counts_and_aabb() -> void:
 	_check_mesh(low, "ring low")
 
 
+## Budget in docs/PROCEDURAL.md: ring = 8·(seg+1) vertices / 8·seg triangles. 128 segments are the
+## default (oculus, floor inlay); 160 are the verification ring/band and the activation wave.
+func test_ring_triangle_formula_for_budget_segment_counts() -> void:
+	var expected := {128: [1032, 1024], 160: [1288, 1280]}
+	for seg: int in expected:
+		var arrays := _check_mesh(MeshBuilder.ring(3.42, 0.06, 0.1, seg), "ring %d" % seg)
+		assert_eq(_vert_count(arrays), 8 * (seg + 1), "ring %d vertex formula" % seg)
+		assert_eq(_tri_count(arrays), 8 * seg, "ring %d triangle formula" % seg)
+		assert_eq(_vert_count(arrays), int(expected[seg][0]), "ring %d vertices" % seg)
+		assert_eq(_tri_count(arrays), int(expected[seg][1]), "ring %d triangles" % seg)
+	assert_eq(_tri_count(MeshBuilder.ring(1.0, 0.1, 0.1).surface_get_arrays(0)), 1024,
+		"default segments = 128")
+
+
 func test_rib_counts_taper_and_aabb() -> void:
 	var mesh := MeshBuilder.rib(4.2, 0.06, 0.08)
 	var arrays := _check_mesh(mesh, "rib")
