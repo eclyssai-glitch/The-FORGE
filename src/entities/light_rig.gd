@@ -8,7 +8,8 @@ extends Node3D
 ## `environment` (set by the world before add_child) receives ambient, exposure and
 ## volumetric fog density of the stage; exposure is scaled per Session mode by
 ## EnvironmentProfile.mode_fog(mode)["exposure_scale"]. The Environment is only written when a
-## value changes (a steady stage costs no resource updates). Every light gets
+## value changes (a steady stage costs no resource updates); Simulation.world_rebuilt clears that
+## cache. Every light gets
 ## EnvironmentProfile.FOG_LIGHT. Key shadow splits follow Quality.profile["shadow_splits"].
 
 ## Core light: reach and falloff (the core lights the inner faces of the rings and fades before
@@ -16,7 +17,9 @@ extends Node3D
 ## hot point where the core reflects.
 const CORE_RANGE := 12.0
 const CORE_ATTENUATION := 2.2
-const CORE_SPECULAR := 0.35
+## (0.35 left a copper hot spot on the one segment facing the camera, read as a selection;
+## at 0.1 it is a soft warm glint spread over the ring under the core.)
+const CORE_SPECULAR := 0.1
 ## Key shadow: normal bias and blur keep the rings free of acne and the edges soft.
 const KEY_SHADOW_NORMAL_BIAS := 2.0
 const KEY_SHADOW_BLUR := 1.8
@@ -55,6 +58,7 @@ func _ready() -> void:
 	Quality.profile_changed.connect(_on_quality)
 	_on_quality(Quality.profile)
 	Session.mode_changed.connect(_on_mode_changed)
+	Simulation.world_rebuilt.connect(_on_world_rebuilt)
 	_on_mode_changed(Session.mode)
 
 
@@ -92,6 +96,13 @@ static func exposure_scale_for(mode: int) -> float:
 ## Last values written to the Environment: (ambient, exposure, volumetric fog density).
 func environment_written() -> Vector3:
 	return _env_written
+
+
+## Seek/reset: forget what was written, so the next frame writes the Environment again even if
+## someone else changed it meanwhile (the cache only skips writes of a steady stage).
+func _on_world_rebuilt() -> void:
+	_env_written = Vector3(-1.0, -1.0, -1.0)
+	_update()
 
 
 func _on_mode_changed(mode: int) -> void:

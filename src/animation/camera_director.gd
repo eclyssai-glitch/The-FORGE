@@ -6,15 +6,26 @@ extends Node3D
 ## being told (approach on activation, pull back on fragments, slow orbit while building, low
 ## angle on verification, orbital reveal on the final form).
 ##
-## Transitions between shots are real-time Tweens (Palette.T_CINEMATIC) of a blend factor from
-## a snapshot to the live goal, so moving goals (orbits) stay smooth. After Simulation.seek/reset
-## (`world_rebuilt`) the camera snaps to the goal without a tween.
+## Transitions between shots are real-time tweens (Palette.T_CINEMATIC, sine in-out curve of
+## Tween.interpolate_value on the wall clock — see _start_blend) of a blend factor from a
+## snapshot to the live goal, so moving goals (orbits) stay smooth. After Simulation.seek/reset
+## (`world_rebuilt`) the camera snaps to the goal without a tween (unless a user/focus framing
+## holds outside a cue, see below).
 ## Input (unhandled, so the UI consumes first): drag with left/right button = orbit, wheel = zoom,
 ## WASD = fly (UNIVERSE), `camera_reset` = back to the mode shot. A press only orbits once its
 ## accumulated travel is a drag for InputTuning.is_drag — the same threshold the Picker uses, so
 ## a press is either a click or an orbit, never both. Input suspends cues for
 ## USER_HOLD seconds; outside a cue the user's framing stays until reset or mode change.
 ## Group "camera_director": automation calls snap_to_mode_shot() after each seek/mode change.
+##
+## Focus (Session.focus_requested(id)): the entity is found through the group
+## SessionState.entity_group(id); its world bounds are the FOCUS_BOUNDS_META AABB (local) of the
+## group node when present, else the merged AABB of its VisualInstance3D descendants.
+## CameraShots.focus_shot frames it keeping the mode (fov, offset, limits) and the rig tweens
+## there (Palette.T_CINEMATIC). A focus counts as user input: cues wait USER_HOLD seconds after
+## the framing settles; outside a cue it holds until reset, mode change or new input. Targets
+## outside the mode's reach (CameraShots.FOCUS_REACH, e.g. a seed from FORGE) are ignored.
+## Seek/reset keep a user framing that is not under a cue (the story cue always snaps).
 
 const GROUP := &"camera_director"
 ## Seconds of user control before cinematic cues take the camera back.
@@ -23,6 +34,8 @@ const USER_HOLD := 6.0
 const ORBIT_PER_PIXEL := 0.0055
 const ZOOM_STEP := 1.1
 const FLY_SPEED := 0.5
+## Meta (AABB, in the node's local space) that an entity root sets to give its exact focus bounds.
+const FOCUS_BOUNDS_META := &"focus_bounds"
 
 var camera: Camera3D
 
@@ -31,11 +44,17 @@ var _from := CameraShots.Shot.new()
 var _goal := CameraShots.Shot.new()
 ## Tweened 0..1 from _from to the live goal.
 var _blend := 1.0
-var _tween: Tween
+## Running transition: wall-clock start (s) and duration; duration 0 = none.
+var _blend_start := 0.0
+var _blend_duration := 0.0
 var _shot_id: StringName = &""
 var _user := false
 var _user_until := 0.0
 var _press_travel := -1.0
+## Focus framing being tweened / held (_blend goes _from -> _focus_goal).
+var _focus_goal := CameraShots.Shot.new()
+var _focusing := false
+var _focus_id: StringName = &""
 
 
 func _ready() -> void:
@@ -49,15 +68,17 @@ func _ready() -> void:
 	camera.current = true
 	Session.mode_changed.connect(_on_mode_changed)
 	Session.cinematic_changed.connect(_on_cinematic_changed)
-	Simulation.world_rebuilt.connect(snap_to_mode_shot)
+	Session.focus_requested.connect(focus_on)
+	Simulation.world_rebuilt.connect(_on_world_rebuilt)
 	snap_to_mode_shot()
 
 
 ## Jumps (no tween) to the goal of the current state: the cinematic cue in FORGE when
 ## Session.cinematic, otherwise the mode shot. Clears user control.
 func snap_to_mode_shot() -> void:
-	_kill_tween()
+	_stop_blend()
 	_user = false
+	_end_focus()
 	_press_travel = -1.0
 	_shot_id = _evaluate_goal()
 	_rig.copy_from(_goal)
@@ -69,8 +90,68 @@ func snap_to_mode_shot() -> void:
 ## Tweens back to the goal of the current state (what `camera_reset` does).
 func reset_to_mode_shot() -> void:
 	_user = false
+	_end_focus()
 	_shot_id = _evaluate_goal()
 	_begin_transition()
+
+
+## Frames entity `id` (Session.focus_requested). Returns false (camera untouched) when no node
+## is in its group or the target is out of the mode's reach.
+func focus_on(id: StringName) -> bool:
+	if not is_inside_tree() or id == &"":
+		return false
+	var nodes := get_tree().get_nodes_in_group(SessionState.entity_group(id))
+	var found := false
+	var bounds := AABB()
+	for n in nodes:
+		if not n is Node3D:
+			continue
+		var b := node_bounds(n as Node3D)
+		bounds = b if not found else bounds.merge(b)
+		found = true
+	if not found or not CameraShots.focus_reachable(Session.mode, bounds.get_center()):
+		return false
+	CameraShots.focus_shot(Session.mode, bounds, _rig, _aspect(), _focus_goal)
+	_stop_blend()
+	_user = true
+	_press_travel = -1.0
+	_focusing = true
+	_focus_id = id
+	# The hold starts when the framing has settled.
+	_user_until = _now() + Palette.T_CINEMATIC + USER_HOLD
+	_from.copy_from(_rig)
+	_start_blend()
+	return true
+
+
+## Entity being framed by the last focus (empty when none or after reset/input/mode change).
+func focused() -> StringName:
+	return _focus_id if _focusing else &""
+
+
+## Goal of the last focus (read-only use: tests/debug).
+func focus_goal() -> CameraShots.Shot:
+	return _focus_goal
+
+
+## World bounds of a focus node: its FOCUS_BOUNDS_META (local AABB) or the merged AABB of its
+## VisualInstance3D descendants (itself included); a bare point at its position otherwise.
+static func node_bounds(n: Node3D) -> AABB:
+	if n.has_meta(FOCUS_BOUNDS_META):
+		return n.global_transform * (n.get_meta(FOCUS_BOUNDS_META) as AABB)
+	var acc := [false, AABB(n.global_position, Vector3.ZERO)]
+	_merge_visuals(n, acc)
+	return acc[1]
+
+
+static func _merge_visuals(n: Node, acc: Array) -> void:
+	if n is VisualInstance3D:
+		var v := n as VisualInstance3D
+		var b := v.global_transform * v.get_aabb()
+		acc[1] = (acc[1] as AABB).merge(b) if acc[0] else b
+		acc[0] = true
+	for c in n.get_children():
+		_merge_visuals(c, acc)
 
 
 ## Accumulated pointer travel (px) of the current left/right press; -1 when no press.
@@ -85,13 +166,17 @@ func rig() -> CameraShots.Shot:
 
 func _process(delta: float) -> void:
 	_fly(delta)
+	_advance_blend()
 	var id := _evaluate_goal()
 	if _user:
 		# The user framing holds; cues take over again after USER_HOLD seconds.
 		if _is_cue(id) and _now() >= _user_until:
 			_user = false
+			_end_focus()
 			_shot_id = id
 			_begin_transition()
+		elif _focusing:
+			CameraShots.blend(_from, _focus_goal, _blend, _rig)
 	elif id != _shot_id:
 		_shot_id = id
 		_begin_transition()
@@ -147,8 +232,10 @@ func _fly(delta: float) -> void:
 
 
 func _take_control() -> void:
-	if not _user:
-		_kill_tween()
+	if not _user or _focusing:
+		# Input during a focus keeps the camera where it is and hands it to the user.
+		_stop_blend()
+		_end_focus()
 		_user = true
 	_user_until = _now() + USER_HOLD
 
@@ -158,26 +245,60 @@ func _evaluate_goal() -> StringName:
 
 
 func _begin_transition() -> void:
-	_kill_tween()
+	_stop_blend()
 	_from.copy_from(_rig)
+	_start_blend()
+
+
+## Starts a transition of _blend 0 -> 1 over Palette.T_CINEMATIC of wall-clock time.
+## It is a Tween curve (Tween.interpolate_value, sine in-out) driven by Time.get_ticks_msec, not
+## by the frame delta: the engine caps a frame's delta (max_physics_steps_per_frame /
+## physics_ticks_per_second = 8/60 s), so on a slow renderer a delta-driven Tween would run
+## several times slower than real time and a focus would not settle in the time it promises.
+func _start_blend() -> void:
 	_blend = 0.0
-	_tween = create_tween()
-	_tween.tween_property(self, "_blend", 1.0, Palette.T_CINEMATIC) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_blend_start = _now()
+	_blend_duration = Palette.T_CINEMATIC
 
 
-func _kill_tween() -> void:
-	if _tween and _tween.is_valid():
-		_tween.kill()
-	_tween = null
+func _advance_blend() -> void:
+	if _blend_duration <= 0.0:
+		return
+	var x := clampf((_now() - _blend_start) / _blend_duration, 0.0, 1.0)
+	_blend = Tween.interpolate_value(0.0, 1.0, x, 1.0, Tween.TRANS_SINE, Tween.EASE_IN_OUT)
+	if x >= 1.0:
+		_blend = 1.0
+		_blend_duration = 0.0
+
+
+func _end_focus() -> void:
+	_focusing = false
+	_focus_id = &""
+
+
+## Stops the running transition where it is (the rig keeps its current pose).
+func _stop_blend() -> void:
+	_blend_duration = 0.0
 
 
 func _apply() -> void:
 	var pos := _rig.position()
 	camera.transform = Transform3D(Basis.IDENTITY, pos).looking_at(_rig.target, Vector3.UP)
 	camera.fov = _rig.fov
+	camera.h_offset = _rig.h_offset(_aspect())
+
+
+func _aspect() -> float:
 	var size := get_viewport().get_visible_rect().size if is_inside_tree() else Vector2(16, 9)
-	camera.h_offset = _rig.h_offset(size.x / maxf(size.y, 1.0))
+	return size.x / maxf(size.y, 1.0)
+
+
+## Seek/reset: the story cue always snaps (its framing is a function of the sim time); a user or
+## focus framing outside a cue stays (a focused seed does not jump away on a timeline scrub).
+func _on_world_rebuilt() -> void:
+	if _user and not _is_cue(_evaluate_goal()):
+		return
+	snap_to_mode_shot()
 
 
 func _on_mode_changed(_mode: SessionState.Mode) -> void:

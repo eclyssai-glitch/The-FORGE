@@ -25,8 +25,9 @@ const PITCH_MIN := -0.32
 const PITCH_MAX := 1.35
 ## Distance limits per mode (index = SessionState.Mode).
 const DISTANCE_LIMITS: Array[Vector2] = [Vector2(14.0, 140.0), Vector2(4.8, 15.5), Vector2(6.0, 30.0)]
-## UNIVERSE flight: the rig target stays within this radius of the chamber and on this height.
-const FLY_RADIUS := 70.0
+## UNIVERSE flight and focus: the rig target stays within this radius of the chamber (the seeds
+## sit 62–70 units out and drift a little, so focusing one never clamps its centre).
+const FLY_RADIUS := 74.0
 
 
 ## Orbit rig state. Fields are plain floats/vectors so a Shot can be reused every frame.
@@ -75,8 +76,8 @@ const FORGE_YAW := 0.42
 ## Pitched high enough that the near pillars' tops stay below the structure on screen.
 const UNIVERSE_YAW := TAU * 2.0 / 24.0
 const UNIVERSE_PITCH := 0.42
-const UNIVERSE_DISTANCE := 90.0
-const UNIVERSE_FOV := 40.0
+const UNIVERSE_DISTANCE := 78.0
+const UNIVERSE_FOV := 38.0
 const UNIVERSE_TARGET := Vector3(0.0, 3.0, 0.0)
 ## Slow orbit while the structure is built (rad/s of sim time), and during the final reveal.
 const BUILD_ORBIT := 0.011
@@ -171,6 +172,78 @@ static func desired(mode: int, cinematic: bool, w: WorldState, t: float, out: Sh
 		id = MODE_IDS[clampi(mode, 0, MODE_IDS.size() - 1)]
 	clamp_shot(out, mode)
 	return id
+
+
+# --- Focus on an entity (Session.focus_requested) ---------------------------------------------
+
+## Fraction of the half frame (vertical and horizontal) the focused entity's extent fills.
+const FOCUS_FILL := 0.6
+## FORGE focus looks down at least this much, so a ring reads as a ring and not as a line.
+const FOCUS_MIN_PITCH := 0.3
+## Horizontal reach of a focus target from the chamber centre per mode (index = Mode): in FORGE
+## and OBSERVATORY the camera stays with the chamber; UNIVERSE reaches the seeds.
+const FOCUS_REACH: Array[float] = [FLY_RADIUS, 8.0, 8.0]
+## UNIVERSE targets farther than FOCUS_FAR from the centre (the seeds) are seen from outside,
+## turned SEED_FOCUS_YAW off the radial line and shifted SEED_FOCUS_OFFSET (NDC) on screen, so the
+## seed holds the left third and the lit chamber stays in the background on the right third —
+## the dormant seed read against the place where constructs are born. SEED_FOCUS_PITCH above.
+const FOCUS_FAR := 30.0
+const SEED_FOCUS_YAW := 0.42
+const SEED_FOCUS_OFFSET := -0.22
+const SEED_FOCUS_PITCH := 0.16
+
+
+## True when `mode` may frame a target centred at `centre` (FOCUS_REACH).
+static func focus_reachable(mode: int, centre: Vector3) -> bool:
+	var reach: float = FOCUS_REACH[clampi(mode, 0, FOCUS_REACH.size() - 1)]
+	return Vector2(centre.x, centre.z).length() <= reach + 1e-3
+
+
+## Distance at which `bounds` (world AABB of a roughly round entity: rings, spheres, seeds)
+## fills at most FOCUS_FILL of the frame, seen from `pitch` with vertical `fov` (degrees),
+## subject shifted by `offset` NDC, viewport `aspect` (w/h). The entity is a vertical cylinder
+## (radius r = half the wider horizontal side, so AABB corners do not inflate rings; half height
+## h), with perspective: vertically its half extent r·|sin p| + h·cos p is taken at the depth of
+## the near rim (d − r·cos p − h·|sin p|); horizontally the widest rim point subtends
+## r / sqrt(d² − r²).
+static func fit_distance(bounds: AABB, pitch: float, fov: float, offset: float, aspect: float) -> float:
+	var r := maxf(bounds.size.x, bounds.size.z) * 0.5
+	var h := bounds.size.y * 0.5
+	var tan_v := tan(deg_to_rad(fov) * 0.5)
+	var tan_h := tan_v * maxf(aspect, 0.1) * maxf(1.0 - absf(offset), 0.1)
+	var sp := absf(sin(pitch))
+	var cp := cos(pitch)
+	var d_v := (r * sp + h * cp) / (tan_v * FOCUS_FILL) + r * cp + h * sp
+	var k := 1.0 / (tan_h * FOCUS_FILL)
+	var d_h := r * sqrt(1.0 + k * k)
+	return maxf(d_v, d_h)
+
+
+## Writes into `out` the shot that frames `bounds` in `mode`, starting from the `current` rig.
+## Keeps the mode (fov and screen offset of the mode shot; clamped to the mode limits) and the
+## current yaw, so the camera moves towards the entity instead of swinging around it. FORGE
+## looks down at least FOCUS_MIN_PITCH; OBSERVATORY keeps its high pitch; UNIVERSE keeps its
+## pitch near the chamber and, for far targets (seeds), looks from outside with the chamber
+## behind (SEED_FOCUS_*). Callers check focus_reachable() first. Returns `out`.
+static func focus_shot(mode: int, bounds: AABB, current: Shot, aspect: float, out: Shot) -> Shot:
+	var yaw := current.yaw
+	var current_pitch := current.pitch
+	mode_shot(mode, out)
+	var pitch := out.pitch
+	var centre := bounds.get_center()
+	match mode:
+		SessionState.Mode.FORGE:
+			pitch = maxf(current_pitch, FOCUS_MIN_PITCH)
+		SessionState.Mode.UNIVERSE:
+			if Vector2(centre.x, centre.z).length() > FOCUS_FAR:
+				yaw = atan2(centre.x, centre.z) + SEED_FOCUS_YAW
+				pitch = SEED_FOCUS_PITCH
+				out.offset = SEED_FOCUS_OFFSET
+	out.target = centre
+	out.yaw = yaw
+	out.pitch = pitch
+	out.distance = fit_distance(bounds, pitch, out.fov, out.offset, aspect)
+	return clamp_shot(out, mode)
 
 
 # --- Limits and blending ----------------------------------------------------------------------

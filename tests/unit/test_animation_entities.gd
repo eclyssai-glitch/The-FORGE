@@ -252,3 +252,140 @@ func test_floor_is_not_pickable_but_the_chamber_is() -> void:
 	var hit := space.intersect_ray(at)
 	assert_false(hit.is_empty(), "pillar is pickable")
 	assert_eq(Picker.entity_id_of_hit(hit), ChamberArchitecture.ENTITY_ID)
+
+
+func _focus_ids() -> Array[StringName]:
+	var ids: Array[StringName] = [&"origin_chamber", &"origin_core", &"fragment_field", &"verification_array"]
+	for i in OriginChamberScript.LAYER_COUNT:
+		ids.append(OriginChamberScript.layer_entity(i))
+	return ids
+
+
+func test_every_entity_joins_its_focus_group() -> void:
+	for id in _focus_ids():
+		var nodes := get_tree().get_nodes_in_group(SessionState.entity_group(id))
+		assert_eq(nodes.size(), 1, "one focus root for %s" % id)
+		if nodes.is_empty():
+			continue
+		var b := CameraDirector.node_bounds(nodes[0] as Node3D)
+		assert_gt(maxf(b.size.x, b.size.z), 0.5, "%s has real bounds" % id)
+	var fs: FragmentStructure = _nodes["fragment_structure"]
+	for l in OriginChamberScript.LAYER_COUNT:
+		var node := get_tree().get_first_node_in_group(SessionState.entity_group(OriginChamberScript.layer_entity(l))) as Node3D
+		var b := CameraDirector.node_bounds(node)
+		assert_almost_eq(b.get_center().y, float(fs.blueprint.layers[l]["y"]), 1e-4, "layer %d bounds on its ring" % l)
+		assert_almost_eq(b.size.x * 0.5, float(fs.blueprint.segment_mesh_params(l)["r_out"]), 1e-4)
+	# Descendant fallback (no meta): the merged AABB of the visuals.
+	var bare := Node3D.new()
+	var mi := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(2.0, 1.0, 2.0)
+	mi.mesh = box
+	bare.add_child(mi)
+	_root.add_child(bare)
+	bare.position = Vector3(1.0, 2.0, 3.0)
+	var bb := CameraDirector.node_bounds(bare)
+	assert_true(bb.get_center().is_equal_approx(Vector3(1.0, 2.0, 3.0)), "fallback centre %s" % bb.get_center())
+	assert_true(bb.size.is_equal_approx(Vector3(2.0, 1.0, 2.0)), "fallback size %s" % bb.size)
+
+
+func test_focus_frames_the_layer_and_suspends_cues() -> void:
+	var d: CameraDirector = _nodes["camera_director"]
+	Session.set_cinematic(true)
+	Simulation.seek(30.5)
+	d.snap_to_mode_shot()
+	Session.focus(&"layer_2")
+	assert_eq(d.focused(), &"layer_2")
+	await wait_seconds(Palette.T_CINEMATIC + 0.4)
+	assert_true(d.rig().approx_equals(d.focus_goal()), "the framing settled on the focus goal")
+	var fs: FragmentStructure = _nodes["fragment_structure"]
+	assert_almost_eq(d.rig().target.y, float(fs.blueprint.layers[2]["y"]), 1e-3, "aimed at ring 2")
+	assert_gte(d.rig().pitch, CameraShots.FOCUS_MIN_PITCH - 1e-4)
+	# The cue did not take the camera back (a focus counts as user input).
+	var cue := CameraShots.Shot.new()
+	CameraShots.desired(Session.mode, true, Simulation.world, Simulation.time, cue)
+	assert_false(d.rig().approx_equals(cue), "cue suspended while focused")
+	# A repeated request re-frames (Session.focus always emits).
+	Session.focus(&"layer_2")
+	assert_eq(d.focused(), &"layer_2")
+	# camera_reset: back to the shot of the state.
+	d.reset_to_mode_shot()
+	assert_eq(d.focused(), &"", "reset ends the focus")
+	await wait_seconds(Palette.T_CINEMATIC + 0.3)
+	var goal := CameraShots.Shot.new()
+	CameraShots.desired(Session.mode, Session.cinematic, Simulation.world, Simulation.time, goal)
+	assert_true(d.rig().approx_equals(goal), "back on the cue")
+
+
+func test_focus_ignores_unknown_and_out_of_reach_targets() -> void:
+	var d: CameraDirector = _nodes["camera_director"]
+	d.snap_to_mode_shot()
+	assert_false(d.focus_on(&"no_such_entity"))
+	var far := Node3D.new()
+	far.add_to_group(SessionState.entity_group(&"seed_test"))
+	_root.add_child(far)
+	far.position = Vector3(0.0, 8.0, -62.0)
+	var before := CameraShots.Shot.new().copy_from(d.rig())
+	assert_false(d.focus_on(&"seed_test"), "a seed is out of reach from FORGE")
+	assert_true(d.rig().approx_equals(before), "camera untouched")
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	d.snap_to_mode_shot()
+	assert_true(d.focus_on(&"seed_test"), "reachable in UNIVERSE")
+	assert_true(d.focus_goal().target.is_equal_approx(far.position))
+
+
+func test_input_during_focus_hands_control_to_the_user() -> void:
+	var d: CameraDirector = _nodes["camera_director"]
+	d.snap_to_mode_shot()
+	Session.focus(&"origin_core")
+	assert_eq(d.focused(), &"origin_core")
+	await wait_process_frames(2)
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	d._unhandled_input(wheel)
+	assert_eq(d.focused(), &"", "input ends the focus tween")
+	var held := CameraShots.Shot.new().copy_from(d.rig())
+	await wait_process_frames(3)
+	assert_true(d.rig().approx_equals(held), "the camera stays where the user left it")
+
+
+func test_universe_focus_survives_seek() -> void:
+	var d: CameraDirector = _nodes["camera_director"]
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	d.snap_to_mode_shot()
+	Session.focus(&"origin_core")
+	await wait_seconds(Palette.T_CINEMATIC + 0.3)
+	Simulation.seek(20.0)
+	await wait_process_frames(2)
+	assert_true(d.rig().approx_equals(d.focus_goal()), "a scrub keeps the focus outside a cue")
+
+
+func test_oculus_hidden_only_in_universe() -> void:
+	var arch: ChamberArchitecture = _nodes["chamber_architecture"]
+	assert_true(arch.oculus.visible)
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	assert_false(arch.oculus.visible, "no loose ring above the chamber in UNIVERSE")
+	Session.set_mode(SessionState.Mode.OBSERVATORY)
+	assert_true(arch.oculus.visible)
+
+
+func test_scan_band_rides_on_top_of_the_ring() -> void:
+	var va: VerificationArray = _nodes["verification_array"]
+	Simulation.seek(37.0)
+	await wait_process_frames(1)
+	var y := Choreography.scan_y(Simulation.world, Simulation.time)
+	assert_almost_eq(va.band.global_position.y, y, 1e-4, "band centre = scan height")
+	var ring_top := va.ring.global_position.y + VerificationArray.RING_HEIGHT * 0.5
+	var band_bottom := va.band.global_position.y - VerificationArray.BAND_WIDTH * 0.5
+	assert_gte(band_bottom, ring_top - 1e-4, "the opaque ring never covers the band")
+
+
+func test_light_rig_rewrites_environment_after_rebuild() -> void:
+	Simulation.seek(49.0)
+	await wait_process_frames(1)
+	var expected := _env.tonemap_exposure
+	_env.tonemap_exposure = 0.123
+	Simulation.seek(49.0)
+	await wait_process_frames(1)
+	assert_almost_eq(_env.tonemap_exposure, expected, 1e-4, "world_rebuilt clears the write cache")

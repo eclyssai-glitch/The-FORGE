@@ -183,3 +183,114 @@ func test_blend_endpoints_and_shortest_yaw() -> void:
 	CameraShots.blend(a, b, 0.5, out)
 	assert_gt(absf(out.yaw), 3.0, "yaw crosses PI (shortest arc), not through 0")
 	assert_almost_eq(out.distance, 15.0, 1e-5)
+
+
+# --- Focus framing (Session.focus_requested) ---------------------------------------------------
+
+const ASPECT := 16.0 / 9.0
+
+
+## Round entity bounds: a ring/sphere of radius r and height h centred at c.
+func _round(c: Vector3, r: float, h: float) -> AABB:
+	return AABB(c - Vector3(r, h * 0.5, r), Vector3(2.0 * r, h, 2.0 * r))
+
+
+## Largest |NDC| (x, y) reached by the silhouette of a vertical cylinder (radius r, height h,
+## centre c) seen from shot s, relative to the subject (before the screen offset): samples its rims.
+func _extent(s: CameraShots.Shot, c: Vector3, r: float, h: float) -> Vector2:
+	var m := Vector2.ZERO
+	for k in 72:
+		var a := TAU * float(k) / 72.0
+		for dy: float in [-h * 0.5, h * 0.5]:
+			var p := _project(s, c + Vector3(sin(a) * r, dy, cos(a) * r))
+			m.x = maxf(m.x, absf(p.x))
+			m.y = maxf(m.y, absf(p.y))
+	return m
+
+
+func test_fit_distance_fills_the_frame() -> void:
+	for pitch: float in [0.0, 0.3, 0.62]:
+		for dims: Vector2 in [Vector2(3.05, 0.19), Vector2(0.55, 1.1), Vector2(4.0, 4.4)]:
+			var b := _round(Vector3.ZERO, dims.x, dims.y)
+			var d := CameraShots.fit_distance(b, pitch, 36.0, 0.0, ASPECT)
+			var s := _shot().setup(Vector3.ZERO, 0.4, pitch, d, 36.0)
+			var e := _extent(s, Vector3.ZERO, dims.x, dims.y)
+			var tight := maxf(e.x, e.y)
+			# The fit is on the silhouette at the target depth; near rims of big rings reach a bit further.
+			assert_between(tight, CameraShots.FOCUS_FILL * 0.85, CameraShots.FOCUS_FILL * 1.3,
+				"pitch %.2f dims %s fills ~FOCUS_FILL (%.2f)" % [pitch, dims, tight])
+			assert_lt(tight, 1.0, "entity entirely in frame")
+	var small := CameraShots.fit_distance(_round(Vector3.ZERO, 1.0, 0.2), 0.3, 36.0, 0.0, ASPECT)
+	var big := CameraShots.fit_distance(_round(Vector3.ZERO, 2.0, 0.2), 0.3, 36.0, 0.0, ASPECT)
+	assert_gt(big, small * 1.5, "bigger entity, farther camera")
+	var shifted := CameraShots.fit_distance(_round(Vector3.ZERO, 2.0, 0.2), 0.0, 36.0, 0.38, ASPECT)
+	var centred := CameraShots.fit_distance(_round(Vector3.ZERO, 2.0, 0.2), 0.0, 36.0, 0.0, ASPECT)
+	assert_gte(shifted, centred, "a shifted subject has less room")
+
+
+func test_focus_keeps_the_mode_and_centres_the_entity() -> void:
+	var layer := _round(Vector3(0.0, 0.9, 0.0), 2.8, 0.19)
+	for m: int in [Mode.FORGE, Mode.OBSERVATORY]:
+		var current := CameraShots.mode_shot(m, _shot())
+		var s := CameraShots.focus_shot(m, layer, current, ASPECT, _shot())
+		var base := CameraShots.mode_shot(m, _shot())
+		assert_almost_eq(s.fov, base.fov, 1e-5, "mode %d keeps its fov" % m)
+		assert_almost_eq(s.offset, base.offset, 1e-5, "mode %d keeps its screen offset" % m)
+		assert_almost_eq(absf(angle_difference(s.yaw, current.yaw)), 0.0, 1e-5, "keeps the current yaw")
+		assert_true(s.target.is_equal_approx(layer.get_center()), "targets the entity centre")
+		var c := _shot().copy_from(s)
+		assert_true(CameraShots.clamp_shot(c, m).approx_equals(s), "inside the mode limits")
+		var lim: Vector2 = CameraShots.DISTANCE_LIMITS[m]
+		assert_lt(s.distance, lim.y, "closer than the widest framing")
+		var p := _project(s, layer.get_center())
+		assert_almost_eq(p.x, 0.0, 1e-4)
+		assert_almost_eq(p.y, 0.0, 1e-4)
+	var forge := CameraShots.focus_shot(Mode.FORGE, layer, CameraShots.mode_shot(Mode.FORGE, _shot()), ASPECT, _shot())
+	assert_gte(forge.pitch, CameraShots.FOCUS_MIN_PITCH, "FORGE looks down on a ring")
+	var obs := CameraShots.focus_shot(Mode.OBSERVATORY, layer, CameraShots.mode_shot(Mode.OBSERVATORY, _shot()), ASPECT, _shot())
+	assert_gt(obs.offset, 0.2, "OBSERVATORY keeps the subject right of the panel")
+
+
+func test_focus_distance_limited_to_the_chamber() -> void:
+	# The whole chamber (pillar ring) from FORGE: framed from inside, at the FORGE limit.
+	var chamber := ChamberArchitecture.focus_bounds()
+	var s := CameraShots.focus_shot(Mode.FORGE, chamber, CameraShots.mode_shot(Mode.FORGE, _shot()), ASPECT, _shot())
+	assert_almost_eq(s.distance, CameraShots.DISTANCE_LIMITS[Mode.FORGE].y, 1e-4)
+	# A tiny entity never brings the camera closer than the mode allows.
+	var tiny := CameraShots.focus_shot(Mode.FORGE, _round(Vector3.ZERO, 0.05, 0.05), _shot(), ASPECT, _shot())
+	assert_almost_eq(tiny.distance, CameraShots.DISTANCE_LIMITS[Mode.FORGE].x, 1e-4)
+
+
+func test_focus_reach_per_mode() -> void:
+	for seed_def: Dictionary in Universe.SEEDS:
+		var p := Universe.seed_base_position(seed_def)
+		assert_true(CameraShots.focus_reachable(Mode.UNIVERSE, p), "%s reachable in UNIVERSE" % seed_def["id"])
+		assert_false(CameraShots.focus_reachable(Mode.FORGE, p), "%s out of reach in FORGE" % seed_def["id"])
+		assert_false(CameraShots.focus_reachable(Mode.OBSERVATORY, p), "%s out of reach in OBSERVATORY" % seed_def["id"])
+	for m: int in [Mode.UNIVERSE, Mode.FORGE, Mode.OBSERVATORY]:
+		assert_true(CameraShots.focus_reachable(m, Vector3(0.0, 0.9, 0.0)), "chamber entities reachable in mode %d" % m)
+
+
+func test_universe_seed_focus_keeps_the_chamber_in_the_background() -> void:
+	for seed_def: Dictionary in Universe.SEEDS:
+		var size := float(seed_def["size"])
+		var centre := Universe.seed_base_position(seed_def)
+		var b := _round(centre, size * 1.9, size * 2.0)
+		var current := CameraShots.mode_shot(Mode.UNIVERSE, _shot())
+		var s := CameraShots.focus_shot(Mode.UNIVERSE, b, current, ASPECT, _shot())
+		var id: StringName = seed_def["id"]
+		assert_true(s.target.is_equal_approx(centre), "%s: target is the seed (not clamped)" % id)
+		var lim: Vector2 = CameraShots.DISTANCE_LIMITS[Mode.UNIVERSE]
+		assert_between(s.distance, lim.x, 40.0, "%s: close to the seed" % id)
+		assert_gt(s.position().y, CameraShots.FLOOR_Y + CameraShots.FLOOR_CLEARANCE)
+		var e := _extent(s, centre, size * 1.9, size * 2.0)
+		assert_lt(maxf(e.x, e.y), 0.9, "%s: whole seed in frame" % id)
+		assert_lt(s.offset, 0.0, "%s: seed on the left third" % id)
+		assert_lt(maxf(e.x + absf(s.offset), e.y), 0.95, "%s: whole seed in frame with its offset" % id)
+		# Screen x = projected x + offset (Camera3D.h_offset shifts the whole image).
+		var chamber := _project(s, Vector3.ZERO)
+		var cx := chamber.x + s.offset
+		assert_gt(chamber.z, s.distance + 20.0, "%s: chamber far behind the seed" % id)
+		assert_between(cx, 0.2, 0.8, "%s: chamber on the right third (%.2f)" % [id, cx])
+		assert_between(chamber.y, -0.7, 0.7, "%s: chamber in frame (y %.2f)" % [id, chamber.y])
+		assert_gt(chamber.x, e.x + 0.1, "%s: chamber beside the seed, not behind it" % id)

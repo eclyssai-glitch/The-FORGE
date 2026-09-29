@@ -15,6 +15,9 @@ extends Node3D
 ## Material uniforms owned here: finish, final_lock, energy (scan_* belong to VerificationArray).
 ## Selection: loose fragments pick as &"fragment_field" (one sphere per loose fragment, moved
 ## only when their pose changes); a fully seated layer picks as &"layer_<l>" (ring trimesh).
+## Focus: this node joins SessionState.entity_group(&"fragment_field") (bounds = the scatter
+## shell, which also holds the built construct); the MultiMeshInstance3D of layer l joins
+## entity_group(&"layer_<l>") (bounds = that ring).
 
 const SEED := 7
 const FIELD_ID := &"fragment_field"
@@ -62,6 +65,8 @@ func _ready() -> void:
 		_build_layer(l)
 	_build_ribs()
 	_build_fragment_picks()
+	add_to_group(SessionState.entity_group(FIELD_ID))
+	set_meta(CameraDirector.FOCUS_BOUNDS_META, field_bounds())
 	_custom_cache.resize(blueprint.segment_count_total())
 	_moving.resize(blueprint.segment_count_total())
 	_frag_pick_on.resize(blueprint.segment_count_total())
@@ -78,6 +83,29 @@ func _process(delta: float) -> void:
 ## MultiMesh buffer (readable headless, for tests and debug).
 func segment_state(i: int) -> Color:
 	return _custom_cache[i]
+
+
+## Local bounds of the fragment field: every fragment at its scatter pose and the rest of the
+## construct (the scatter shell encloses the built rings too), with a small margin.
+func field_bounds() -> AABB:
+	var box := AABB()
+	var first := true
+	for l in blueprint.layers.size():
+		var pivot := blueprint.segment_pivot(l)
+		var layer := blueprint.layers[l]
+		for k in int(layer["segment_count"]):
+			var p := blueprint.scatter_transform(int(layer["first_segment"]) + k) * pivot
+			box = AABB(p, Vector3.ZERO) if first else box.expand(p)
+			first = false
+	return box.grow(FRAGMENT_PICK_RADIUS)
+
+
+## Local bounds of ring l (its seated extent: outer radius, layer height).
+func layer_bounds(l: int) -> AABB:
+	var p := blueprint.segment_mesh_params(l)
+	var r := float(p["r_out"])
+	var h := float(p["height"])
+	return AABB(Vector3(-r, float(blueprint.layers[l]["y"]) - h * 0.5, -r), Vector3(2.0 * r, h, 2.0 * r))
 
 
 func _on_world_rebuilt() -> void:
@@ -99,6 +127,8 @@ func _build_layer(l: int) -> void:
 	mmi.material_override = _material
 	# Loose fragments travel up to ~5 units out; keep culling stable while they fly.
 	mmi.custom_aabb = AABB(Vector3(-5.5, -5.5, -5.5), Vector3(11, 11, 11))
+	mmi.add_to_group(SessionState.entity_group(OriginChamberScript.layer_entity(l)))
+	mmi.set_meta(CameraDirector.FOCUS_BOUNDS_META, layer_bounds(l))
 	add_child(mmi)
 	_mm.append(mm)
 	_mmi.append(mmi)

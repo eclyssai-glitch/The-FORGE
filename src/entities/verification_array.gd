@@ -7,11 +7,21 @@ extends Node3D
 ## Each passed check sends a PALE flash through the structure (FragmentStructure, Choreography).
 ## Selection: StaticBody3D (layer 2) on the ring, meta entity_id = &"verification_array";
 ## highlight = BONE emission on the ring body.
+## The band rides on top of the physical ring (BAND_LIFT): the band's centre is the scan height
+## (`scan_y`), the ring hangs just below it. Coplanar, the opaque ring hid the middle of the band
+## on its near side and left two sub-pixel slivers that read as a dotted thread.
+## Focus: the ring node joins SessionState.entity_group(ENTITY_ID) (bounds = ring + band, so
+## the framing follows the ring's height at the moment of the request).
 
 const ENTITY_ID := &"verification_array"
 ## Radius clears the widest ring (3.05) with room for the band.
 const RADIUS := 3.42
 const BAND_WIDTH := 0.16
+## Physical ring cross-section (radial thickness, height).
+const RING_THICKNESS := 0.06
+const RING_HEIGHT := 0.1
+## Band centre above the ring centre: the band sits on the ring's top edge, never behind it.
+const BAND_LIFT := (RING_HEIGHT + BAND_WIDTH) * 0.5
 const HIGHLIGHT_ENERGY := 0.5
 ## The band is the brightest PALE element: capped so it reads as a calm scan line, not a bloom.
 const BAND_LEVEL := 0.5
@@ -37,8 +47,12 @@ func _ready() -> void:
 
 	ring = MeshInstance3D.new()
 	ring.name = "Ring"
-	ring.mesh = MeshBuilder.ring(RADIUS + 0.05, 0.06, 0.1, 160)
+	ring.mesh = MeshBuilder.ring(RADIUS + 0.05, RING_THICKNESS, RING_HEIGHT, 160)
 	ring.material_override = _ring_mat
+	ring.add_to_group(SessionState.entity_group(ENTITY_ID))
+	var r := RADIUS + 0.05 + RING_THICKNESS
+	ring.set_meta(CameraDirector.FOCUS_BOUNDS_META,
+		AABB(Vector3(-r, -RING_HEIGHT * 0.5, -r), Vector3(2.0 * r, BAND_LIFT + (RING_HEIGHT + BAND_WIDTH) * 0.5, 2.0 * r)))
 	add_child(ring)
 
 	# Vertical ribbon (width along Y > radial thickness): reads as a band from the side.
@@ -48,6 +62,7 @@ func _ready() -> void:
 	band.material_override = _band_mat
 	band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	band.visible = false
+	band.position.y = BAND_LIFT
 	ring.add_child(band)
 
 	body = StaticBody3D.new()
@@ -77,7 +92,7 @@ func _update(delta: float) -> void:
 	if now.is_equal_approx(_last):
 		return
 	_last = now
-	ring.position.y = y
+	ring.position.y = y - BAND_LIFT
 	band.visible = s > 0.001
 	_band_mat.set_shader_parameter("strength", s * BAND_LEVEL)
 	_structure_mat.set_shader_parameter("scan_y", y)
