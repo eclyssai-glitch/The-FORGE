@@ -85,12 +85,20 @@ func _run_capture(dir: String) -> void:
 			continue
 		Session.set_mode(c[2])
 		Simulation.seek(c[1])
+		_snap_cameras()
 		await _settle(2.4)
 		var img := get_viewport().get_texture().get_image()
 		var path := abs_dir.path_join("%s.png" % c[0])
 		img.save_png(path)
 		print("[capture] %s (t=%.1f, %s)" % [path, c[1], Session.mode_name()])
 	get_tree().quit(0)
+
+
+## Jumps every camera rig straight to the current mode's shot (no tween) before settling.
+func _snap_cameras() -> void:
+	for node in get_tree().get_nodes_in_group(&"camera_director"):
+		if node.has_method(&"snap_to_mode_shot"):
+			node.call(&"snap_to_mode_shot")
 
 
 ## Lets camera tweens and time-based visuals settle before a capture.

@@ -27,13 +27,18 @@ UI: src/ui (Control nativo), src/style (tema)
 `scenes/main.tscn` (raiz: `main.gd`) → `World` (`scenes/world.tscn`) + `HUD` (`scenes/hud.tscn`)
 + camada de fade. `main.gd` também ativa automação por argumentos (`--smoke-test`, `--capture=`, `--quality=`).
 
+`World` (`src/world/world.gd`) compõe, nesta ordem: `WorldEnvironment` → entidades
+(`src/entities`) → efeitos (`src/fx`) → `Universe` → `CameraDirector` (`src/animation`) → `Picker`.
+Módulos de outras áreas entram por caminho e são pulados se ausentes (detalhes em `docs/ENGINE.md`).
+Seleção 3D: `Picker` faz raycast na camada de colisão 2 e escreve em `Session`; a UI lê `Session`.
+
 ## Diretórios
 
 | Diretório | Conteúdo | Escritor |
 |---|---|---|
 | `src/events` | Lógica pura de eventos, mundo, missão, entidades | game-engineer |
 | `src/core` | Autoloads Simulation/Session, main, automação | game-engineer |
-| `src/world` | Quality, composição do mundo, universo | game-engineer |
+| `src/world` | Quality, composição do mundo, universo (céu + sementes), seleção (Picker) | game-engineer |
 | `src/procedural` | Blueprints e builders de malha | procedural-modeler |
 | `src/entities`, `src/animation`, `src/fx` | Entidades, câmeras, efeitos | animator |
 | `src/style`, `src/ui` | Paleta, materiais, ambiente, tema, HUD | art-director |
