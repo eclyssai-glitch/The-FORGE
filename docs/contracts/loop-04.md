@@ -144,3 +144,35 @@ rótulos diegéticos em destaque.
   Fase B: `world.gd` compõe o AudioDirector por caminho e registra âncoras `set_anchor(&"planet"|&"miku"|&"hands",
   node)`; remix contra o timing real; o grave (50–300 Hz) está denso e constante na mix de prova — abrir espaço;
   investigar "4 resources still in use at exit" observado na gravação de prova.
+
+## Fase B — contratos (cena GENESIS viva)
+
+Princípio: GENESIS é composto **ao lado** da ORIGIN; o padrão continua ORIGIN até a virada (Fase C). Tudo que é
+narrativo = f(`Simulation.genesis`, `Simulation.time`); ambiente via `MotionClock`.
+
+- **game-engineer** (`src/world/**`, `src/core/**`, `scenes/**`, `tools/**`, `project.godot`):
+  - `world.gd` compõe módulos **por cenário** (`MODULES_BY_SCENARIO`; GENESIS = caminhos abaixo) e recompõe em
+    `Simulation.scenario_changed`; `modules=N/M` do smoke conta os módulos do cenário ativo. ORIGIN intacta.
+  - GENESIS: `Universe`/sementes da ORIGIN desligados; `WorldEnvironment` v2 (céu `MaterialLibrary.nebula_sky()`,
+    AgX, glow contido, névoa/volumétrica leve se couber no LOW, ambiente mínimo — a luz vem do rig), atualização do
+    `motion_time` do céu ≤ 5 Hz, `MaterialLibrary.set_motion_time(MotionClock.now())` por quadro e
+    `apply_quality()` ao trocar perfil.
+  - Áudio: compõe `res://src/audio/audio_director.gd` (nome `AudioDirector`, grupo `audio_director`) em ambos os
+    cenários; após compor, registra âncoras: todo nó com meta `audio_anchor` (`&"planet"|&"miku"|&"hands"`) vira
+    `set_anchor(kind, node)`.
+  - Automação GENESIS: lista de capturas própria (fases-chave × modos, HUD visível) + **style frames**
+    (`--style-frames=<dir>`: ≥ 6 enquadramentos herói com HUD oculto, 1920×1080), smoke GENESIS exigindo módulos
+    N/N, UI e selo; `tools/capture_evidence.sh --scenario=genesis`. Picker funciona com entidades GENESIS
+    (`StaticBody3D` layer 2 + meta `entity_id`).
+- **animator** (`src/entities/**`, `src/fx/**`, `src/animation/**`) — módulos GENESIS (caminhos fixos):
+  `src/entities/genesis/genesis_light_rig.gd`, `miku.gd`, `auxiliary_hands.gd`, `forming_planet.gd`,
+  `orbital_system.gd` (luas, anel, cinturão, planetas distantes, linhas orbitais), `relation_threads.gd` (fios do
+  cabelo → corpos, pulsos), `src/fx/genesis/stardust.gd` (poeira/acreção/vestido), `src/fx/genesis/formation_glow.gd`
+  (brilhos controlados, faíscas de formação); câmera: planos GENESIS no `CameraDirector` por modo (FORGE herói,
+  UNIVERSE sistema, OBSERVATORY relacional) + deriva cinematográfica lenta; foco em qualquer entidade GENESIS.
+  Âncoras de áudio por meta `audio_anchor`. Seleção: grupo `entity_<id>` + corpo pickável.
+- **art-director** (`src/ui/**`, `src/style/**`): UI diegética GENESIS ciente do cenário (ver bíblia §8), refino dos
+  materiais nos meshes reais (ressalvas da Fase A) e `EnvironmentProfile` GENESIS se necessário. UI sons via
+  `get_tree().call_group(&"audio_director", &"play_ui", &"ui_tick"|&"ui_select")`; volumes por bus via funções
+  estáticas de `AudioDirector`. Contratos do smoke (`ui_transport` com Start/Pause/Reset, `demo_badge`) mantidos.
+- **sound-designer**: remix contra o timing real quando a cena existir.
