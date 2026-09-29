@@ -5,6 +5,8 @@ extends Node
 const WorldScript := preload("res://src/world/world.gd")
 
 const SMOKE_SPEED := 8.0
+## Seconds allowed for get_tree().quit() to end the main loop before the process kills itself.
+const EXIT_WATCHDOG_SECONDS := 3.0
 const REPORT_NAME := "smoke_report.txt"
 
 ## Capture points: [file name, simulation time, mode].
@@ -84,12 +86,16 @@ func _run_smoke() -> void:
 	lines.append("pause_holds=%s reset_ok=%s" % [pause_holds, reset_ok])
 	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
 	_write_report(lines)
-	get_tree().quit(0 if ok else 1)
+	_quit(0 if ok else 1)
 
 
 func _run_capture(dir: String) -> void:
 	var abs_dir := dir if dir.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(dir)
 	DirAccess.make_dir_recursive_absolute(abs_dir)
+	# Captures must not depend on how far the entry fade got: end it before anything is shot.
+	var main := get_parent()
+	if main and main.has_method(&"finish_fade"):
+		main.call(&"finish_fade")
 	await _settle(1.5)
 	var only := String(options.get("capture-only", ""))
 	for c in CAPTURES:
@@ -103,7 +109,20 @@ func _run_capture(dir: String) -> void:
 		var path := abs_dir.path_join("%s.png" % c[0])
 		img.save_png(path)
 		print("[capture] %s (t=%.1f, %s)" % [path, c[1], Session.mode_name()])
-	get_tree().quit(0)
+	_quit(0)
+
+
+## Ends an automation run. quit() normally ends the main loop at the end of this frame; if
+## the loop is still running EXIT_WATCHDOG_SECONDS later (seen under Xvfb + lavapipe), the
+## process kills itself so scripts waiting on it never hang. Only reached in automation runs
+## (--capture / --smoke-test). Hangs after the main loop (driver teardown) are covered by
+## tools/_proc.sh, which kills the whole process session.
+func _quit(code: int) -> void:
+	get_tree().create_timer(EXIT_WATCHDOG_SECONDS, true, false, true).timeout.connect(
+		func() -> void:
+			push_warning("automation: quit did not complete in %.0fs; killing process." % EXIT_WATCHDOG_SECONDS)
+			OS.kill(OS.get_process_id()))
+	get_tree().quit(code)
 
 
 ## The composed world (scenes/world.tscn instanced as "World" under the main scene), or null.
