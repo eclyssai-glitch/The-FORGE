@@ -8,7 +8,7 @@ Dono: coordenador. Jogo completo com HUD nativo.
 | `low/*.png` | `tools/capture_evidence.sh docs/evidence/loop-03/low --quality=low` | LOW (perfil sem GPU dedicada) |
 | `720p/*.png` | `tools/capture_evidence.sh docs/evidence/loop-03/720p --quality=high --resolution=1280x720` | HIGH, 1280×720 |
 | `smoke_source.txt` | `tools/smoke_test.sh` (UI obrigatória) | AUTO (LOW neste contêiner) |
-| `smoke_windows_pack.txt` | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` | AUTO |
+| `smoke_windows_pack.txt` | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` (build final do commit 214a02a) | AUTO |
 
 Capturas 10–13 exercitam inspector, OBSERVATORY no meio da verificação, foco de câmera numa semente e HUD oculto (H) com o selo mantido.
 Conjunto final após a rodada `docs/contracts/loop-03-fixes.md`.

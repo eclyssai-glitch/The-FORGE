@@ -4,7 +4,7 @@ quality=AUTO · LOW
 modules=9/9
 events_received=20 expected=20
 phase=COMPLETE layers=5/5
-frames=48 wall_seconds=14.57 avg_fps=3.3
+frames=48 wall_seconds=19.89 avg_fps=2.4
 mission_objectives=7/7
 pause_holds=true reset_ok=true
 ui=present
