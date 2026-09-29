@@ -21,7 +21,7 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 0.77, "scaling_mode": Viewport.SCALING_3D_MODE_FSR,
 				"msaa": Viewport.MSAA_DISABLED, "fxaa": true,
 				"ssao": false, "ssil": false, "glow": true, "volumetric_fog": false,
-				"shadow_size": 1024, "shadows": true, "shadow_splits": 2, "particles": 0.35,
+				"shadow_size": 2048, "shadows": true, "shadow_splits": 2, "particles": 0.35,
 			}
 		Level.MEDIUM:
 			return {
