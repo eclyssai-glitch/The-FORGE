@@ -201,7 +201,7 @@ func _build_fragment_picks() -> void:
 func _update(delta: float) -> void:
 	var w := Simulation.world
 	var t := Simulation.time
-	var rt := Time.get_ticks_msec() * 0.001
+	var rt := MotionClock.now()
 	var emitted := w.fragments_at >= 0.0
 	var twist := Choreography.twist_amount(w, t)
 	var force := _force

@@ -252,8 +252,8 @@ func _begin_transition() -> void:
 
 
 ## Starts a transition of _blend 0 -> 1 over Palette.T_CINEMATIC of wall-clock time.
-## It is a Tween curve (Tween.interpolate_value, sine in-out) driven by Time.get_ticks_msec, not
-## by the frame delta: the engine caps a frame's delta (max_physics_steps_per_frame /
+## It is a Tween curve (Tween.interpolate_value, sine in-out) driven by MotionClock (wall clock;
+## game frame time only under the Movie Maker), not by the frame delta: the engine caps a frame's delta (max_physics_steps_per_frame /
 ## physics_ticks_per_second = 8/60 s), so on a slow renderer a delta-driven Tween would run
 ## several times slower than real time and a focus would not settle in the time it promises.
 func _start_blend() -> void:
@@ -319,4 +319,4 @@ static func _is_cue(id: StringName) -> bool:
 
 
 static func _now() -> float:
-	return Time.get_ticks_msec() * 0.001
+	return MotionClock.now()
