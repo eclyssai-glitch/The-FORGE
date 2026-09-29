@@ -37,6 +37,11 @@ const FOG_LIGHT := {"key": 0.08, "fill": 0.0, "rim": 0.0, "core": 1.0}
 ## Stage order (for LightRig and tests).
 const STAGES: Array[String] = ["dormant", "active", "lit", "verify", "final"]
 
+## UNIVERSE: the volumetric volume only fills the near air in front of the camera. Seen from
+## ~80 units, a volume reaching the chamber absorbed most of its light (HIGH read far darker than
+## LOW, which has no volumetric); ending the volume short keeps HIGH and LOW on the same key.
+const UNIVERSE_VOLUMETRIC_LENGTH := 12.0
+
 ## Depth fog starts closer when volumetric fog is off (LOW): multiplier over fog_depth_begin.
 const NO_VOLUMETRIC_FOG_BEGIN_SCALE := 0.7
 const _META_FOG_BEGIN := &"korium_fog_begin"
@@ -133,7 +138,7 @@ static func apply_quality(env: Environment, profile: Dictionary) -> void:
 static func mode_fog(mode: int) -> Dictionary:
 	match mode:
 		SessionState.Mode.UNIVERSE:
-			return {"fog_density": 1.0, "fog_depth_begin": 45.0, "fog_depth_end": 220.0, "fog_depth_curve": 1.3, "volumetric_fog_length": 96.0, "exposure_scale": 1.25}
+			return {"fog_density": 1.0, "fog_depth_begin": 45.0, "fog_depth_end": 220.0, "fog_depth_curve": 1.3, "volumetric_fog_length": UNIVERSE_VOLUMETRIC_LENGTH, "exposure_scale": 1.5}
 		SessionState.Mode.OBSERVATORY:
 			return {"fog_density": 1.0, "fog_depth_begin": 9.0, "fog_depth_end": 30.0, "fog_depth_curve": 1.2, "volumetric_fog_length": 40.0, "exposure_scale": 1.0}
 		_:

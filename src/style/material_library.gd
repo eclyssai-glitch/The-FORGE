@@ -133,25 +133,6 @@ static func mote(color: Color) -> ShaderMaterial:
 	return _cache[key]
 
 
-## DEPRECATED — kept only so current callers (src/fx) keep working until they migrate:
-## dust -> mote(color) (round soft disc; set `near_fade` instead of distance_fade_*),
-## sparks -> spark(color). Remove once nothing calls it. Draws square quads: do not use for new work.
-static func particle(color: Color) -> StandardMaterial3D:
-	var key := StringName("particle_" + color.to_html(true))
-	if not _cache.has(key):
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-		m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-		m.vertex_color_use_as_albedo = true
-		m.albedo_color = color
-		m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-		m.disable_receive_shadows = true
-		_cache[key] = m
-	return _cache[key]
-
-
 ## Solid emissive shard (non-billboard meshes such as the emission sparks): unshaded, additive,
 ## double-sided, colour from the material only. `color` must be a Palette colour; cached per colour.
 static func spark(color: Color) -> StandardMaterial3D:
