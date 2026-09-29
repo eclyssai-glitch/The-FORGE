@@ -101,7 +101,9 @@ func test_universe_has_three_pickable_seeds() -> void:
 		var root := u.seed_node(id)
 		assert_not_null(root, String(id))
 		var d := root.global_position.length()
-		assert_between(d, 18.0, 30.0, "%s distance from the chamber" % id)
+		assert_between(d, 60.0, 72.0, "%s distance from the chamber" % id)
+		var horizontal := Vector2(root.global_position.x, root.global_position.z).length()
+		assert_gt(horizontal, 40.0, "%s beyond the chamber floor (radius 34)" % id)
 		var bodies := root.find_children("*", "StaticBody3D", true, false)
 		assert_eq(bodies.size(), 1, "%s has one pick body" % id)
 		var body := bodies[0] as StaticBody3D
@@ -111,6 +113,41 @@ func test_universe_has_three_pickable_seeds() -> void:
 		assert_eq(shapes.size(), 1)
 		assert_not_null((shapes[0] as CollisionShape3D).shape)
 		assert_true(EntityCatalog.all_ids().has(id), "%s is a catalog entity" % id)
+
+
+func test_seed_rings_are_tilted_never_upright() -> void:
+	var u: Universe = world.universe
+	for id in u.seed_ids():
+		var rings := u.seed_node(id).get_node("Rings")
+		assert_gt(rings.get_child_count(), 0, "%s has halo rings" % id)
+		for ring: Node3D in rings.get_children():
+			var normal := ring.transform.basis.y.normalized()
+			assert_gt(absf(normal.dot(Vector3.UP)), 0.7, "%s/%s is not an upright ring" % [id, ring.name])
+
+
+func test_star_intensity_follows_mode() -> void:
+	var sky: ShaderMaterial = world.universe.sky_material
+	for mode: SessionState.Mode in [SessionState.Mode.UNIVERSE, SessionState.Mode.FORGE, SessionState.Mode.OBSERVATORY]:
+		Session.set_mode(mode)
+		assert_almost_eq(float(sky.get_shader_parameter("star_intensity")), Universe.star_intensity_for(mode), 1e-5)
+	assert_gt(Universe.star_intensity_for(SessionState.Mode.UNIVERSE), Universe.star_intensity_for(SessionState.Mode.OBSERVATORY))
+	assert_gt(Universe.star_intensity_for(SessionState.Mode.OBSERVATORY), Universe.star_intensity_for(SessionState.Mode.FORGE))
+
+
+func test_sky_radiance_pass_has_a_lift() -> void:
+	var names: Array = []
+	for u: Dictionary in world.universe.sky_material.shader.get_shader_uniform_list():
+		names.append(u["name"])
+	assert_has(names, "radiance_lift", "reflection cubemap is not pure VOID")
+
+
+func test_module_report_matches_scripts() -> void:
+	var names := WorldScript.expected_module_names()
+	assert_eq(names.size(), WorldScript.MODULES.size() + 1, "MODULES + CameraDirector")
+	assert_eq(names[-1], String(WorldScript.CAMERA_DIRECTOR[0]))
+	var missing := world.missing_modules()
+	for m in WorldScript.MODULES + [WorldScript.CAMERA_DIRECTOR]:
+		assert_eq(missing.has(String(m[0])), not ResourceLoader.exists(m[1]), "%s missing iff its script is absent" % m[0])
 
 
 func test_seeds_drift_slowly_within_range() -> void:
@@ -126,8 +163,14 @@ func test_seeds_drift_slowly_within_range() -> void:
 
 
 func test_picker_click_logic() -> void:
-	assert_true(Picker.is_click(Vector2(100, 100), Vector2(103, 104)))
-	assert_false(Picker.is_click(Vector2(100, 100), Vector2(106, 100)), "6 px is an orbit drag")
+	assert_eq(InputTuning.DRAG_THRESHOLD_PX, 4.0)
+	assert_true(Picker.is_click_path(PackedVector2Array([Vector2(100, 100), Vector2(103, 100)])), "3 px is a click")
+	assert_false(Picker.is_click_path(PackedVector2Array([Vector2(100, 100), Vector2(105, 100)])), "5 px is a drag")
+	var round_trip := PackedVector2Array([Vector2(100, 100), Vector2(180, 100), Vector2(100, 100)])
+	assert_almost_eq(Picker.path_length(round_trip), 160.0, 1e-4)
+	assert_false(Picker.is_click_path(round_trip), "a drag back to the press point is still a drag")
+	assert_true(InputTuning.is_drag(InputTuning.DRAG_THRESHOLD_PX))
+	assert_false(InputTuning.is_drag(InputTuning.DRAG_THRESHOLD_PX - 0.01))
 	assert_eq(Picker.entity_id_of_hit({}), &"")
 	var body := StaticBody3D.new()
 	body.set_meta(&"entity_id", &"seed_aurel")
@@ -155,13 +198,23 @@ func test_click_selects_and_empty_click_clears() -> void:
 	cam.make_current()
 	await wait_physics_frames(2)
 	var center := world.get_viewport().get_visible_rect().size * 0.5
-	_click(center, center + Vector2(2, 1))
+	_click(center, center + Vector2(3, 0))
 	await wait_physics_frames(2)
-	assert_eq(Session.selected, &"seed_aurel", "click on a seed selects it")
+	assert_eq(Session.selected, &"seed_aurel", "a 3 px click on a seed selects it")
 	# A drag (orbit) does not change the selection.
 	_click(Vector2(1, 1), Vector2(80, 1))
 	await wait_physics_frames(2)
 	assert_eq(Session.selected, &"seed_aurel")
+	# A 160 px round-trip drag that ends in the void where it started is still a drag.
+	cam.look_at(target + Vector3(0.0, 40.0, 0.0))
+	_click(center, center, [center + Vector2(80, 0)])
+	await wait_physics_frames(2)
+	assert_eq(Session.selected, &"seed_aurel", "round-trip drag does not clear the selection")
+	cam.look_at(target)
+	Session.select(&"")
+	_click(center, center, [center + Vector2(80, 0)])
+	await wait_physics_frames(2)
+	assert_eq(Session.selected, &"", "round-trip drag over a seed does not select it")
 	# Click in the void clears the selection.
 	cam.look_at(target + Vector3(0.0, 40.0, 0.0))
 	_click(center, center)
@@ -176,12 +229,20 @@ func test_click_selects_and_empty_click_clears() -> void:
 	assert_eq(Session.selected, &"")
 
 
-func _click(press: Vector2, release: Vector2) -> void:
+func _click(press: Vector2, release: Vector2, via: Array = []) -> void:
 	var down := InputEventMouseButton.new()
 	down.button_index = MOUSE_BUTTON_LEFT
 	down.pressed = true
 	down.position = press
 	world.picker._unhandled_input(down)
+	var last := press
+	for p: Vector2 in via + [release]:
+		var mm := InputEventMouseMotion.new()
+		mm.position = p
+		mm.relative = p - last
+		mm.button_mask = MOUSE_BUTTON_MASK_LEFT
+		world.picker._unhandled_input(mm)
+		last = p
 	var up := InputEventMouseButton.new()
 	up.button_index = MOUSE_BUTTON_LEFT
 	up.pressed = false

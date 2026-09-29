@@ -2,8 +2,11 @@
 // The background stays VOID. On top of it: sparse, cold, pin-point stars (two layers on a cube-face
 // grid, sized in screen pixels so they never become blobs) and a barely visible distant dust band
 // along one great circle. No nebulae, no colour: every colour is injected from Palette.
-// Static (no TIME): the sky is rendered once and only redrawn when a uniform changes.
-// The radiance cubemap pass outputs pure VOID so reflections are not speckled by stars.
+// Static (no TIME): the background is still drawn every frame (it depends on the camera), but the
+// radiance cubemap (Sky.PROCESS_MODE_AUTOMATIC) is only re-rendered when a uniform changes.
+// The radiance cubemap pass carries no stars (reflections are not speckled); it outputs VOID plus a
+// faint vertical lift of the band colour (brighter above, none below the horizon), so metals
+// reflecting the sky get a readable gradient instead of pure black.
 // `disable_fog`: depth fog would otherwise fully cover the sky (fog_sky_affect = 1).
 shader_type sky;
 render_mode disable_fog;
@@ -16,7 +19,7 @@ uniform vec3 band_color : source_color;
 uniform float star_intensity = 0.55;
 // Probability that a grid cell holds a star (layer 1 = brighter, layer 2 = faint dust of stars).
 uniform float star_density = 0.045;
-uniform float faint_density = 0.045;
+uniform float faint_density = 0.03;
 // Cells across one cube face (angular size of a cell ≈ 90° / grid).
 uniform float grid = 70.0;
 uniform float faint_grid = 150.0;
@@ -28,6 +31,8 @@ uniform float band_width = 0.2;
 uniform float band_strength = 0.04;
 // Extra star density inside the band.
 uniform float band_star_boost = 1.2;
+// Radiance (reflection) cubemap only: strength of the band-colour gradient over VOID.
+uniform float radiance_lift = 0.05;
 
 float hash13(vec3 p) {
 	p = fract(p * 0.1031);
@@ -85,7 +90,7 @@ vec2 star_layer(vec2 p, float face, float px, float density, float seed) {
 
 void sky() {
 	if (AT_CUBEMAP_PASS) {
-		COLOR = void_color;
+		COLOR = void_color + band_color * radiance_lift * smoothstep(-0.1, 0.8, EYEDIR.y);
 	} else {
 		vec3 dir = normalize(EYEDIR);
 		float along = dot(dir, normalize(band_normal)) / band_width;

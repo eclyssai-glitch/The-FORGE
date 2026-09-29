@@ -22,6 +22,9 @@ No Windows com o editor instalado: *Project → Export → Windows Desktop*, ou
 | Pacote exato do `.exe` executado no renderizador real | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` |
 | Jogo a partir do código | `tools/smoke_test.sh` e `tools/capture_evidence.sh` |
 
+O smoke reprova se: `RESULT=FAIL`, falta a linha `RESULT`, há `SCRIPT ERROR`/`Parse Error` no log,
+a linha `modules=N/M` tem N ≠ M (script de entidade, fx ou câmera ausente/quebrado) ou o tempo esgota.
+
 Limitação registrada (ADR-007): o `.exe` não executa sob o Wine 9.0 disponível neste ambiente
 (falha do Wine anterior ao código do jogo). O conteúdo do jogo dentro do `.exe` é validado
 executando-o com o runtime oficial Godot 4.7.2. O código específico do Windows (template,
@@ -34,7 +37,8 @@ drivers gráficos do Windows, janela) só é validado pelo checklist abaixo, num
 3. (a partir do Loop 3) `Espaço` inicia/pausa, `R` reinicia, `1/2/3` alternam UNIVERSE/FORGE/OBSERVATORY.
 4. (a partir do Loop 3) Assista à demo completa (~50 s): 7 fases visíveis; OBSERVATORY mostra 7/7 objetivos.
 5. Opcional, teste automatizado: `KoriumUniverse.exe -- --smoke-test` e leia
-   `%APPDATA%\Godot\app_userdata\KORIUM UNIVERSE\smoke_report.txt` (esperado `RESULT=PASS`).
+   `%APPDATA%\Godot\app_userdata\KORIUM UNIVERSE\smoke_report.txt` (esperado `modules=9/9` e
+   `RESULT=PASS`; um módulo do mundo que não carregou reprova o smoke).
 
 ## Builds registradas
 

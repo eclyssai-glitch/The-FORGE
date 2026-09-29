@@ -2,6 +2,8 @@ extends Node
 ## Test automation driven from the command line (see main.gd). Runs inside the real
 ## game — same scenes, same renderer — so results reflect what a player sees.
 
+const WorldScript := preload("res://src/world/world.gd")
+
 const SMOKE_SPEED := 8.0
 const REPORT_NAME := "smoke_report.txt"
 
@@ -50,12 +52,22 @@ func _run_smoke() -> void:
 	var expected := OriginChamberScript.build().size()
 	lines.append("renderer=%s adapter=%s" % [RenderingServer.get_current_rendering_method(), RenderingServer.get_video_adapter_name()])
 	lines.append("quality=%s" % Quality.level_name())
+	# Every expected world module must have loaded: a missing entity/fx/camera script would
+	# otherwise only print a warning and the demo would still "complete".
+	var expected_modules := WorldScript.expected_module_names()
+	var missing: Array[String] = expected_modules.duplicate()
+	var world := _world()
+	if world:
+		missing = world.missing_modules()
+	lines.append("modules=%d/%d" % [expected_modules.size() - missing.size(), expected_modules.size()])
+	if not missing.is_empty():
+		lines.append("FAIL modules missing: %s" % ", ".join(PackedStringArray(missing)))
 	lines.append("events_received=%d expected=%d" % [received.size(), expected])
 	lines.append("phase=%s layers=%d/%d" % [Simulation.world.phase_name(), Simulation.world.layers_built(), OriginChamberScript.LAYER_COUNT])
 	lines.append("frames=%d wall_seconds=%.2f avg_fps=%.1f" % [frames, elapsed, frames / maxf(elapsed, 0.001)])
 	var mission := Mission.evaluate(Simulation.emitted_events())
 	lines.append("mission_objectives=%d/%d" % [Mission.completed_count(mission), mission.size()])
-	ok = ok and received.size() == expected and Simulation.world.phase == WorldState.Phase.COMPLETE \
+	ok = ok and missing.is_empty() and received.size() == expected and Simulation.world.phase == WorldState.Phase.COMPLETE \
 		and Mission.completed_count(mission) == mission.size()
 	# Exercise pause / reset on the live game.
 	Simulation.seek(20.0)
@@ -92,6 +104,14 @@ func _run_capture(dir: String) -> void:
 		img.save_png(path)
 		print("[capture] %s (t=%.1f, %s)" % [path, c[1], Session.mode_name()])
 	get_tree().quit(0)
+
+
+## The composed world (scenes/world.tscn instanced as "World" under the main scene), or null.
+func _world() -> WorldScript:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return null
+	return scene.get_node_or_null(^"World") as WorldScript
 
 
 ## Jumps every camera rig straight to the current mode's shot (no tween) before settling.

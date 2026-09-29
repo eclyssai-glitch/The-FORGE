@@ -3,18 +3,20 @@ extends Node
 ## Mouse picking of 3D entities. Casts a ray from the active camera
 ## (`get_viewport().get_camera_3d()`) against collision layer 2 ("pickable") and forwards the
 ## hit's `entity_id` meta to `Session.select` (left click) or `Session.hover` (mouse motion).
-## A left press that travels CLICK_MAX_DISTANCE px or more before release is a camera orbit
-## drag, not a click. Clicking empty space clears the selection; the `deselect` action too.
+## A left press whose accumulated travel (every movement between press and release, not just
+## the net displacement) reaches InputTuning.DRAG_THRESHOLD_PX is a camera orbit drag, not a
+## click. Clicking empty space clears the selection; the `deselect` action too.
 ## Uses `_unhandled_input`, so events consumed by the UI never reach it; it never marks events
 ## as handled, so the camera rig still receives the same drags.
 ## Physics queries run in `_physics_process` (the safe place to use the direct space state).
 
 const PICK_MASK := 2
-const CLICK_MAX_DISTANCE := 6.0
 const RAY_LENGTH := 500.0
 
-var _press_pos := Vector2.ZERO
 var _pressing := false
+## Accumulated pointer travel (px) of the current left press and the last pointer position.
+var _travel := 0.0
+var _last_pos := Vector2.ZERO
 var _pending_click := false
 var _click_pos := Vector2.ZERO
 var _pending_hover := false
@@ -33,15 +35,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mb and mb.button_index == MOUSE_BUTTON_LEFT:
 		if mb.pressed:
 			_pressing = true
-			_press_pos = mb.position
+			_travel = 0.0
+			_last_pos = mb.position
 		elif _pressing:
 			_pressing = false
-			if is_click(_press_pos, mb.position):
+			_travel += _last_pos.distance_to(mb.position)
+			if not InputTuning.is_drag(_travel):
 				_pending_click = true
 				_click_pos = mb.position
 		return
 	var mm := event as InputEventMouseMotion
 	if mm:
+		if _pressing:
+			_travel += _last_pos.distance_to(mm.position)
+			_last_pos = mm.position
 		_pending_hover = true
 		_hover_pos = mm.position
 
@@ -53,7 +60,7 @@ func _physics_process(_delta: float) -> void:
 	if _pending_hover:
 		_pending_hover = false
 		# No hover changes while dragging the camera.
-		if not _pressing or is_click(_press_pos, _hover_pos):
+		if not _pressing or not InputTuning.is_drag(_travel):
 			Session.hover(pick_at(_hover_pos))
 
 
@@ -77,9 +84,17 @@ func pick_ray(from: Vector3, to: Vector3) -> StringName:
 	return entity_id_of_hit(vp.find_world_3d().direct_space_state.intersect_ray(query))
 
 
-## True when a press and its release are close enough to be a click (not an orbit drag).
-static func is_click(press: Vector2, release: Vector2, max_distance: float = CLICK_MAX_DISTANCE) -> bool:
-	return press.distance_to(release) < max_distance
+## Accumulated length of a pointer path (press, motions..., release) in px.
+static func path_length(points: PackedVector2Array) -> float:
+	var total := 0.0
+	for i in range(1, points.size()):
+		total += points[i - 1].distance_to(points[i])
+	return total
+
+
+## True when a pointer path (press, motions..., release) is a click, not an orbit drag.
+static func is_click_path(points: PackedVector2Array) -> bool:
+	return not InputTuning.is_drag(path_length(points))
 
 
 ## Entity id carried by a ray hit: the collider's "entity_id" meta, else its parent's; &"" if none.

@@ -1,7 +1,8 @@
 class_name Universe
 extends Node3D
 ## The universe around the ORIGIN CHAMBER: a procedural sky (VOID background, sparse cold
-## stars, a barely visible distant dust band) and the three dormant seeds of future constructs.
+## stars, a barely visible distant dust band) and the three dormant seeds of future constructs,
+## placed beyond the chamber (60–70 units from the centre; the floor ends at 34).
 ## Seeds are pickable (StaticBody3D on collision layer 2 with meta "entity_id") and drift
 ## slowly in real time — an ambient breath that carries no simulation state.
 
@@ -14,11 +15,11 @@ const PICK_LAYER := 2
 ## towards +X in degrees, height) and a sober geometric form.
 ##   form "orb":       faceted sphere + one tilted ring
 ##   form "spindle":   elongated icosahedron + two coaxial rings
-##   form "armillary": icosahedron + two crossed rings
+##   form "armillary": icosahedron + two crossed rings, both tilted (never upright)
 const SEEDS: Array[Dictionary] = [
-	{"id": &"seed_aurel", "radius": 21.0, "angle": -100.0, "height": 3.5, "form": "orb", "size": 1.1, "phase": 0.0},
-	{"id": &"seed_vesper", "radius": 25.0, "angle": 150.0, "height": -2.0, "form": "spindle", "size": 0.85, "phase": 2.1},
-	{"id": &"seed_lattice", "radius": 22.0, "angle": 48.0, "height": 6.5, "form": "armillary", "size": 0.9, "phase": 4.2},
+	{"id": &"seed_aurel", "radius": 62.0, "angle": -100.0, "height": 8.0, "form": "orb", "size": 2.2, "phase": 0.0},
+	{"id": &"seed_vesper", "radius": 70.0, "angle": 150.0, "height": -1.0, "form": "spindle", "size": 1.7, "phase": 2.1},
+	{"id": &"seed_lattice", "radius": 66.0, "angle": 205.0, "height": 14.0, "form": "armillary", "size": 1.8, "phase": 4.2},
 ]
 
 ## Drift (real time): vertical bob amplitude/period and spin rate.
@@ -27,8 +28,17 @@ const DRIFT_PERIOD := 46.0
 const SPIN_RATE := 0.035
 ## Picking sphere radius relative to the seed size (generous: seeds are far away).
 const PICK_RADIUS_SCALE := 2.1
+## Halo ring cross-section per unit of seed size (radial thickness, height).
+const RING_THICKNESS := 0.04
+const RING_WIDTH := 0.12
 ## Halo ring strength (BONE, dormant: no energy, no EMBER).
-const HALO_STRENGTH := 0.32
+const HALO_STRENGTH := 0.18
+## Star brightness of the sky per mode: full in UNIVERSE, quiet behind the chamber.
+const STAR_INTENSITY := {
+	SessionState.Mode.UNIVERSE: 0.55,
+	SessionState.Mode.FORGE: 0.22,
+	SessionState.Mode.OBSERVATORY: 0.3,
+}
 
 var sky_material: ShaderMaterial
 
@@ -66,6 +76,15 @@ func apply_sky(env: Environment) -> void:
 	sky.process_mode = Sky.PROCESS_MODE_AUTOMATIC
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
+
+
+## Per-mode sky settings (called by the world on Session.mode_changed and at start).
+func apply_mode(mode: SessionState.Mode) -> void:
+	sky_material.set_shader_parameter("star_intensity", star_intensity_for(mode))
+
+
+static func star_intensity_for(mode: SessionState.Mode) -> float:
+	return float(STAR_INTENSITY.get(mode, STAR_INTENSITY[SessionState.Mode.UNIVERSE]))
 
 
 ## Seed ids in declaration order.
@@ -128,20 +147,20 @@ func _build_seed(s: Dictionary) -> void:
 			m.scale = Vector3(0.75, 1.6, 0.75)
 			body.add_child(m)
 			for k in 2:
-				var ring := _mesh(MeshBuilder.ring(size * (1.7 + 0.45 * k), 0.04, 0.12, 96), _halo)
+				var ring := _halo_ring(size, 1.7 + 0.45 * k)
 				ring.rotation = Vector3(deg_to_rad(8.0 + 6.0 * k), 0.0, deg_to_rad(-4.0))
 				rings.add_child(ring)
 		"armillary":
 			body.add_child(_mesh(MeshBuilder.icosphere(size, 0, true), MaterialLibrary.dormant_seed()))
-			var flat := _mesh(MeshBuilder.ring(size * 1.9, 0.04, 0.12, 96), _halo)
+			var flat := _halo_ring(size, 1.9)
 			flat.rotation = Vector3(deg_to_rad(12.0), 0.0, 0.0)
 			rings.add_child(flat)
-			var upright := _mesh(MeshBuilder.ring(size * 1.9, 0.04, 0.12, 96), _halo)
-			upright.rotation = Vector3(deg_to_rad(90.0), deg_to_rad(35.0), 0.0)
-			rings.add_child(upright)
+			var crossed := _halo_ring(size, 1.9)
+			crossed.rotation = Vector3(deg_to_rad(-34.0), deg_to_rad(60.0), 0.0)
+			rings.add_child(crossed)
 		_:
 			body.add_child(_mesh(MeshBuilder.icosphere(size, 1, true), MaterialLibrary.dormant_seed()))
-			var ring := _mesh(MeshBuilder.ring(size * 1.85, 0.04, 0.12, 96), _halo)
+			var ring := _halo_ring(size, 1.85)
 			ring.rotation = Vector3(deg_to_rad(18.0), 0.0, deg_to_rad(7.0))
 			rings.add_child(ring)
 
@@ -158,6 +177,12 @@ func _build_seed(s: Dictionary) -> void:
 	root.add_child(pick)
 
 	_seeds[id] = {"root": root, "body": body, "rings": rings, "base": root.position, "phase": float(s["phase"])}
+
+
+## Thin halo ring of `radius_factor`·size; cross-section scales with the seed so the rings keep
+## their proportions (and stay above a pixel) at the seeds' distance.
+func _halo_ring(size: float, radius_factor: float) -> MeshInstance3D:
+	return _mesh(MeshBuilder.ring(size * radius_factor, RING_THICKNESS * size, RING_WIDTH * size, 96), _halo)
 
 
 static func _mesh(mesh: Mesh, material: Material) -> MeshInstance3D:
