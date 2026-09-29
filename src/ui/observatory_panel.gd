@@ -2,9 +2,11 @@ class_name ObservatoryPanel
 extends PanelContainer
 ## OBSERVATORY: the left sheet (~38% of the width; the world stays alive on the right).
 ## Mission (Mission.evaluate over the emitted events: objectives with a done mark, progress %),
-## verification results (each check with its time), entity statuses, the complete event log
-## (scrollable, follows the newest event) and the "SIMULATED DATA" footer. Everything is derived
-## from Simulation: appended on event_emitted, rebuilt on world_rebuilt.
+## verification results (each check with its time; only the check under way reads RUNNING, the
+## later ones PENDING), entity statuses, the complete event log (scrollable, follows the newest
+## event; one line per event, the detail only under the newest event and under the newest event
+## of the selected entity) and the "SIMULATED DATA" footer. Everything is derived from
+## Simulation: appended on event_emitted, rebuilt on world_rebuilt.
 
 const DONE_MARK := "✓"
 const PENDING_MARK := "·"
@@ -24,6 +26,9 @@ var checks_header: Label
 var status_grid: GridContainer
 var log_scroll: ScrollContainer
 var log_box: VBoxContainer
+## Holds log_box inside the scroll; its bottom margin snaps the scrolled log to a row start.
+var log_frame: MarginContainer
+var _scroll_gen := 0
 var log_count: Label
 
 var _objective_rows: Array[HBoxContainer] = []
@@ -35,7 +40,7 @@ var _progress := 0.0
 func _init() -> void:
 	name = "ObservatoryPanel"
 	theme_type_variation = &"Sheet"
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	var v := UiKit.vbox(0)
 	add_child(v)
 
@@ -135,12 +140,19 @@ func _init() -> void:
 	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	log_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	log_scroll.custom_minimum_size = Vector2(0, 72)
-	log_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	UiKit.catch_mouse(log_scroll, Control.MOUSE_FILTER_PASS)
 	log_scroll.focus_mode = Control.FOCUS_NONE
 	v.add_child(log_scroll)
+	log_scroll.resized.connect(_scroll_to_end)
+	log_frame = MarginContainer.new()
+	log_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	log_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		log_frame.add_theme_constant_override(side, 0)
+	log_scroll.add_child(log_frame)
 	log_box = UiKit.vbox(6)
 	log_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	log_scroll.add_child(log_box)
+	log_frame.add_child(log_box)
 	v.add_child(UiKit.separator())
 
 	# --- Footer ---
@@ -156,6 +168,9 @@ func _init() -> void:
 func _ready() -> void:
 	Simulation.event_emitted.connect(_on_event)
 	Simulation.world_rebuilt.connect(rebuild)
+	Session.selection_changed.connect(func(_id: StringName) -> void:
+		_refresh_details()
+		_scroll_to_end.call_deferred())
 	rebuild()
 
 
@@ -166,6 +181,7 @@ func rebuild() -> void:
 		c.free()
 	for e in Simulation.emitted_events():
 		log_box.add_child(_log_row(e))
+	_refresh_details()
 	_refresh_state()
 	_scroll_to_end.call_deferred()
 
@@ -183,8 +199,18 @@ func log_size() -> int:
 	return log_box.get_child_count()
 
 
+## Log rows whose detail line is shown (tests): the newest, and the newest of the selection.
+func detailed_rows() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for h in log_box.get_children():
+		if _detail_of(h).visible:
+			out.append(StringName(h.name))
+	return out
+
+
 func _on_event(e: SimEvent) -> void:
 	log_box.add_child(_log_row(e))
+	_refresh_details()
 	_refresh_state()
 	_scroll_to_end.call_deferred()
 
@@ -209,17 +235,42 @@ func _refresh_state() -> void:
 	var passed := {}
 	for c in w.checks:
 		passed[c["check"]] = float(c["at"])
+	var running := current_check(w)
 	for row: Array in _check_rows:
 		var ok := passed.has(row[0])
 		(row[2] as Label).text = ("T+%04.1f" % passed[row[0]]) if ok else "—"
-		(row[3] as Label).text = "PASSED" if ok else ("RUNNING" if w.verification_at >= 0.0 and w.verified_at < 0.0 else "—")
+		(row[3] as Label).text = check_status(w, row[0])
 		(row[3] as Label).theme_type_variation = &"Data" if ok else &"DataDim"
 		(row[3] as Label).add_theme_font_size_override("font_size", Palette.SIZE_SMALL)
-		(row[1] as Label).modulate.a = 1.0 if ok else 0.55
+		(row[1] as Label).modulate.a = 1.0 if ok else (0.8 if row[0] == running else 0.55)
 	checks_header.text = "%d/%d" % [w.checks.size(), OriginChamberScript.CHECKS.size()]
 	for id: StringName in _status_labels:
 		(_status_labels[id] as Label).text = layers_status(w) if id == &"layers" else EntityCatalog.status(id, w)
 	log_count.text = "%02d / %02d" % [emitted.size(), Simulation.timeline.events.size()]
+
+
+## The check under way: the first not yet passed (in CHECKS order) while the sweep runs; &"" else.
+static func current_check(w: WorldState) -> StringName:
+	if w.verification_at < 0.0 or w.verified_at >= 0.0:
+		return &""
+	var passed := {}
+	for c in w.checks:
+		passed[c["check"]] = true
+	for c: StringName in OriginChamberScript.CHECKS:
+		if not passed.has(c):
+			return c
+	return &""
+
+
+## Result column of one check: PASSED, RUNNING (only the current one), PENDING (later ones while
+## the sweep runs) or "—" (before the verification starts).
+static func check_status(w: WorldState, check: StringName) -> String:
+	for c in w.checks:
+		if c["check"] == check:
+			return "PASSED"
+	if w.verification_at < 0.0:
+		return "—"
+	return "RUNNING" if check == current_check(w) else "PENDING"
 
 
 ## "3/5 · RAW": rings built and the status of the newest built ring; "PENDING" before the first.
@@ -241,11 +292,39 @@ func _layout_progress() -> void:
 func _scroll_to_end() -> void:
 	if log_box.get_child_count() == 0 or not is_inside_tree():
 		return
-	await get_tree().process_frame
-	if not is_inside_tree():
+	_scroll_gen += 1
+	var gen := _scroll_gen
+	# Snap: never show a row cut by the top of the scroll area. When the log overflows, pad the
+	# bottom by the distance from the scrolled-to-end top edge to the next row start, so that the
+	# end position begins exactly on a row (a gap shorter than one row is left under the newest).
+	# Layout settles one frame after each change; a newer call supersedes this one.
+	for _i in 3:
+		await get_tree().process_frame
+		if gen != _scroll_gen or not is_inside_tree():
+			return
+		var target := log_box.get_combined_minimum_size().y - log_scroll.size.y
+		var pad := 0
+		var snap := -1
+		if target > 0.0:
+			for row: Control in log_box.get_children():
+				if row.position.y >= target - 0.5:
+					snap = floori(row.position.y)
+					pad = ceili(row.position.y - target)
+					break
+		if log_frame.get_theme_constant("margin_bottom") != pad:
+			log_frame.add_theme_constant_override("margin_bottom", pad)
+			continue
+		log_scroll.scroll_vertical = snap if snap >= 0 else int(log_scroll.get_v_scroll_bar().max_value)
 		return
-	var bar := log_scroll.get_v_scroll_bar()
-	log_scroll.scroll_vertical = int(bar.max_value)
+
+
+## First log row cut by the top edge of the visible area, or null (tests).
+func clipped_top_row() -> Control:
+	var top := float(log_scroll.scroll_vertical)
+	for row: Control in log_box.get_children():
+		if row.position.y + row.size.y > top + 0.5:
+			return row if row.position.y < top - 0.5 else null
+	return null
 
 
 static func _log_row(e: SimEvent) -> HBoxContainer:
@@ -260,8 +339,27 @@ static func _log_row(e: SimEvent) -> HBoxContainer:
 	col.add_child(UiKit.label(e.label, &"RowText"))
 	var d := UiKit.label(e.detail, &"Body", true)
 	d.add_theme_font_size_override("font_size", Palette.SIZE_SMALL)
+	d.visible = false
 	col.add_child(d)
+	h.set_meta(&"entity", e.entity)
 	return h
+
+
+static func _detail_of(row: Node) -> Label:
+	return row.get_child(1).get_child(1) as Label
+
+
+func _refresh_details() -> void:
+	var rows := log_box.get_children()
+	var newest := rows.size() - 1
+	var of_selection := -1
+	if Session.selected != &"":
+		for i in range(rows.size() - 1, -1, -1):
+			if rows[i].get_meta(&"entity", &"") == Session.selected:
+				of_selection = i
+				break
+	for i in rows.size():
+		_detail_of(rows[i]).visible = i == newest or i == of_selection
 
 
 static func _gap(px: int) -> Control:

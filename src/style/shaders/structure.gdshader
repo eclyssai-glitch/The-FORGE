@@ -52,8 +52,11 @@ uniform float flash_edge_energy = 0.7;
 uniform float finished_line : hint_range(0.0, 1.0) = 0.18;
 uniform float finished_chamfer : hint_range(0.0, 1.0) = 0.08;
 // Width multiplier of the selection/hover hairline: a 1 px line breaks into dashes on grazing
-// caps without MSAA (LOW); a slightly wider line stays continuous.
-uniform float select_px_scale : hint_range(1.0, 3.0) = 1.5;
+// caps without MSAA (LOW); a wider line stays continuous.
+uniform float select_px_scale : hint_range(1.0, 4.0) = 2.0;
+// Selection hairline on the top/bottom caps, relative to the walls: the caps carry every segment
+// outline seen from above, so at full strength they read as a grid; the outer wall keeps the full line.
+uniform float select_cap_share : hint_range(0.0, 1.0) = 0.5;
 
 varying flat vec4 v_custom;
 varying vec3 v_world;
@@ -61,6 +64,8 @@ varying vec3 v_world;
 // space, where the origin is the ring axis (MeshBuilder.annular_segment), so it holds for any
 // instance transform.
 varying float v_outer;
+// 1 on the top/bottom caps (horizontal faces), 0 on the walls.
+varying float v_cap;
 
 void vertex() {
 	v_custom = INSTANCE_CUSTOM;
@@ -69,6 +74,7 @@ void vertex() {
 	vec2 pxz = VERTEX.xz;
 	float radial = dot(nxz / max(length(nxz), 1e-5), pxz / max(length(pxz), 1e-5));
 	v_outer = smoothstep(0.8, 0.95, radial) * (1.0 - abs(NORMAL.y));
+	v_cap = smoothstep(0.6, 0.9, abs(NORMAL.y));
 }
 
 void fragment() {
@@ -129,7 +135,8 @@ void fragment() {
 
 	// BONE: selection / hover (a slightly wider hairline, see select_px_scale).
 	float sel_w = edge_px * select_px_scale;
-	float sel_line = (1.0 - smoothstep(sel_w - 0.5, sel_w + 0.5, d_px)) * far_fade;
+	float sel_line = (1.0 - smoothstep(sel_w - 0.5, sel_w + 0.5, d_px)) * far_fade
+			* mix(1.0, select_cap_share, v_cap);
 	emit += select_color * highlight * (sel_line * 1.2 + fres * 0.18);
 
 	EMISSION = emit;

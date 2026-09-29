@@ -10,7 +10,7 @@ var count_label: Label
 func _init() -> void:
 	name = "ForgePanel"
 	theme_type_variation = &"HudPanel"
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	var v := UiKit.vbox(8)
 	add_child(v)
 	var head := UiKit.header("CONSTRUCT")

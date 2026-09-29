@@ -81,15 +81,18 @@ static func halo() -> ShaderMaterial:
 	return _cache[&"halo"]
 
 
-## Chamber floor: almost black, rough, with a faint glossy reflection of the lit structure.
+## Chamber floor: almost black, rough, with a faint glossy reflection of the lit structure; albedo
+## and specular fade to zero over the outer 15 % of the disc (uniform `edge_fade`, radius share
+## 0.85 -> 1.0) so the floor dissolves into the void instead of ending in a lit edge.
+## Expects a CylinderMesh (the radius is read from its cap UVs, see shaders/chamber_floor).
 ## (Named floor_material in GDScript would be clearer, but the contract name is kept.)
-static func floor() -> StandardMaterial3D:
+static func floor() -> ShaderMaterial:
 	if not _cache.has(&"floor"):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = Palette.ABYSS
-		m.metallic = 0.0
-		m.metallic_specular = 0.18
-		m.roughness = 0.55
+		var m := _shader_material("chamber_floor")
+		m.set_shader_parameter("floor_color", Palette.ABYSS)
+		m.set_shader_parameter("specular_amount", 0.18)
+		m.set_shader_parameter("roughness_amount", 0.55)
+		m.set_shader_parameter("edge_fade", Vector2(0.85, 1.0))
 		_cache[&"floor"] = m
 	return _cache[&"floor"]
 
@@ -108,13 +111,16 @@ static func architecture() -> StandardMaterial3D:
 
 
 ## Dormant seed of a future construct (UNIVERSE); uniform `energy` 0..1 (0 = cold, no EMBER).
+## Hover/selection writes only `select` 0..1 (BONE rim); cold_color/cold_energy stay at rest.
 static func dormant_seed() -> ShaderMaterial:
 	if not _cache.has(&"dormant_seed"):
 		var m := _shader_material("dormant_seed")
 		m.set_shader_parameter("body_color", Palette.ABYSS)
 		m.set_shader_parameter("cold_color", Palette.ASH)
 		m.set_shader_parameter("ember_color", Palette.EMBER)
+		m.set_shader_parameter("select_color", Palette.BONE)
 		m.set_shader_parameter("energy", 0.0)
+		m.set_shader_parameter("select", 0.0)
 		_cache[&"dormant_seed"] = m
 	return _cache[&"dormant_seed"]
 

@@ -21,7 +21,7 @@ var _drawn_time := -1.0
 
 func _init() -> void:
 	name = "Timeline"
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	focus_mode = Control.FOCUS_NONE
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	custom_minimum_size = Vector2(160, 24)
