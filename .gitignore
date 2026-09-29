@@ -1,0 +1,18 @@
+# Godot
+.godot/
+/android/
+*.translation
+
+# Builds and exported artifacts (produced by tools/export_windows.sh)
+/build/
+
+# Test / capture scratch
+/tests/.gut_output/
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local Claude settings
+.claude/settings.local.json

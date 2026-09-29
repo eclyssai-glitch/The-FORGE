@@ -1,0 +1,63 @@
+class_name QualityProfiles
+extends RefCounted
+## Graphics quality presets. Pure data; applied by the Quality autoload and by the
+## world components that listen to Quality.profile_changed.
+
+enum Level { LOW, MEDIUM, HIGH, ULTRA }
+
+const LEVEL_NAMES: Array[String] = ["LOW", "MEDIUM", "HIGH", "ULTRA"]
+
+## Frames per second below which AUTO steps quality down.
+const AUTO_MIN_FPS := 40.0
+
+
+static func get_profile(level: Level) -> Dictionary:
+	match level:
+		Level.LOW:
+			return {
+				"level": level, "name": "LOW",
+				"render_scale": 0.77, "scaling_mode": Viewport.SCALING_3D_MODE_FSR,
+				"msaa": Viewport.MSAA_DISABLED, "fxaa": true,
+				"ssao": false, "ssil": false, "glow": true, "volumetric_fog": false,
+				"shadow_size": 1024, "shadows": true, "particles": 0.35,
+			}
+		Level.MEDIUM:
+			return {
+				"level": level, "name": "MEDIUM",
+				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
+				"msaa": Viewport.MSAA_2X, "fxaa": false,
+				"ssao": true, "ssil": false, "glow": true, "volumetric_fog": true,
+				"shadow_size": 2048, "shadows": true, "particles": 0.6,
+			}
+		Level.HIGH:
+			return {
+				"level": level, "name": "HIGH",
+				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
+				"msaa": Viewport.MSAA_4X, "fxaa": false,
+				"ssao": true, "ssil": false, "glow": true, "volumetric_fog": true,
+				"shadow_size": 4096, "shadows": true, "particles": 1.0,
+			}
+		_:
+			return {
+				"level": Level.ULTRA, "name": "ULTRA",
+				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
+				"msaa": Viewport.MSAA_4X, "fxaa": false,
+				"ssao": true, "ssil": true, "glow": true, "volumetric_fog": true,
+				"shadow_size": 4096, "shadows": true, "particles": 1.0,
+			}
+
+
+## Initial level from the GPU class reported by the rendering server.
+static func detect(adapter_type: RenderingDevice.DeviceType) -> Level:
+	match adapter_type:
+		RenderingDevice.DEVICE_TYPE_DISCRETE_GPU:
+			return Level.HIGH
+		RenderingDevice.DEVICE_TYPE_INTEGRATED_GPU, RenderingDevice.DEVICE_TYPE_VIRTUAL_GPU:
+			return Level.MEDIUM
+		_:
+			return Level.LOW
+
+
+## One step down, never below LOW.
+static func step_down(level: Level) -> Level:
+	return maxi(int(level) - 1, int(Level.LOW)) as Level
