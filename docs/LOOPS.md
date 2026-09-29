@@ -95,3 +95,14 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   - animator/art-director: degrau suave residual na sombra do anel inferior no LOW.
   - Validar o `.exe` numa máquina Windows e registrar o resultado em `docs/BUILD.md`.
 - Retomada: versão 0.1.0 concluída; próximos passos dependem de decisão de produto (novo conteúdo além da ORIGIN CHAMBER).
+
+## Vídeo-review v0.1.0 · concluído
+
+- Especificação e roteiro: `docs/contracts/review-video.md`.
+- animator: `MotionClock` (relógio de movimento que segue o tempo do jogo no Movie Maker; ADR-011 vale fora dele).
+- game-engineer: `tools/review/review_tour.*` (tour roteirizada com interações reais pela UI, legendas PT-BR,
+  cartões de título/veredito; fora do export) e `tools/record_review.sh` (Movie Maker 30 fps → ffmpeg H.264).
+- Resultado: `build/review/korium_universe_review_v0.1.0.mp4` — 1600×900, 30 fps, 2 min 13 s (3 991 quadros),
+  17,5 MB, sem áudio; gravado em 26 min por renderização em software (Forward+, HIGH). Não versionado (build/).
+  Quadros conferidos em todos os trechos do roteiro. Reproduzir: `tools/record_review.sh`.
+- Verificação: `tools/run_tests.sh` 193/193.
