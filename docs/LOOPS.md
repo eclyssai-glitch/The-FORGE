@@ -40,6 +40,17 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
 - Retomada: iniciar Loop 2 pela Fase A (procedural-modeler + art-director em paralelo, áreas disjuntas),
   contratos de interface registrados na entrada do Loop 2.
 
-## Loop 2 — Motor visual · pendente
+## Loop 2 — Motor visual · em andamento
+
+- Escopo: ambiente 3D, câmeras cinematográficas, construção procedural, materiais e iluminação,
+  efeitos visuais, animação dirigida por eventos, qualidade gráfica aplicada ao mundo.
+- Contratos de interface entre áreas: `docs/contracts/loop-02.md`.
+- Plano de execução (escritor único por área, worktrees isoladas por agente):
+  - Fase A (paralela): `procedural-modeler` → `src/procedural`; `art-director` → `src/style`.
+  - Fase B (paralela, após merge de A): `animator` → `src/entities`, `src/animation`, `src/fx`;
+    `game-engineer` → `src/world` (composição, universo, seleção, qualidade no ambiente).
+  - Fase C: integração, capturas de todas as fases, revisão do `art-director`, auditoria do
+    `technical-auditor`, correções pelos donos, checkpoint.
+- Retomada: verificar `git log` por commits "loop 02:" de cada área; continuar pela fase seguinte.
 
 ## Loop 3 — Experiência interativa + build Windows · pendente
