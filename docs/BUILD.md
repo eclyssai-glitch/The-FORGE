@@ -95,3 +95,24 @@ drivers gráficos do Windows, janela) só é validado pelo checklist abaixo, num
 | Versão | Commit de origem | Zip (bytes) | SHA-256 do zip | SHA-256 do `.exe` | Smoke | Reproduzido em checkout limpo |
 |---|---|---|---|---|---|---|
 | 0.1.0 | `214a02a` | `KoriumUniverse-0.1.0-windows-x86_64.zip` (38 716 033) | `26af2ef57f95b72d23f2a066b7f9ffdb36baf136f0330166648855e1a0c1e95f` | `a4fcdc5b4c7d0eaab2029405babe9aa12e9107601745b578eca4d86f27ec6a81` | smoke do pack PASS (modules 9/9, ui=present, selo 3/3) | sim |
+
+## Vídeo-review
+
+Roteiro e requisitos: `docs/contracts/review-video.md`. Ferramenta (fora do export: `tools/*` está em
+`exclude_filter`): `tools/review/review_tour.tscn` + `review_tour.gd` instanciam `scenes/main.tscn`, forçam
+HIGH (`Quality.override_for_session`) e seguem o roteiro por **tempo de jogo** (soma de `delta`), com
+interações reais — teclas via `Input.parse_input_event`, cliques/arrasto da timeline/órbita como
+`InputEventMouseButton`/`InputEventMouseMotion` no centro dos controles do HUD. Legendas de fase entram com
+`Simulation.event_emitted`; legenda, cartões e anel do ponteiro ficam numa CanvasLayer acima do HUD (Palette/UiTheme).
+
+```bash
+tools/record_review.sh                                   # 1600x900 → build/review/korium_universe_review_v0.1.0.mp4
+tools/record_review.sh --until=15 --resolution=960x540   # prévia curta → ..._preview.mp4
+```
+
+Grava `build/review/korium_review.avi` com o Movie Maker (`--write-movie`, `--fixed-fps 30`) sob Xvfb
+(`tools/_proc.sh`; `--timeout=<s>`/`REVIEW_TIMEOUT`, padrão 5400 s — renderização em software, dezenas de
+minutos) e codifica com ffmpeg (libx264, CRF 22, yuv420p, `+faststart`, sem áudio); imprime duração e tamanho.
+O Movie Maker grava no tamanho de janela do projeto (1600x900) qualquer que seja `--resolution`; o MP4 é
+escalado para a resolução pedida. Log: `build/review/record.log`. Depuração sem gravar:
+`godot --path . res://tools/review/review_tour.tscn -- --review-snap=<dir>` salva PNG após cada passo.
