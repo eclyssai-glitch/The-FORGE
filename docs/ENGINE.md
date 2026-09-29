@@ -69,8 +69,8 @@ primeiro aos nós mais abaixo da árvore):
   anel, size 2,2), `seed_vesper` r70/150°/h−1 (fuso + dois anéis, 1,7), `seed_lattice` r66/205°/h14
   (icosaedro + dois anéis cruzados, ambos inclinados — nenhum anel vertical, 1,8).
   Malhas de `MeshBuilder.icosphere`/`ring` (seção do anel proporcional ao size: `RING_THICKNESS`,
-  `RING_WIDTH`); materiais `MaterialLibrary.dormant_seed()` (compartilhado) e uma cópia de `halo()`
-  (BONE, `HALO_STRENGTH` 0,18; sem energia, sem EMBER). Cada semente
+  `RING_WIDTH`); cada semente tem sua própria cópia de `MaterialLibrary.dormant_seed()` e de `halo()`
+  (BONE, `HALO_STRENGTH` 0,18 em repouso; sem energia, sem EMBER). Cada semente
   tem um `StaticBody3D` (nó `Pick`, máscara 0, `meta entity_id`) com esfera de colisão
   generosa (`PICK_RADIUS_SCALE`). A raiz de cada semente entra no grupo `entity_<id>`
   (`SessionState.entity_group(id)`), alvo de foco da câmera.
@@ -81,11 +81,21 @@ primeiro aos nós mais abaixo da árvore):
   Estado inicial: não selecionáveis até o primeiro `apply_mode` (o mundo aplica no `_ready`).
   Testado com a câmera do plano FORGE (`CameraShots.mode_shot`) virada para cada semente e com uma
   varredura 17×9 do quadro FORGE; sem a correção a varredura seleciona `seed_*`.
+- **Destaque de seleção/hover** (Loop 3): nível por semente, alvo 1 se `Session.selected == id`,
+  `HOVER_LEVEL` 0,5 se `Session.hovered == id`, 0 caso contrário **ou fora do UNIVERSE**
+  (`highlight_target(id, selected, hovered, pickable)`, estático). O nível anda em tempo real
+  (`move_toward`, 0→1 em `Palette.T_FAST`) em `update_highlight(delta)`, chamado do `_process`, e só
+  escreve uniformes quando muda. Efeito, sempre BONE: fresnel `cold_color` ASH→BONE e `cold_energy`
+  `COLD_ENERGY_BASE` 0,55 → `COLD_ENERGY_SELECTED` 1,5; halo `strength` 0,18 → `HALO_STRENGTH_SELECTED`
+  0,6. `energy` fica em 0 (nunca EMBER, nunca PALE). Usa só uniformes existentes do `dormant_seed`
+  (sem uniform dedicado de seleção; ver pedido ao `art-director` no relatório do Loop 3).
 - **Deriva**: oscilação lenta (período ~46 s, ±0,35 un.) e giro lento, em tempo real. É respiração
   ambiente, não estado de simulação: não depende de `Simulation.time` e não precisa de seek.
 - API: `seed_ids()`, `seed_node(id)`, `seed_base_position(s)`, `drift_offset(t, phase)`,
   `make_sky_material()`, `apply_sky(env)`, `apply_mode(mode)`, `star_intensity_for(mode)`, `sky_material`,
-  `seeds_pickable_in(mode) -> bool` (estático), `set_seeds_pickable(enabled)`, `seeds_pickable() -> bool`.
+  `seeds_pickable_in(mode) -> bool` (estático), `set_seeds_pickable(enabled)`, `seeds_pickable() -> bool`,
+  `update_highlight(delta)`, `highlight_target(...)` (estático), `seed_highlight(id) -> float`,
+  `seed_body_material(id)`, `seed_halo_material(id)`.
 
 ## Seleção (`src/world/picker.gd`, `class_name Picker`)
 
@@ -149,7 +159,9 @@ e o brilho das estrelas, uniform `radiance_lift` presente, 3 sementes com coliso
 60–72 e fora do piso, anéis nunca verticais, deriva limitada, lógica de clique (limiar, percurso
 acumulado), raycast e clique/arrasto/ida-e-volta/vazio via `_unhandled_input`, grupos `entity_<id>` das
 sementes, sementes selecionáveis só no UNIVERSE (camada por modo, além do fim da névoa FORGE/OBSERVATORY,
-câmera do plano FORGE virada para cada semente + varredura do quadro FORGE, câmera do plano UNIVERSE).
+câmera do plano FORGE virada para cada semente + varredura do quadro FORGE, câmera do plano UNIVERSE),
+destaque de seleção/hover das sementes (materiais próprios, transição gradual, hover 0,5, seleção 1 com
+fresnel BONE, desmarcar volta ao repouso, `energy` 0 e halo BONE, nenhum destaque fora do UNIVERSE).
 `tests/integration/test_interaction_flow.gd`: ações e teclas (V, H, Espaço, R, 1/2/3, Esc, F11; soltar,
 eco e Ctrl não disparam), atalhos alteram `Simulation`/`Session`, `focus` emite sempre, `hud_visible`
 alterna com sinal, `LineEdit`/`HSlider` em foco bloqueiam e `Button` não, `main.tscn` compõe `Shortcuts`

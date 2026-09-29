@@ -312,6 +312,67 @@ func test_universe_camera_picks_seeds() -> void:
 		assert_eq(world.picker.pick_at(cam.unproject_position(p)), id, "%s picked in UNIVERSE" % id)
 
 
+## Loop 3: selecting/hovering a seed raises its own BONE fresnel and halo (short real-time ease);
+## clearing returns to rest. Never EMBER (energy stays 0) and only in UNIVERSE.
+func test_seed_selection_and_hover_highlight() -> void:
+	var u: Universe = world.universe
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	var ids := u.seed_ids()
+	var a: StringName = ids[0]
+	var b: StringName = ids[1]
+	var mat_a := u.seed_body_material(a)
+	var halo_a := u.seed_halo_material(a)
+	assert_ne(mat_a, MaterialLibrary.dormant_seed(), "each seed owns a copy of dormant_seed()")
+	assert_ne(mat_a, u.seed_body_material(b))
+	assert_ne(halo_a, u.seed_halo_material(b))
+	assert_eq(Color(halo_a.get_shader_parameter("color")), Palette.BONE, "halo is BONE")
+	u.update_highlight(0.0)
+	var rest_energy := float(mat_a.get_shader_parameter("cold_energy"))
+	var rest_halo := float(halo_a.get_shader_parameter("strength"))
+	assert_almost_eq(rest_energy, Universe.COLD_ENERGY_BASE, 1e-5)
+	assert_almost_eq(rest_halo, Universe.HALO_STRENGTH, 1e-5)
+	assert_eq(Color(mat_a.get_shader_parameter("cold_color")), Palette.ASH, "rest fresnel ASH")
+
+	# Hover: half-way, eased in real time (not instant).
+	Session.hover(a)
+	u.update_highlight(Palette.T_FAST * 0.25)
+	assert_between(u.seed_highlight(a), 0.01, Universe.HOVER_LEVEL - 0.01, "hover eases in")
+	u.update_highlight(Palette.T_FAST)
+	assert_almost_eq(u.seed_highlight(a), Universe.HOVER_LEVEL, 1e-5)
+	assert_gt(float(mat_a.get_shader_parameter("cold_energy")), rest_energy, "hover raises the fresnel")
+	assert_gt(float(halo_a.get_shader_parameter("strength")), rest_halo, "hover raises the halo")
+	assert_eq(u.seed_highlight(b), 0.0, "other seeds stay at rest")
+
+	# Select: full highlight, BONE fresnel, still no EMBER.
+	Session.select(a)
+	u.update_highlight(Palette.T_FAST * 2.0)
+	assert_almost_eq(u.seed_highlight(a), 1.0, 1e-5)
+	assert_almost_eq(float(mat_a.get_shader_parameter("cold_energy")), Universe.COLD_ENERGY_SELECTED, 1e-5)
+	assert_almost_eq(float(halo_a.get_shader_parameter("strength")), Universe.HALO_STRENGTH_SELECTED, 1e-5)
+	assert_true(Color(mat_a.get_shader_parameter("cold_color")).is_equal_approx(Palette.BONE), "selected fresnel BONE")
+	for id in ids:
+		assert_eq(float(u.seed_body_material(id).get_shader_parameter("energy")), 0.0, "%s: no EMBER" % id)
+		assert_eq(Color(u.seed_halo_material(id).get_shader_parameter("color")), Palette.BONE)
+
+	# Clear: back to rest.
+	Session.select(&"")
+	Session.hover(&"")
+	u.update_highlight(Palette.T_FAST * 2.0)
+	assert_eq(u.seed_highlight(a), 0.0)
+	assert_almost_eq(float(mat_a.get_shader_parameter("cold_energy")), rest_energy, 1e-5)
+	assert_almost_eq(float(halo_a.get_shader_parameter("strength")), rest_halo, 1e-5)
+	assert_eq(Color(mat_a.get_shader_parameter("cold_color")), Palette.ASH)
+
+	# Outside UNIVERSE seeds are not selectable: no highlight even if the id is selected.
+	Session.select(b)
+	Session.set_mode(SessionState.Mode.FORGE)
+	u.update_highlight(Palette.T_FAST * 2.0)
+	assert_eq(u.seed_highlight(b), 0.0, "no highlight in FORGE")
+	assert_eq(Universe.highlight_target(b, b, &"", false), 0.0)
+	assert_eq(Universe.highlight_target(b, b, &"", true), 1.0)
+	assert_eq(Universe.highlight_target(b, &"", b, true), Universe.HOVER_LEVEL)
+
+
 func _click(press: Vector2, release: Vector2, via: Array = []) -> void:
 	var down := InputEventMouseButton.new()
 	down.button_index = MOUSE_BUTTON_LEFT

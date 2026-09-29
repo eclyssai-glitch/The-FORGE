@@ -8,6 +8,11 @@ extends Node3D
 ## the end of the depth fog (invisible), so their bodies leave collision layer 2 (see
 ## apply_mode / seeds_pickable_in). They drift slowly in real time — an ambient breath that
 ## carries no simulation state.
+## Selection/hover highlight (only where seeds are pickable, i.e. UNIVERSE): each seed owns a
+## duplicate of MaterialLibrary.dormant_seed() and of its halo. Selected = 1, hovered =
+## HOVER_LEVEL; the level eases in real time (Palette.T_FAST) and raises the fresnel
+## (cold_color ASH -> BONE, cold_energy) and the halo strength (BONE). `energy` stays 0: never
+## EMBER, never PALE.
 
 const SKY_SHADER := preload("res://src/world/universe_sky.gdshader")
 
@@ -36,6 +41,11 @@ const RING_THICKNESS := 0.04
 const RING_WIDTH := 0.12
 ## Halo ring strength (BONE, dormant: no energy, no EMBER).
 const HALO_STRENGTH := 0.18
+## Highlight: level when hovered (selected = 1); fresnel and halo at rest and at full highlight.
+const HOVER_LEVEL := 0.5
+const COLD_ENERGY_BASE := 0.55
+const COLD_ENERGY_SELECTED := 1.5
+const HALO_STRENGTH_SELECTED := 0.6
 ## Star brightness of the sky per mode: full in UNIVERSE, quiet behind the chamber.
 const STAR_INTENSITY := {
 	SessionState.Mode.UNIVERSE: 0.55,
@@ -45,9 +55,9 @@ const STAR_INTENSITY := {
 
 var sky_material: ShaderMaterial
 
-var _seeds: Dictionary = {}  # id -> {"root", "body", "rings": Node3D, "pick": StaticBody3D, "base": Vector3, "phase": float}
+var _seeds: Dictionary = {}  # id -> {"root", "body", "rings": Node3D, "pick": StaticBody3D, "base": Vector3, "phase": float,
+#                            "body_mat", "halo_mat": ShaderMaterial, "highlight", "applied": float}
 var _elapsed := 0.0
-var _halo: ShaderMaterial
 ## Seeds start unpickable until apply_mode() says otherwise (the default mode is FORGE).
 var _pickable := false
 
@@ -55,8 +65,6 @@ var _pickable := false
 func _init() -> void:
 	name = "Universe"
 	sky_material = make_sky_material()
-	_halo = MaterialLibrary.halo().duplicate() as ShaderMaterial
-	_halo.set_shader_parameter("strength", HALO_STRENGTH)
 	for s in SEEDS:
 		_build_seed(s)
 
@@ -70,6 +78,54 @@ func _process(delta: float) -> void:
 		root.position = (s["base"] as Vector3) + drift_offset(_elapsed, ph)
 		(s["body"] as Node3D).rotation.y = _elapsed * SPIN_RATE + ph
 		(s["rings"] as Node3D).rotation.y = -_elapsed * SPIN_RATE * 0.6 + ph
+	update_highlight(delta)
+
+
+## Eases every seed's highlight towards its target (Session.selected/hovered, UNIVERSE only)
+## and pushes it to the seed's own materials. delta <= 0 snaps to the target.
+func update_highlight(delta: float) -> void:
+	for id: StringName in _seeds:
+		var s: Dictionary = _seeds[id]
+		var target := highlight_target(id, Session.selected, Session.hovered, _pickable)
+		var h: float = s["highlight"]
+		h = move_toward(h, target, delta / Palette.T_FAST) if delta > 0.0 else target
+		s["highlight"] = h
+		if is_equal_approx(h, float(s["applied"])):
+			continue
+		s["applied"] = h
+		_apply_highlight(s["body_mat"], s["halo_mat"], h)
+
+
+## 1 when the seed is selected, HOVER_LEVEL when hovered, 0 otherwise or when not pickable.
+static func highlight_target(id: StringName, selected: StringName, hovered: StringName, pickable: bool) -> float:
+	if not pickable:
+		return 0.0
+	if selected == id:
+		return 1.0
+	if hovered == id:
+		return HOVER_LEVEL
+	return 0.0
+
+
+## Current highlight level (0..1) of a seed.
+func seed_highlight(id: StringName) -> float:
+	return float(_seeds[id]["highlight"]) if _seeds.has(id) else 0.0
+
+
+## The seed's own dormant_seed material (body), or null.
+func seed_body_material(id: StringName) -> ShaderMaterial:
+	return _seeds[id]["body_mat"] if _seeds.has(id) else null
+
+
+## The seed's own halo material (shared by that seed's rings only), or null.
+func seed_halo_material(id: StringName) -> ShaderMaterial:
+	return _seeds[id]["halo_mat"] if _seeds.has(id) else null
+
+
+static func _apply_highlight(body_mat: ShaderMaterial, halo_mat: ShaderMaterial, h: float) -> void:
+	body_mat.set_shader_parameter("cold_color", Palette.ASH.lerp(Palette.BONE, h))
+	body_mat.set_shader_parameter("cold_energy", lerpf(COLD_ENERGY_BASE, COLD_ENERGY_SELECTED, h))
+	halo_mat.set_shader_parameter("strength", lerpf(HALO_STRENGTH, HALO_STRENGTH_SELECTED, h))
 
 
 ## Puts the universe sky behind the environment. The background stays VOID (drawn by the sky
@@ -166,27 +222,32 @@ func _build_seed(s: Dictionary) -> void:
 	var rings := Node3D.new()
 	rings.name = "Rings"
 	root.add_child(rings)
+	# Per-seed copies: each seed lights up alone when selected/hovered.
+	var body_mat := MaterialLibrary.dormant_seed().duplicate() as ShaderMaterial
+	var halo_mat := MaterialLibrary.halo().duplicate() as ShaderMaterial
+	halo_mat.set_shader_parameter("color", Palette.BONE)
+	_apply_highlight(body_mat, halo_mat, 0.0)
 
 	match String(s["form"]):
 		"spindle":
-			var m := _mesh(MeshBuilder.icosphere(size, 0, true), MaterialLibrary.dormant_seed())
+			var m := _mesh(MeshBuilder.icosphere(size, 0, true), body_mat)
 			m.scale = Vector3(0.75, 1.6, 0.75)
 			body.add_child(m)
 			for k in 2:
-				var ring := _halo_ring(size, 1.7 + 0.45 * k)
+				var ring := _halo_ring(halo_mat, size, 1.7 + 0.45 * k)
 				ring.rotation = Vector3(deg_to_rad(8.0 + 6.0 * k), 0.0, deg_to_rad(-4.0))
 				rings.add_child(ring)
 		"armillary":
-			body.add_child(_mesh(MeshBuilder.icosphere(size, 0, true), MaterialLibrary.dormant_seed()))
-			var flat := _halo_ring(size, 1.9)
+			body.add_child(_mesh(MeshBuilder.icosphere(size, 0, true), body_mat))
+			var flat := _halo_ring(halo_mat, size, 1.9)
 			flat.rotation = Vector3(deg_to_rad(12.0), 0.0, 0.0)
 			rings.add_child(flat)
-			var crossed := _halo_ring(size, 1.9)
+			var crossed := _halo_ring(halo_mat, size, 1.9)
 			crossed.rotation = Vector3(deg_to_rad(-34.0), deg_to_rad(60.0), 0.0)
 			rings.add_child(crossed)
 		_:
-			body.add_child(_mesh(MeshBuilder.icosphere(size, 1, true), MaterialLibrary.dormant_seed()))
-			var ring := _halo_ring(size, 1.85)
+			body.add_child(_mesh(MeshBuilder.icosphere(size, 1, true), body_mat))
+			var ring := _halo_ring(halo_mat, size, 1.85)
 			ring.rotation = Vector3(deg_to_rad(18.0), 0.0, deg_to_rad(7.0))
 			rings.add_child(ring)
 
@@ -202,13 +263,14 @@ func _build_seed(s: Dictionary) -> void:
 	pick.add_child(shape)
 	root.add_child(pick)
 
-	_seeds[id] = {"root": root, "body": body, "rings": rings, "pick": pick, "base": root.position, "phase": float(s["phase"])}
+	_seeds[id] = {"root": root, "body": body, "rings": rings, "pick": pick, "base": root.position, "phase": float(s["phase"]),
+		"body_mat": body_mat, "halo_mat": halo_mat, "highlight": 0.0, "applied": 0.0}
 
 
 ## Thin halo ring of `radius_factor`·size; cross-section scales with the seed so the rings keep
 ## their proportions (and stay above a pixel) at the seeds' distance.
-func _halo_ring(size: float, radius_factor: float) -> MeshInstance3D:
-	return _mesh(MeshBuilder.ring(size * radius_factor, RING_THICKNESS * size, RING_WIDTH * size, 96), _halo)
+static func _halo_ring(halo_mat: ShaderMaterial, size: float, radius_factor: float) -> MeshInstance3D:
+	return _mesh(MeshBuilder.ring(size * radius_factor, RING_THICKNESS * size, RING_WIDTH * size, 96), halo_mat)
 
 
 static func _mesh(mesh: Mesh, material: Material) -> MeshInstance3D:
