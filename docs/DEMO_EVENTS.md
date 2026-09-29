@@ -10,7 +10,7 @@ Todos os eventos são fictícios. Nenhum representa, imita ou prepara integraç�
 |---|---|---|
 | `session.opened` | Abre a sessão de demonstração | `session_at` |
 | `core.activation` | O núcleo desperta | `core_activation_at`, fase ACTIVATING |
-| `core.online` | Núcleo estável, energia disponível | `core_online_at`, fase CORE ONLINE |
+| `core.online` | Núcleo estável, energia disponível | `core_online_at`, fase CORE STABLE |
 | `fragments.emitted` | Fragmentos geométricos liberados | `fragments_at`, `fragment_count`, fase FRAGMENTS |
 | `structure.seeded` | Eixo de construção travado em torno do núcleo | `seeded_at`, fase BUILDING |
 | `structure.layer_added` | Uma camada é montada a partir de fragmentos (`payload.layer`) | `layer_times[i]` |
@@ -21,5 +21,9 @@ Todos os eventos são fictícios. Nenhum representa, imita ou prepara integraç�
 | `verification.passed` | Todas as verificações passaram | `verified_at`, fase VERIFIED |
 | `structure.finalized` | A estrutura trava na forma final | `finalized_at`, fase FINAL FORM |
 | `session.completed` | Fim da demonstração | `completed_at`, fase COMPLETE |
+
+Vocabulário exibido (Loop 3): o evento `core.online` aparece como **CORE STABLE** (título e fase) e o
+status do núcleo como **ACTIVE** — nada na UI sugere conexão real. Os identificadores internos
+(`core.online`, `CORE_ONLINE`, `core_online_at`) permanecem.
 
 A missão exibida no OBSERVATORY (`src/events/mission.gd`) deriva seus 7 objetivos desses eventos.

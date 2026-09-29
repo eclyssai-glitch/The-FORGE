@@ -172,7 +172,7 @@ func test_entity_catalog_covers_every_id_and_statuses_progress() -> void:
 	assert_eq(EntityCatalog.status(&"origin_core", w0), "DORMANT")
 	assert_eq(EntityCatalog.status(&"layer_0", w0), "PENDING")
 	var w1 := WorldState.derive(tl.seek(tl.duration))
-	assert_eq(EntityCatalog.status(&"origin_core", w1), "ONLINE")
+	assert_eq(EntityCatalog.status(&"origin_core", w1), "ACTIVE")
 	assert_eq(EntityCatalog.status(&"layer_4", w1), "FINAL")
 	assert_eq(EntityCatalog.status(&"verification_array", w1), "PASSED")
 

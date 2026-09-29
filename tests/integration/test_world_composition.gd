@@ -312,8 +312,9 @@ func test_universe_camera_picks_seeds() -> void:
 		assert_eq(world.picker.pick_at(cam.unproject_position(p)), id, "%s picked in UNIVERSE" % id)
 
 
-## Loop 3: selecting/hovering a seed raises its own BONE fresnel and halo (short real-time ease);
-## clearing returns to rest. Never EMBER (energy stays 0) and only in UNIVERSE.
+## Loop 3: selecting/hovering a seed raises its own `select` uniform and BONE halo (short
+## real-time ease); clearing returns to rest. The body's rest look (cold_color/cold_energy) is
+## never written by the highlight. Never EMBER (energy stays 0) and only in UNIVERSE.
 func test_seed_selection_and_hover_highlight() -> void:
 	var u: Universe = world.universe
 	Session.set_mode(SessionState.Mode.UNIVERSE)
@@ -322,16 +323,19 @@ func test_seed_selection_and_hover_highlight() -> void:
 	var b: StringName = ids[1]
 	var mat_a := u.seed_body_material(a)
 	var halo_a := u.seed_halo_material(a)
-	assert_ne(mat_a, MaterialLibrary.dormant_seed(), "each seed owns a copy of dormant_seed()")
+	var lib := MaterialLibrary.dormant_seed()
+	assert_ne(mat_a, lib, "each seed owns a copy of dormant_seed()")
 	assert_ne(mat_a, u.seed_body_material(b))
 	assert_ne(halo_a, u.seed_halo_material(b))
 	assert_eq(Color(halo_a.get_shader_parameter("color")), Palette.BONE, "halo is BONE")
 	u.update_highlight(0.0)
-	var rest_energy := float(mat_a.get_shader_parameter("cold_energy"))
+	var rest_cold_color: Variant = mat_a.get_shader_parameter("cold_color")
+	var rest_cold_energy: Variant = mat_a.get_shader_parameter("cold_energy")
+	assert_eq(rest_cold_color, lib.get_shader_parameter("cold_color"), "rest cold_color is the library's")
+	assert_eq(rest_cold_energy, lib.get_shader_parameter("cold_energy"), "rest cold_energy is the library's")
 	var rest_halo := float(halo_a.get_shader_parameter("strength"))
-	assert_almost_eq(rest_energy, Universe.COLD_ENERGY_BASE, 1e-5)
+	assert_almost_eq(float(mat_a.get_shader_parameter("select")), 0.0, 1e-5, "rest select 0")
 	assert_almost_eq(rest_halo, Universe.HALO_STRENGTH, 1e-5)
-	assert_eq(Color(mat_a.get_shader_parameter("cold_color")), Palette.ASH, "rest fresnel ASH")
 
 	# Hover: half-way, eased in real time (not instant).
 	Session.hover(a)
@@ -339,17 +343,20 @@ func test_seed_selection_and_hover_highlight() -> void:
 	assert_between(u.seed_highlight(a), 0.01, Universe.HOVER_LEVEL - 0.01, "hover eases in")
 	u.update_highlight(Palette.T_FAST)
 	assert_almost_eq(u.seed_highlight(a), Universe.HOVER_LEVEL, 1e-5)
-	assert_gt(float(mat_a.get_shader_parameter("cold_energy")), rest_energy, "hover raises the fresnel")
+	assert_almost_eq(float(mat_a.get_shader_parameter("select")), Universe.HOVER_LEVEL, 1e-5, "hover select")
 	assert_gt(float(halo_a.get_shader_parameter("strength")), rest_halo, "hover raises the halo")
 	assert_eq(u.seed_highlight(b), 0.0, "other seeds stay at rest")
+	assert_almost_eq(float(u.seed_body_material(b).get_shader_parameter("select")), 0.0, 1e-5)
 
-	# Select: full highlight, BONE fresnel, still no EMBER.
+	# Select: full highlight through `select` only; rest look and energy untouched.
 	Session.select(a)
 	u.update_highlight(Palette.T_FAST * 2.0)
 	assert_almost_eq(u.seed_highlight(a), 1.0, 1e-5)
-	assert_almost_eq(float(mat_a.get_shader_parameter("cold_energy")), Universe.COLD_ENERGY_SELECTED, 1e-5)
+	assert_almost_eq(float(mat_a.get_shader_parameter("select")), 1.0, 1e-5, "selected select 1")
 	assert_almost_eq(float(halo_a.get_shader_parameter("strength")), Universe.HALO_STRENGTH_SELECTED, 1e-5)
-	assert_true(Color(mat_a.get_shader_parameter("cold_color")).is_equal_approx(Palette.BONE), "selected fresnel BONE")
+	assert_almost_eq(Universe.HALO_STRENGTH_SELECTED, 0.3, 1e-5, "selected halo stays discreet")
+	assert_eq(mat_a.get_shader_parameter("cold_color"), rest_cold_color, "cold_color fixed")
+	assert_eq(mat_a.get_shader_parameter("cold_energy"), rest_cold_energy, "cold_energy fixed")
 	for id in ids:
 		assert_eq(float(u.seed_body_material(id).get_shader_parameter("energy")), 0.0, "%s: no EMBER" % id)
 		assert_eq(Color(u.seed_halo_material(id).get_shader_parameter("color")), Palette.BONE)
@@ -359,9 +366,10 @@ func test_seed_selection_and_hover_highlight() -> void:
 	Session.hover(&"")
 	u.update_highlight(Palette.T_FAST * 2.0)
 	assert_eq(u.seed_highlight(a), 0.0)
-	assert_almost_eq(float(mat_a.get_shader_parameter("cold_energy")), rest_energy, 1e-5)
+	assert_almost_eq(float(mat_a.get_shader_parameter("select")), 0.0, 1e-5)
 	assert_almost_eq(float(halo_a.get_shader_parameter("strength")), rest_halo, 1e-5)
-	assert_eq(Color(mat_a.get_shader_parameter("cold_color")), Palette.ASH)
+	assert_eq(mat_a.get_shader_parameter("cold_color"), rest_cold_color)
+	assert_eq(mat_a.get_shader_parameter("cold_energy"), rest_cold_energy)
 
 	# Outside UNIVERSE seeds are not selectable: no highlight even if the id is selected.
 	Session.select(b)
@@ -371,6 +379,56 @@ func test_seed_selection_and_hover_highlight() -> void:
 	assert_eq(Universe.highlight_target(b, b, &"", false), 0.0)
 	assert_eq(Universe.highlight_target(b, b, &"", true), 1.0)
 	assert_eq(Universe.highlight_target(b, &"", b, true), Universe.HOVER_LEVEL)
+
+
+## Loop 3 (M-2): when the UI consumes a mouse motion (it never reaches _unhandled_input) the
+## hover left by the 3D world is cleared; a motion that reaches the world picks as usual.
+## Headless, the GUI does not route the pointer (no window under it), so the UI's consumption is
+## reproduced by delivering the motion to _input only, exactly what the viewport does when a
+## STOP control takes it.
+func test_hover_cleared_when_pointer_enters_ui() -> void:
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	var shot := CameraShots.mode_shot(SessionState.Mode.UNIVERSE, CameraShots.Shot.new())
+	var cam := Camera3D.new()
+	cam.fov = shot.fov
+	cam.far = 600.0
+	world.add_child(cam)
+	cam.global_position = shot.position()
+	cam.look_at(shot.target)
+	cam.make_current()
+	await wait_physics_frames(2)
+	var id: StringName = world.universe.seed_ids()[0]
+	var over_seed := cam.unproject_position(world.universe.seed_node(id).global_position)
+
+	# Motion reaches the world over the seed: hovered.
+	_motion(over_seed, true)
+	await wait_physics_frames(2)
+	assert_eq(Session.hovered, id, "pointer over the seed hovers it")
+
+	# Same position, but a panel in front consumes the motion: hover cleared.
+	_motion(over_seed, false)
+	await wait_physics_frames(2)
+	assert_eq(Session.hovered, &"", "hover cleared when the UI takes the pointer")
+
+	# Back to the world: hovered again; several motions in one step, the last one decides.
+	_motion(over_seed, false)
+	_motion(over_seed, true)
+	await wait_physics_frames(2)
+	assert_eq(Session.hovered, id, "the last motion reached the world")
+
+	# Leaving the window clears it as well.
+	world.picker.notification(Node.NOTIFICATION_WM_MOUSE_EXIT)
+	assert_eq(Session.hovered, &"", "hover cleared when the pointer leaves the window")
+
+
+## Delivers a mouse motion to the Picker as the viewport would: _input always, then
+## _unhandled_input only when the UI did not consume it.
+func _motion(pos: Vector2, reaches_world: bool) -> void:
+	var mm := InputEventMouseMotion.new()
+	mm.position = pos
+	world.picker._input(mm)
+	if reaches_world:
+		world.picker._unhandled_input(mm)
 
 
 func _click(press: Vector2, release: Vector2, via: Array = []) -> void:

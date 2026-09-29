@@ -9,6 +9,12 @@ extends Node
 ## Shortcuts, src/core/shortcuts.gd).
 ## Uses `_unhandled_input`, so events consumed by the UI never reach it; it never marks events
 ## as handled, so the camera rig still receives the same drags.
+## Hover over the UI: a motion the UI consumes (a MOUSE_FILTER_STOP panel, a slider...) never
+## reaches `_unhandled_input`. `_input` (which runs before the UI) marks every motion as
+## "not reached"; `_unhandled_input` marks it "reached". If the last motion of a physics step
+## did not reach the world, the pointer is over UI and `Session.hovered` is cleared — a panel in
+## front of a seed never leaves that seed highlighted. Leaving the window
+## clears it too.
 ## Physics queries run in `_physics_process` (the safe place to use the direct space state).
 
 const PICK_MASK := 2
@@ -22,10 +28,26 @@ var _pending_click := false
 var _click_pos := Vector2.ZERO
 var _pending_hover := false
 var _hover_pos := Vector2.ZERO
+## The pointer moved since the last physics step (seen in `_input`, before the UI), and whether
+## the last of those motions reached `_unhandled_input` (i.e. the UI did not consume it).
+var _pointer_moved := false
+var _motion_reached_world := false
 
 
 func _init() -> void:
 	name = "Picker"
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		_pointer_moved = true
+		_motion_reached_world = false
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_MOUSE_EXIT:
+		_pending_hover = false
+		Session.hover(&"")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -44,6 +66,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var mm := event as InputEventMouseMotion
 	if mm:
+		_motion_reached_world = true
 		if _pressing:
 			_travel += _last_pos.distance_to(mm.position)
 			_last_pos = mm.position
@@ -52,6 +75,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if _pointer_moved:
+		_pointer_moved = false
+		if not _motion_reached_world:  # the UI consumed the pointer's last motion
+			_pending_hover = false
+			Session.hover(&"")
 	if _pending_click:
 		_pending_click = false
 		Session.select(pick_at(_click_pos))

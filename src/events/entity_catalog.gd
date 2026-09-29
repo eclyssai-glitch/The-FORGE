@@ -46,7 +46,7 @@ static func status(id: StringName, w: WorldState) -> String:
 			return w.phase_name()
 		&"origin_core":
 			if w.core_online_at >= 0.0:
-				return "ONLINE"
+				return "ACTIVE"
 			return "ACTIVATING" if w.core_activation_at >= 0.0 else "DORMANT"
 		&"fragment_field":
 			if w.fragments_at < 0.0:
