@@ -24,12 +24,13 @@ uniform vec3 pale_color : source_color;
 uniform vec3 select_color : source_color;
 
 group_uniforms state;
-// 0 raw (light matte grey) -> 1 finished (dark metal, medium roughness, fine edges).
+// 0 raw (light matte grey) -> 1 finished (half-metal slate, fairly smooth, fine edges).
 uniform float finish : hint_range(0.0, 1.0) = 0.0;
 // World-space Y of the verification sweep, and its strength (PALE band).
 uniform float scan_y = -100.0;
 uniform float scan_strength : hint_range(0.0, 1.0) = 0.0;
-// Final form: discreet EMBER hairlines along the arcs only (continuous rings, no outlines).
+// Final form: one discreet EMBER ring per layer — the top contour of the OUTER wall only; the
+// segments' outer walls join into a continuous circle (no outlines, no inner rims, no caps).
 uniform float final_lock : hint_range(0.0, 1.0) = 0.0;
 // Global power: scales every EMBER term (nothing glows warm without energy).
 uniform float energy : hint_range(0.0, 1.0) = 1.0;
@@ -39,15 +40,27 @@ uniform float edge_px : hint_range(0.5, 3.0) = 1.1;
 uniform float chamfer_m : hint_range(0.0, 0.1) = 0.022;
 uniform float scan_half_width : hint_range(0.02, 1.0) = 0.16;
 uniform float ember_edge_energy = 3.2;
-uniform float lock_edge_share : hint_range(0.0, 1.0) = 0.32;
+uniform float lock_edge_share : hint_range(0.0, 1.0) = 0.5;
+// Width multiplier of the lock ring over edge_px (a ring, not a hairline of the outline).
+uniform float lock_px_scale : hint_range(1.0, 3.0) = 1.6;
 uniform float pale_edge_energy = 2.4;
+// Per-segment verify flash (INSTANCE_CUSTOM.g): lower than the sweep so it never reads as a grid.
+uniform float flash_edge_energy = 0.6;
 
 varying flat vec4 v_custom;
 varying vec3 v_world;
+// 1 on the outer curved wall, 0 elsewhere (top/bottom, inner wall, side caps). Computed in mesh
+// space, where the origin is the ring axis (MeshBuilder.annular_segment), so it holds for any
+// instance transform.
+varying float v_outer;
 
 void vertex() {
 	v_custom = INSTANCE_CUSTOM;
 	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec2 nxz = NORMAL.xz;
+	vec2 pxz = VERTEX.xz;
+	float radial = dot(nxz / max(length(nxz), 1e-5), pxz / max(length(pxz), 1e-5));
+	v_outer = smoothstep(0.8, 0.95, radial) * (1.0 - abs(NORMAL.y));
 }
 
 void fragment() {
@@ -65,9 +78,12 @@ void fragment() {
 	float face_px = 1.0 / max(uv_px.x, uv_px.y);
 	float far_fade = smoothstep(5.0, 14.0, face_px);
 	float line = (1.0 - smoothstep(edge_px - 0.5, edge_px + 0.5, d_px)) * far_fade;
-	// Arc lines only (v borders: top/bottom contour of walls, inner/outer rim of caps). They
-	// join across segments into continuous circles — used by the final lock, never a full outline.
-	float arc_line = (1.0 - smoothstep(edge_px - 0.5, edge_px + 0.5, d_px2.y)) * far_fade;
+	// Lock ring: top border of the outer wall (walls: v = 0 bottom -> 1 top). Faded by the arc
+	// length of the face only, so a short wall far away still carries its ring.
+	float lock_w = edge_px * lock_px_scale;
+	float d_top_px = (1.0 - UV.y) / uv_px.y;
+	float lock_line = (1.0 - smoothstep(lock_w - 0.5, lock_w + 0.5, d_top_px))
+			* smoothstep(5.0, 14.0, 1.0 / uv_px.x) * v_outer;
 	// World-sized chamfer: metres -> pixels using the world footprint of one pixel.
 	float m_per_px = max(0.5 * (length(dFdx(v_world)) + length(dFdy(v_world))), 1e-5);
 	float chamfer_px = max(chamfer_m / m_per_px, edge_px + 0.5);
@@ -80,8 +96,8 @@ void fragment() {
 	albedo *= 1.0 - 0.28 * line * (1.0 - f);
 	albedo = mix(albedo, edge_color, (0.10 * chamfer + 0.30 * line) * f);
 	ALBEDO = albedo;
-	METALLIC = mix(0.0, 0.74, f);
-	ROUGHNESS = mix(0.9, 0.44, f) - 0.18 * chamfer * f;
+	METALLIC = mix(0.0, 0.35, f);
+	ROUGHNESS = mix(0.9, 0.34, f) - 0.18 * chamfer * f;
 	SPECULAR = mix(0.35, 0.5, f);
 
 	// --- Emission (every term has a narrative owner) ---
@@ -93,13 +109,13 @@ void fragment() {
 	float power = clamp(energy, 0.0, 1.0);
 	emit += ember_color * build * power * (line * ember_edge_energy + chamfer * 0.35 + 0.05);
 	float lock = clamp(final_lock, 0.0, 1.0) * f * power;
-	emit += ember_color * lock * arc_line * ember_edge_energy * lock_edge_share;
+	emit += ember_color * lock * lock_line * ember_edge_energy * lock_edge_share;
 
 	// PALE: verification sweep band (world Y) and per-segment check flash.
 	float dy = (v_world.y - scan_y) / scan_half_width;
 	float band = exp(-dy * dy) * clamp(scan_strength, 0.0, 1.0);
 	emit += pale_color * band * (line * pale_edge_energy + chamfer * 0.45 + 0.05);
-	emit += pale_color * flash * (line * pale_edge_energy + 0.10);
+	emit += pale_color * flash * (line * flash_edge_energy + 0.08);
 
 	// BONE: selection / hover.
 	emit += select_color * highlight * (line * 1.2 + fres * 0.18);

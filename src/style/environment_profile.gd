@@ -11,7 +11,9 @@ const KEY_COLOR := Palette.BONE
 const FILL_COLOR := Palette.ASH
 const RIM_COLOR := Palette.ASH
 const CORE_COLOR := Palette.EMBER
-const AMBIENT_COLOR := Palette.SLATE
+## Ambient is ASH (not SLATE): the walls facing the FORGE camera get almost no key, so the lit
+## stages need a real ambient term to reveal them; at dormant energy it stays negligible.
+const AMBIENT_COLOR := Palette.ASH
 const FOG_COLOR := Palette.VOID
 const VOLUMETRIC_ALBEDO := Palette.ASH
 
@@ -22,9 +24,9 @@ const VOLUMETRIC_ALBEDO := Palette.ASH
 const LIGHT := {
 	"dormant": {"key": 0.0, "fill": 0.04, "rim": 0.45, "core": 0.0, "ambient": 0.05, "exposure": 0.9, "fog": 0.006},
 	"active": {"key": 0.12, "fill": 0.06, "rim": 0.3, "core": 2.2, "ambient": 0.07, "exposure": 0.95, "fog": 0.012},
-	"lit": {"key": 1.5, "fill": 0.3, "rim": 0.7, "core": 1.4, "ambient": 0.16, "exposure": 1.0, "fog": 0.014},
-	"verify": {"key": 1.05, "fill": 0.24, "rim": 0.8, "core": 1.1, "ambient": 0.13, "exposure": 1.0, "fog": 0.014},
-	"final": {"key": 1.7, "fill": 0.34, "rim": 0.95, "core": 1.8, "ambient": 0.18, "exposure": 1.05, "fog": 0.016},
+	"lit": {"key": 2.2, "fill": 0.9, "rim": 0.7, "core": 1.4, "ambient": 0.3, "exposure": 1.1, "fog": 0.014},
+	"verify": {"key": 1.3, "fill": 0.6, "rim": 0.8, "core": 1.1, "ambient": 0.24, "exposure": 1.0, "fog": 0.014},
+	"final": {"key": 2.0, "fill": 0.8, "rim": 0.95, "core": 1.8, "ambient": 0.32, "exposure": 1.05, "fog": 0.016},
 }
 
 ## Light3D.light_volumetric_fog_energy per light (constant across stages). Directional lights
@@ -48,7 +50,9 @@ static func make_environment() -> Environment:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = AMBIENT_COLOR
 	env.ambient_light_energy = LIGHT["dormant"]["ambient"]
-	env.reflected_light_source = Environment.REFLECTION_SOURCE_BG
+	# Explicit: the finished metal reflects the universe sky's radiance (dim VOID with a faint band),
+	# not a black BG colour — otherwise metal reads as holes in the lit phase.
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = LIGHT["dormant"]["exposure"]
@@ -59,7 +63,7 @@ static func make_environment() -> Environment:
 	env.glow_intensity = 0.55
 	env.glow_strength = 0.9
 	env.glow_bloom = 0.0
-	env.glow_hdr_threshold = 1.1
+	env.glow_hdr_threshold = 1.25
 	env.glow_hdr_scale = 1.6
 	env.glow_hdr_luminance_cap = 6.0
 	env.set_glow_level(0, 0.0)
@@ -122,24 +126,27 @@ static func apply_quality(env: Environment, profile: Dictionary) -> void:
 
 
 ## Fog/depth settings per Session mode. Keys are Environment property names (depth fog:
-## fog_density is the maximum opacity reached at fog_depth_end).
-## FORGE: close chamber air. UNIVERSE: sees far (seeds at 18–30 units stay legible).
-## OBSERVATORY: the world recedes slightly behind the left panel.
+## fog_density is the maximum opacity reached at fog_depth_end), plus "exposure_scale", which is
+## not an Environment property: LightRig multiplies the stage exposure by it (default 1.0).
+## FORGE: close chamber air. UNIVERSE: sees far (seeds beyond the chamber, 60–70 units, stay
+## legible) and is slightly brighter. OBSERVATORY: the world recedes slightly behind the left panel.
 static func mode_fog(mode: int) -> Dictionary:
 	match mode:
 		SessionState.Mode.UNIVERSE:
-			return {"fog_density": 1.0, "fog_depth_begin": 24.0, "fog_depth_end": 150.0, "fog_depth_curve": 1.3, "volumetric_fog_length": 96.0}
+			return {"fog_density": 1.0, "fog_depth_begin": 45.0, "fog_depth_end": 220.0, "fog_depth_curve": 1.3, "volumetric_fog_length": 96.0, "exposure_scale": 1.25}
 		SessionState.Mode.OBSERVATORY:
-			return {"fog_density": 1.0, "fog_depth_begin": 9.0, "fog_depth_end": 30.0, "fog_depth_curve": 1.2, "volumetric_fog_length": 40.0}
+			return {"fog_density": 1.0, "fog_depth_begin": 9.0, "fog_depth_end": 30.0, "fog_depth_curve": 1.2, "volumetric_fog_length": 40.0, "exposure_scale": 1.0}
 		_:
-			return {"fog_density": 1.0, "fog_depth_begin": 11.0, "fog_depth_end": 34.0, "fog_depth_curve": 1.4, "volumetric_fog_length": 40.0}
+			return {"fog_density": 1.0, "fog_depth_begin": 11.0, "fog_depth_end": 34.0, "fog_depth_curve": 1.4, "volumetric_fog_length": 40.0, "exposure_scale": 1.0}
 
 
-## Applies mode_fog(mode) to env, keeping the quality compensation of the depth fog.
+## Applies mode_fog(mode) to env, keeping the quality compensation of the depth fog. Keys that
+## are not Environment properties (exposure_scale) are skipped; LightRig consumes them.
 static func apply_mode_fog(env: Environment, mode: int) -> void:
 	var f := mode_fog(mode)
 	for key: String in f:
-		env.set(key, f[key])
+		if key in env:
+			env.set(key, f[key])
 	env.set_meta(_META_FOG_BEGIN, float(f["fog_depth_begin"]))
 	_update_depth_fog(env)
 
