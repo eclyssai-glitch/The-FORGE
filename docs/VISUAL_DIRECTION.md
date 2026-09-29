@@ -1,202 +1,152 @@
-# Direção visual
+# Direção visual: bíblia GENESIS (v2)
 
-Dono: `art-director`. Responsabilidade: identidade, composição, luz, materiais, movimento e UI.
-Valores concretos vivem no código e não são repetidos aqui: cores, fontes e tempos em
-`src/style/palette.gd`; materiais em `src/style/material_library.gd` e `src/style/shaders/`;
-atmosfera e luz por estágio em `src/style/environment_profile.gd`.
+Dono: `art-director`. Responsabilidade: identidade, composição, luz, materiais, movimento, UI e o resumo da
+linguagem sonora. Valores concretos vivem no código e não se repetem aqui: cores e tempos em
+`src/style/palette.gd`; materiais em `src/style/material_library.gd` + `src/style/shaders/genesis/`; atmosfera em
+`src/style/environment_profile.gd`. Diagnóstico da versão anterior: `docs/art/v0.1-postmortem.md`. Registros de
+lookdev (primitivas substitutas, não usados no jogo): `docs/art/lookdev/`.
 
-## Sensação
+## 1. Conceito: MIKU, a tecelã celeste
 
-Um universo misterioso que se transforma aos poucos. Silêncio, escala, precisão. O espectador
-entende o que acontece pela luz e pela forma, não por texto.
+Um único ambiente: o espaço profundo diante de uma nebulosa quente. No centro, **MIKU**, personagem original do
+universo KORIUM, suspensa em pé, tece corpos celestes. Os agentes que ela cria são planetas; o que eles sabem são
+luas; o que sabem fazer são anéis; o que lembram são cinturões. **O cabelo de MIKU é o grafo**: seus filamentos
+se prolongam e viram os fios de luz que ligam cada corpo a ela e entre si (notas ↔ links ↔ grafo, traduzidos
+em astronomia, sem copiar interface de app de notas). Sensação: contemplativa, cósmica, poética, elegante,
+cinematográfica. O espectador entende pela luz, pela forma e pelo som, não por texto.
 
-## Princípios
+### MIKU: especificação e diferenciação
 
-1. **Um só ambiente.** UNIVERSE, FORGE e OBSERVATORY são o mesmo espaço visto de outra distância;
-   nada de telas desconectadas.
-2. **Monocromático com um acento.** Base VOID→BONE. EMBER é energia/ativação e só aparece quando
-   algo recebe energia. PALE é exclusivo da verificação.
-3. **Luz conta a história.** Câmara quase escura no início; a luz sobe com os eventos
-   (ativação → iluminação da estrutura → verificação → forma final).
-4. **Arquitetura, não dispositivo.** Formas de anéis, lâminas e colunas com proporção arquitetônica;
-   bordas finas, superfícies escuras com brilho controlado.
-5. **Movimento com função.** Cada movimento corresponde a um evento; o ambiente respira devagar.
-6. **Texto mínimo.** Rótulos curtos em maiúsculas espaçadas, dados em mono. Sem texto decorativo.
+- Figura feminina alta e serena, proporção de estátua (≈ 9 cabeças), suspensa em pé, contrapposto leve, cabeça
+  inclinada para a criação abaixo, braços abertos para a frente e para baixo, regendo as mãos. Dignidade de
+  escultura sacra.
+- **Porcelana lunar**: sem roupa modelada. Da cintura para baixo, um **vestido de luz** que se dissolve num rio de
+  poeira estelar (sem pernas). Rosto sereno, olhos fechados sugeridos pela forma, sem boca detalhada; um ponto de
+  luz GOLD na testa (a semente).
+- **Cabelo**: uma única massa muito longa que flui para cima e para trás como filamentos de nebulosa; gradiente
+  ouro pálido → rosa crepúsculo → lilás. **Halo**: arco incompleto fino de astrolábio atrás da cabeça, girando devagar.
+- **Diferenciação de franquias (obrigatória)**: nada de mechas duplas/"twin tails", nada de azul-turquesa ou
+  verde-água, nada de microfone, headset, número, tatuagem/insígnia, gravata, saia plissada, braçadeiras,
+  uniforme escolar ou figurino de idol. Nenhuma pose de palco, nenhum olhar para a câmera, nenhum sorriso.
+  Estética **não** anime/idol: a referência é escultura (mármore, porcelana, estatuária votiva), não ilustração.
+  Nunca sexualizada: sem ênfase anatômica; o volume do corpo é contido e o vestido de luz começa na cintura.
 
-## Evitar
+## 2. Paleta v2 (`Palette`)
 
-Y2K, cyberpunk genérico, neon saturado, grades de "tron", robôs/cérebros, hologramas azuis,
-dashboards corporativos, excesso de partículas, bloom estourado, lens flares, glitch,
-efeitos sem função narrativa, cópia de projetos existentes.
+Noite índigo como base, luz quente de criação, porcelana e gelo. Baixa saturação (HSV ≤ 0,6, testado), sem neon.
+**GOLD é o acento narrativo**: só aparece onde algo está sendo criado ou foi criado (semente, kintsugi aceso,
+magma, borda de acreção, pulso de link).
 
-## Composição
-
-- FORGE: núcleo levemente acima do centro óptico; estrutura ocupa ~55% da altura; horizonte baixo.
-- UNIVERSE: a câmara é um ponto de luz quente entre sementes dormentes frias; profundidade por névoa.
-- OBSERVATORY: painel nativo à esquerda (~38% da largura); o mundo continua vivo à direita.
-- UI nas bordas; o centro pertence ao mundo.
-
-## Tipografia
-
-Inter (UI) e IBM Plex Mono (dados, tempos, IDs). Rótulos 11–13 px, espaçamento amplo;
-títulos raros. Ambas OFL, embarcadas.
-
-## Regras de cor (quem pode usar cada tom)
-
-| Tom | Significado | Onde aparece |
+| Token | Hex | Papel |
 |---|---|---|
-| VOID → BONE | matéria, espaço, informação neutra | superfícies, piso, arquitetura, texto de UI, seleção |
-| **EMBER** (+ EMBER_DEEP) | energia fluindo **agora** | coração do núcleo e sua luz, aro do casco energizado, arestas em montagem, linhas de arco da forma final, halos de ativação/forma final |
-| **PALE** | verificação | banda de varredura, anel de varredura, flash de checagem |
+| `SPACE_DEEP` | #05060b | fundo do céu, névoa de profundidade; nunca preto puro |
+| `INDIGO` | #141a30 | corpo da noite, ambiente, sombra da matéria |
+| `NEBULA` | #3a2d63 | nuvens violeta da nebulosa, fill |
+| `LILAC` | #9a88c6 | pontas do cabelo, início dos fios, realces da nebulosa |
+| `DUSK_ROSE` | #c48b9f | núcleo quente da nebulosa, contraluz, meio do cabelo, borda de atmosfera |
+| `PEARL` | #f4efe9 | porcelana de MIKU, estrelas brancas |
+| `BLUSH` | #f2d6d0 | translucidez da porcelana, estrelas quentes |
+| `GOLD` | #e9b872 | criação: semente, kintsugi, magma quente, acreção, pulsos |
+| `MAGMA` | #c47a50 | tom médio do magma (cobre fundido, não laranja) |
+| `GOLD_DEEP` | #7d5836 | magma resfriado, fundo das fendas, ouro apagado do kintsugi |
+| `ICE` | #a9c6e8 | conhecimento/documentação: luas, atmosfera, rim frio |
+| `STONE` | #1b1e2e | pedra-noite das mãos, crosta, asteroides |
 
-- EMBER nunca marca estado, status, seleção ou decoração. Sem energia, sem EMBER.
-- PALE nunca é luz de cena nem texto comum; só existe enquanto a verificação acontece.
-- Seleção/hover é BONE (hairlines + fresnel leve), nunca EMBER nem PALE.
+Regras: UI nunca usa GOLD (a UI não cria nada); ICE nunca vira turquesa; brancos são sempre PEARL/BLUSH.
+Os tokens v1 (VOID…EMBER/PALE) ficam até a virada da Fase C (seção 10).
 
-### Núcleo dormente (resolve pendência do Loop 1)
+## 3. Materiais (`MaterialLibrary`, `shaders/genesis/`)
 
-Antes de `CORE_ACTIVATION` o núcleo **não tem EMBER**: casco `core_shell` com `energy = 0`
-(metal GRAPHITE com fresnel BONE mínimo), coração `core_heart` com `energy = 0` (negro),
-luz do núcleo desligada (`LIGHT.dormant.core`). O que o revela é só o contraluz frio (`RIM_COLOR`)
-e o fresnel do casco — uma silhueta no escuro. EMBER entra com a ativação, subindo `energy`.
+Instâncias em cache e compartilhadas; corpos com estado próprio usam `.duplicate()`. Toda cor vem de `Palette`
+(teste). **Nenhum shader lê `TIME`**: o movimento ambiente usa o uniform `motion_time`, alimentado por
+`MaterialLibrary.set_motion_time(MotionClock.now())` uma vez por quadro (e pelo dono de cada duplicata). O
+progresso narrativo (`formation`, `heat`, `veins`…) vem de `Simulation.genesis` + `Simulation.time`.
+`MaterialLibrary.apply_quality(profile)` ajusta as oitavas de ruído (`detail`) por perfil.
 
-### Selo DEMO MODE
-
-O selo é informação permanente, não energia: **texto BONE** em IBM Plex Mono ("DEMO MODE", + "SIMULATED
-EVENTS" em tom apagado), sobre fundo `PANEL` com contorno `PANEL_LINE` e um marcador quadrado ASH à esquerda.
-Nunca EMBER (sugeriria atividade/alerta) e nunca PALE (é da verificação). Canto superior esquerdo, pequeno,
-sempre visível — inclusive com o HUD oculto (H) — e legível em 1280×720 (`src/ui/demo_badge.gd`).
-
-## UI (HUD nativo, `src/ui/`)
-
-Nós `Control` + `Theme` construídos em código (`UiTheme`, a partir de `Palette` e das fontes embarcadas);
-a UI só conversa com o mundo por `Simulation`, `Session` e `Quality`.
-
-- **Composição**: a UI mora nas bordas, o centro é do mundo. Topo: selo (esquerda), modos (centro, com as
-  teclas 1/2/3 discretas), SETTINGS (direita). Esquerda: painel do modo. Direita: inspector (quando há
-  seleção) e feed de eventos acima do transporte. Base: transporte em faixa única.
-- **Por modo**: FORGE — lista CONSTRUCT (núcleo, camadas I–V, verificação; clique seleciona).
-  UNIVERSE — SITES (câmara + 3 sementes; clique seleciona e enquadra) + dica de navegação (tecla `RowText`
-  BONE, ação `Caption` apagada: mesma fonte e corpo, mesma linha de base).
-  OBSERVATORY — folha à esquerda (margem de 24 px como todo painel, borda direita em 38% da largura, sem feed):
-  missão com ✓ e progresso, verificação (checks com tempo; **só o check em curso diz RUNNING**, os seguintes
-  PENDING), entidades, log completo rolável (uma linha por evento; o detalhe em `Body` só no evento mais recente
-  e no mais recente da entidade selecionada) e rodapé "SIMULATED DATA"; o inspector desce para o canto inferior
-  direito para não cobrir a estrutura enquadrada à direita.
-- **Hierarquia de texto**: rótulos em Inter maiúsculas espaçadas (`Caption` apagado 11 px, `RowText` 11 px,
-  `Title` 13–15 px); dados, tempos e status em IBM Plex Mono (`Data` BONE, `DataDim` apagado). Prosa só no
-  resumo do inspector e no detalhe do log (`Body`). Nada de texto decorativo.
-- **Cor**: tudo VOID→BONE. Painéis `PANEL` translúcido + hairline `PANEL_LINE`; hover/seleção são lavagens BONE
-  (`PANEL_HOVER`/`PANEL_ACTIVE`) com um fio BONE à esquerda da linha selecionada; texto secundário `TEXT_DIM`.
-  **A UI nunca usa EMBER nem PALE** (teste `test_ui_theme`).
-- **Linha do tempo**: fio fino; trecho decorrido ASH; uma marca por mudança de fase (derivada dos eventos),
-  BONE quando já passou; cabeça BONE. Arrastar/clicar faz `Simulation.seek`.
-- **Movimento**: troca de modo faz cross-fade dos painéis (`T_BASE` entrando, `T_FAST` saindo); H esmaece tudo
-  menos o selo. Tempo/fase atualizam a 10 Hz (`T_UI_REFRESH`); listas só em eventos e `world_rebuilt`.
-- **Input**: nós de layout com `MOUSE_FILTER_IGNORE` (órbita e picking livres fora dos painéis); painéis
-  param o mouse só no próprio retângulo — **inclusive a roda**: tudo que pega o mouse passa por
-  `UiKit.catch_mouse` (`mouse_force_pass_scroll_events = false`), senão rolar sobre um painel daria zoom na
-  câmera (teste `test_ui_hud`). Nenhum botão pega foco de teclado (Espaço/R/1–3 sempre chegam aos
-  atalhos globais).
-- **Nada sugere conexão real**: nenhum vocabulário de rede/conta (connect, sync, cloud, server, login —
-  teste `test_ui_hud`); o rodapé do OBSERVATORY diz
-  "SIMULATED DATA · LOCAL · DETERMINISTIC".
-
-## Materiais (`MaterialLibrary`)
-
-Instâncias compartilhadas (cache estático). Quem precisa de valores próprios usa `.duplicate()`.
-Nenhuma textura; toda cor vem de `Palette` e é injetada pela biblioteca (os shaders não têm literais de cor).
-Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.time`, então pausa/seek ficam consistentes.
-
-| Getter | Uso | Aparência / controle |
+| Getter | Aparência | Controles |
 |---|---|---|
-| `structure()` | 96 segmentos (MultiMesh, `use_custom_data`) | bruto → acabado por `finish`; ver abaixo |
-| `core_shell()` | casco facetado do núcleo | metal escuro, fresnel BONE sutil; `energy` acende aro EMBER |
-| `core_heart()` | coração do núcleo | EMBER emissivo sem sombreamento; `energy`, `pulse` |
-| `scan_ring()` | anel da varredura | PALE aditivo com borda suave; `strength` |
-| `halo()` | halos (ativação, forma final, piso) | aditivo sutil; `color` (BONE por padrão, EMBER só com energia), `strength` |
-| `floor()` | piso da câmara | `chamber_floor.gdshader`: quase preto, rugoso, especular baixo (leve reflexo); `edge_fade` (0.85→1.0 do raio) leva albedo e especular a zero na borda — o disco se dissolve no VOID em vez de terminar numa aresta iluminada. Raio lido do UV da tampa do `CylinderMesh` (centro 0.25/0.75, raio 0.25; guardado por teste) |
-| `architecture()` | pilares, colunas, óculo | GRAPHITE fosco; nunca mais brilhante que a estrutura |
-| `dormant_seed()` | sementes do UNIVERSE | corpo quase preto (piso de emissão fria 0.03) com fresnel ASH frio; `energy` aquece para EMBER; **seleção/hover só por `select`** 0..1: aro BONE `select_color · (1−n·v)³ · select · select_energy` (0.35) somado ao repouso — `cold_color`/`cold_energy` nunca mudam com a seleção (o mundo escreve apenas `select`) |
-| `mote(color)` | poeira (quad de `GPUParticles3D`) | `ShaderMaterial` (`particle_mote.gdshader`): unshaded, aditivo, billboard de partículas (mantém escala/giro), disco redondo e suave, alpha pela rampa de cor do sistema; `near_fade` (Vector2, metros de vista) esconde o que passa rente à lente; cache por cor |
-| `spark(color)` | faíscas sólidas (malha `shard`, sem billboard) | `StandardMaterial3D` unshaded, aditivo, dupla face, cor só do material; cache por cor |
+| `miku_body()` | porcelana perolada: albedo pérola/blush, mármore de contraste mínimo, **sheen iridescente** em ângulo rasante pérola → rosa → ouro pálido, translucidez falsa na silhueta (emissão dependente da vista), luz interna suave; AO = `COLOR.r` do vértice | `awaken`, `breath`, `select`, `inner_glow`, `sheen`, `backlight_amount`, `ao_strength` |
+| `miku_hair()` | fitas aditivas; ouro pálido (raiz) → rosa → lilás (ponta), filamentos internos, borda suave, cintilação lenta rumo às pontas. Malha: UV.x raiz→ponta, UV.y através; alpha do vértice = opacidade do fio | `reveal`, `motion_time`, `intensity`, `seed` |
+| `miku_gown()` | véu de luz aditivo, mais claro em ângulo rasante, comido por ruído de cima para baixo (Y do objeto), deixando grãos de estrela | `fade_top`, `fade_bottom`, `presence`, `motion_time` |
+| `halo_arc()` | arco de astrolábio incompleto + arco interno oposto + graduação fina; linhas de largura constante em pixels (quad) | `strength`, `breath`, `arc_span` |
+| `hand_stone()` | basalto azul-noite polido (clearcoat) com estrelas dentro da pedra (espaço do objeto) e **kintsugi**: bordas de Voronoi deformadas, largura variável, ouro metálico sempre presente e apagado; `veins` espalha e acende a rede | `veins`, `motion_time`, `select`, `vein_scale`, `star_scale` |
+| `planet_forming()` | `formation` acreção por manchas com borda GOLD → `heat` magma escuro com rios de ouro fluindo → `crust` placas de pedra (Voronoi) assentando uma a uma, fendas acesas que esfriam com `heat` → `atmosphere` névoa de limbo + aro fino ICE→DUSK_ROSE | `formation`, `heat`, `crust`, `atmosphere`, `motion_time`, `seed`, `detail`, `select` |
+| `moon_doc()` | gelo fosco com estratos finos (páginas), rim ICE fino, acreção igual ao planeta | `formation`, `glow`, `seed`, `select` |
+| `ring_skill()` | bandas finas douradas com vãos escuros sobre quad (raio do UV); formação varre o círculo com borda quente | `formation`, `inner`, `outer`, `bands`, `intensity` |
+| `asteroid_memory()` | pedra rugosa, rim rosa-lilás; ~5 % das rochas (por `INSTANCE_ID`) guardam um brilho GOLD discreto | `memory`, `glint_share` |
+| `orbit_line()` | linha fina aditiva, mais clara logo atrás do corpo, desvanecendo ao longo do arco | `head`, `trail`, `base`, `formation` |
+| `relation_thread()` | fibra de luz LILAC (sai do cabelo) → cor do alvo (ICE luas, GOLD planeta), afinando nas pontas; pulso GOLD viajante = backlink | `pulse`, `woven`, `color_to`, `intensity` |
+| `nebula_sky()` | céu: nebulosa índigo/violeta por fbm deformado, faixa larga e **núcleo quente DUSK_ROSE atrás de MIKU** (`warm_dir`, padrão −Z levemente acima do horizonte), lanes de poeira escura, 3 camadas de estrelas de tamanho em pixel (quentes/frias), cintilação sutil, **dithering** contra banding; passe de radiância sem estrelas | `warm_dir`, `motion_time`, `detail`, `sky_energy`, `star_intensity`, `warm_intensity` |
 
-### Estrutura: estados
+Contratos de malha: linhas (órbitas, fios) funcionam melhor como **fitas cruzadas** (duas larguras ortogonais)
+ou tubo fino, porque uma fita plana some de lado. Planetas/luas: qualquer esfera (padrões no espaço da direção).
+Esculturas (`miku_body.obj`, mãos) não precisam de UV. `mote(color)`/`spark(color)` seguem para poeira e faíscas.
 
-- **INSTANCE_CUSTOM** (por segmento): `r` montagem (0 fragmento solto, 1 assentado),
-  `g` flash de verificação (PALE), `b` seleção/hover (BONE), `a` energia de construção (EMBER nas arestas).
-- **Uniformes**: `finish` (0 bruto → 1 acabado), `scan_y` + `scan_strength` (banda PALE em Y mundial),
-  `final_lock` (linhas EMBER de arco), `energy` (multiplicador global de todo EMBER; padrão 1).
-- **Bruto**: cinza fosco claro (ASH→BONE), dielétrico, com costuras finas mais escuras que leem o corte.
-  **Opaco de propósito**: translucidez num MultiMesh de 96 instâncias sobrepostas não ordena entre instâncias
-  (artefatos), perde sombras e SSAO e custa overdraw em hardware modesto; o "inacabado" é dito pelo valor claro e fosco.
-- **Acabado**: meio-metal escuro (SLATE puxado para ASH), rugosidade média (0.42: o reflexo EMBER do núcleo se
-  espalha pelo anel em vez de acender um só segmento, que lia como "selecionado"), chanfro fino de tamanho físico
-  que pega a luz e hairline BONE discreta (`finished_line` 0.18, `finished_chamfer` 0.08: o anel acabado/verificado
-  lê como uma superfície, não como grade de blocos contornados). Metal demais com albedo escuro vira buraco: sem nada para refletir, a parede
-  some no VOID. Por isso o metal é parcial (a key ainda ilumina o difuso) e o ambiente reflete o céu
-  (`reflected_light_source = SKY`, cujo passe de radiância é um VOID levemente erguido — dono: game-engineer).
-  O acabamento só vale para segmentos assentados (`finish × r`).
-- **Arestas**: vêm do UV (0..1 por face, garantido pelo MeshBuilder): distância à borda convertida em pixels →
-  hairlines de largura constante, com fade quando a face fica pequena na tela (sem cintilação à distância).
-- **Montagem** (`a`): todas as arestas do segmento em EMBER, transitório.
-- **Forma final** (`final_lock`): **um anel EMBER por camada** — só a borda superior da **parede externa**
-  (máscara `v_outer` calculada no espaço da malha, cuja origem é o eixo do anel; `lock_px_scale` alarga a linha).
-  As paredes externas dos segmentos se unem num círculo contínuo. Tampas, bordas internas e laterais ficam
-  sem EMBER: nada de contorno de "wireframe".
-- **Varredura**: banda gaussiana em Y que acende hairlines e chanfros em PALE. O flash `g` marca checagens com
-  energia própria (`flash_edge_energy` 0.7, abaixo da banda) e só na parede externa (máscara `v_outer`, a mesma
-  do `final_lock`), para ler como um lampejo ao longo do anel, não como grade.
-- **Seleção/hover** (`b`): hairline BONE mais larga que a das arestas (`select_px_scale` 2.0), para não
-  se quebrar em tracejado nas tampas rasantes sem MSAA (LOW), + fresnel leve. Nas tampas o fio cai à metade
-  (`select_cap_share` 0.5): vistas de cima elas somam todos os contornos e liam como grade; a parede externa
-  mantém o fio pleno.
+## 4. Iluminação
 
-### Contrato de malha com os consumidores
+- **Contraluz primeiro**: a fonte motivada é o núcleo quente da nebulosa atrás de MIKU. Uma direcional quente
+  (DUSK_ROSE→GOLD) vinda de trás recorta MIKU, as mãos e o planeta; um rim frio ICE de trás/lado separa as formas.
+- **Key suave de ¾ lateral** (PEARL, energia moderada), nunca frontal: luz frontal achata a porcelana (verificado
+  no lookdev). Fill violeta (NEBULA) muito baixo. Ambiente INDIGO, baixo: sombras são noite, não cinza.
+- Emissão conta a criação: o planeta ilumina as palmas por baixo (luz local GOLD/MAGMA com `heat`); o kintsugi
+  acende quando as mãos trabalham.
+- Tonemap AgX; glow com limiar ≥ 1, só emissão verdadeira floresce; **nada de bloom estourado**. Exposição por
+  plano, não por evento.
+- Rig do lookdev (referência para a composição de Fase B): rim quente 2,2 de (0,3,−10); rim frio ICE 0,8 de (10,6,−6);
+  key PEARL 1,0 de (−12,7,3) com sombra; ambiente 0,25.
 
-- Segmentos: UV 0..1 por face (u ao longo do arco, v radial nas tampas e vertical nas paredes).
-- Anéis com `scan_ring()`/`halo()`: v atravessa a largura **visível** da fita (0..1), u ao longo do anel.
-  O anel de varredura deve ser uma fita vertical (ou de seção retangular), não uma fita plana horizontal:
-  vista de lado, a fita plana some em traços serrilhados.
+## 5. Composição (um só espaço, três distâncias)
 
-## Luz por estágio (`EnvironmentProfile.LIGHT`)
+- **FORGE (herói)**: MIKU no terço superior central, recortada contra o núcleo quente; planeta em formação e mãos
+  no terço inferior, em primeiro plano; leve contra-plongée (câmara abaixo do peito de MIKU olhando para cima). O
+  cabelo sobe para fora do quadro: escala. Assimetria: mão esquerda baixa à esquerda, direita alta à direita.
+- **UNIVERSE (sistema)**: vista alta e afastada; órbitas finas, cinturão de memória, planetas distantes com suas
+  luas; MIKU é uma chama perolada no centro, e o cabelo, uma pluma que abre em fios para cada corpo.
+- **OBSERVATORY (relacional)**: ¾ alto, mais próximo; fios relacionais e pulsos em destaque, rótulos diegéticos
+  junto dos corpos; a nebulosa recua (menos `sky_energy`) para os fios lerem.
 
-A luz conta a história; o `LightRig` interpola os níveis (em `Palette.T_CINEMATIC`) segundo os eventos:
+## 6. Movimento
 
-| Estágio | Eventos | Leitura |
-|---|---|---|
-| `dormant` | até `CORE_ACTIVATION` | quase escuro: só contraluz frio e ambiente mínimo; sem EMBER |
-| `active` | `CORE_ACTIVATION` → `LIGHTING_APPLIED` | o núcleo é a fonte: luz EMBER local, key mal existe |
-| `lit` | `LIGHTING_APPLIED` | key BONE sobe, a estrutura acabada aparece inteira |
-| `verify` | `VERIFICATION_STARTED` → `VERIFICATION_PASSED` | key recua um pouco para a banda PALE ler |
-| `final` | `STRUCTURE_FINALIZED` em diante | nível mais alto, núcleo pleno, arcos EMBER |
+- **Tudo respira**: períodos de 4–8 s (`T_BREATH` 6 s, `T_BREATH_SLOW` 8 s), só senoides; nada pisca.
+- **Formação = inchaço/acreção** (`T_SWELL`): matéria se junta, a borda brilha, o volume incha; nunca flash, nunca pop.
+- Mãos: lentas, pesadas, reverentes; antecipação e assentamento. Halo: uma volta em `T_HALO_TURN`.
+- Câmara: grua/dolly lenta (`T_CRANE`), sem órbita constante, sem corte seco entre planos.
+- Pulsos de link viajam do cabelo para o alvo em ~2 s, com easing, espaçados.
 
-- Cores: `KEY_COLOR` (BONE, quente-neutro), `FILL_COLOR` e `RIM_COLOR` (ASH, frios), `CORE_COLOR` (EMBER, a única luz quente),
-  `AMBIENT_COLOR` (ASH: o ambiente só pesa quando a energia do estágio sobe — `lit`/`final` revelam as paredes
-  que a key não alcança; em `dormant` continua desprezível).
-- As paredes de frente para a câmera FORGE recebem pouca key: quem as desenha é o fill (frio) e o ambiente.
-- `FOG_LIGHT`: as direcionais quase não entram na névoa volumétrica (é o que a tornaria leitosa);
-  o volume ganha corpo só em volta do núcleo.
+## 7. Linguagem sonora (resumo; detalhe do `sound-designer` em `docs/AUDIO.md`)
 
-## Atmosfera (`EnvironmentProfile.make_environment`)
+Drone grave ~55 Hz + quinta; pad aéreo formântico; brilhos cristalinos esparsos; vento cósmico filtrado. SFX de
+formação são **sinos/harpa em escala pentatônica** (acreção = arpejo ascendente, crosta = sino grave, atmosfera =
+pad que abre, lua = sino alto, anel = glissando de harpa, link = nota curta ao chegar o pulso). Nunca bleeps, UI
+sonora de sistema, whooshes de trailer ou impactos. O som também respira.
 
-- Fundo VOID, tonemap AgX, ajuste leve de contraste e saturação.
-- **Glow contido**: limiar HDR acima de 1 — só emissão real (hairlines, coração, anel) floresce, com raio curto.
-- **Névoa de profundidade** em modo DEPTH, cor VOID: a distância afunda no preto e bordas de piso/pilares se
-  dissolvem em vez de cortar um horizonte. **Volumétrica tênue** (albedo ASH, densidade por estágio).
-- **SSAO** moderado assenta segmentos e pilares.
-- `apply_quality(env, profile)`: liga/desliga SSAO, SSIL, glow e volumétrica pelo perfil de `Quality`;
-  sem volumétrica (LOW) a névoa de profundidade começa mais perto para manter a profundidade.
-- `mode_fog(mode)` / `apply_mode_fog(env, mode)`: FORGE fechado, OBSERVATORY recua o mundo atrás do painel,
-  UNIVERSE vê longe (sementes além da câmara, a 60–70 unidades, legíveis) e mais claro (`exposure_scale` 1.5).
-  No UNIVERSE o volume volumétrico é curto (`UNIVERSE_VOLUMETRIC_LENGTH`): visto a ~80 unidades, um volume que
-  alcançava a câmara absorvia a maior parte da luz dela — o HIGH ficava muito mais escuro que o LOW (sem
-  volumétrica). Com o volume curto os dois perfis leem igual (mediana do centro 10 vs 12/255, p99 43 vs 49).
-  A chave `exposure_scale` (todos os modos; não é propriedade do `Environment`, `apply_mode_fog` a ignora)
-  é multiplicada pelo `LightRig` sobre a exposição do estágio.
-- **Reflexos**: `reflected_light_source = SKY` explícito (ver "Acabado").
+## 8. UI diegética (princípios; implementação na Fase B, `src/ui/`)
 
-## Custo
+- **A cena é o herói.** Nada de painel acima da cena. Selo DEMO MODE pequeno e permanente (canto superior esquerdo).
+- Modos = três rótulos mínimos; transporte = arco fino recolhido que aparece ao passar o mouse.
+- Rótulos de entidades no mundo (Label3D com fio-guia fino), junto do corpo que nomeiam, na tipografia existente
+  (Inter/Plex Mono), PEARL apagado; nunca GOLD.
+- OBSERVATORY mostra o grafo por fios e rótulos no espaço, não por listas. H esconde tudo exceto o selo.
+- Nenhum vocabulário de rede/conta; contratos do smoke (`ui_transport`, `demo_badge`) mantidos.
 
-Estrutura: 5 MultiMesh (um por camada) + nervuras, opacos, algumas derivadas por pixel, sem texturas. Emissivos de anel são
-aditivos sem escrita de profundidade. Os efeitos caros (volumétrica, SSAO, SSIL, glow) obedecem ao perfil de `Quality`.
+## 9. Proibições
+
+Y2K; cyberpunk genérico; neon saturado; grades "tron", hairlines técnicas de CAD, hologramas azuis; UI corporativa
+fria (dashboards, listas de status, logs como imagem principal); **turquesa, mechas duplas ou qualquer traço de
+personagem conhecida**; estética idol/anime; sexualização; robôs/cérebros; bloom estourado, lens flare, glitch,
+aberração cromática; excesso de partículas; texto decorativo; flash como transição; imagem estática simulando 3D.
+
+## 10. Legado v1 (cenário ORIGIN, até a virada da Fase C)
+
+Enquanto `&"origin_chamber"` for o cenário padrão, valem as regras v1 (detalhe no histórico git deste arquivo,
+commit 5c4f2e9): base VOID→BONE; EMBER só onde há energia agora; PALE só durante a verificação; a UI nunca usa
+EMBER/PALE; seleção/hover em BONE; estrutura opaca (MultiMesh sem ordenação); luz por estágio
+(`EnvironmentProfile.LIGHT`: dormant/active/lit/verify/final); névoa DEPTH escura; glow contido; efeitos caros
+por perfil de `Quality`. Esses tokens e materiais são removidos pelos donos na limpeza da Fase C.
+
+## 11. Custo
+
+Shaders v2 usam só ruído de valor por hash e um Voronoi 3×3×3 (planeta, mãos), com laços de limite constante;
+`detail` por perfil (céu 3/4/5/5, planeta 3/3/4/4 para LOW/MEDIUM/HIGH/ULTRA). Aditivos sem escrita de profundidade.
+Céu: com `Sky.PROCESS_MODE_AUTOMATIC` a radiância é refeita quando um uniform muda. Atualizar `motion_time` do céu
+a ≤ 5 Hz (ou manter estático no LOW); o passe de radiância não tem estrelas e usa ≤ 2 oitavas.
