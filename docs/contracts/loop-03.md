@@ -92,3 +92,8 @@ revisão `art-director` + auditoria `technical-auditor`, correções pelos donos
   mostra piso/colunata bem mais claros que no HIGH; conciliar os perfis em `EnvironmentProfile`.
 - [MENOR] art-director: remover `MaterialLibrary.particle()` (sem chamadores) e a linha em VISUAL_DIRECTION.md.
 - [MENOR] animator: zerar o cache `_env_written` do LightRig em `world_rebuilt`.
+
+## Pedido registrado (game-engineer → art-director)
+
+- `dormant_seed.gdshader`: uniform dedicado de seleção (`select` 0..1 + `select_color` BONE injetado pela
+  MaterialLibrary), para que `universe.gd` deixe de usar `Palette.BONE/ASH` diretamente no destaque das sementes.
