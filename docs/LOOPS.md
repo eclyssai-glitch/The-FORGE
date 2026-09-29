@@ -70,7 +70,12 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   - Etapa 1 concluída: game-engineer (80fd37a — Shortcuts: Espaço/R/1/2/3/V/H/Esc/F11; `Session.focus`,
     `hud_visible`, `entity_group`; capturas 10–12; smoke exige UI nativa (`ui=present`, transporte, selo 3/3);
     sementes selecionáveis só no UNIVERSE). procedural-modeler (25dd4b3 — nervuras rentes à pilha). Suíte 132/132.
-  - Etapa 2 em andamento (worktrees paralelas): art-director (HUD nativo + pendências visuais), animator
-    (foco de câmera + pendências), game-engineer (destaque de seleção das sementes).
-- Retomada: merge das branches `worktree-agent-*` com commits "loop 03:"; se ausentes, relançar a etapa 2 pelo
-  contrato; depois etapa 3 (integração, export Windows, evidências `docs/evidence/loop-03/`, revisão + auditoria).
+  - Etapa 2 concluída: art-director (2f4832a — HUD nativo completo), animator (145cb26 — foco de câmera; ADR-011),
+    game-engineer (b100ef8 — destaque das sementes). Suíte 169/169.
+  - Etapa 3: smoke com UI obrigatória PASS (fonte e pack do .exe); export reproduzível; 12+12 capturas em
+    `docs/evidence/loop-03/`. Revisão final art-director APROVADO COM RESSALVAS (P1 semente selecionada);
+    auditoria final technical-auditor APROVADO COM RESSALVAS (critérios 1–6 atendidos; 7–8 parciais por registros;
+    I-1 scroll atravessa HUD; 680 checks de robustez sem falhas).
+  - Rodada final de correção: `docs/contracts/loop-03-fixes.md`.
+- Retomada: executar `docs/contracts/loop-03-fixes.md` (art-director, game-engineer, animator em paralelo) → merge →
+  recapturar `docs/evidence/loop-03/` (+ 1280×720 e HUD oculto) → export → registrar build → reauditoria → checkpoint.
