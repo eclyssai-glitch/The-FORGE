@@ -97,3 +97,12 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
   fora do repositório, criado pelo hook SessionStart). Nenhum asset de terceiros.
 - Consequência: assets reproduzíveis a partir do código; regenerá-los exige o venv; o export continua offline e
   determinístico.
+
+## ADR-014 — Cenários de simulação com estados tipados separados
+- Contexto: o Loop 4 introduz o cenário GENESIS ao lado da ORIGIN CHAMBER. Tipar `Simulation.world` com uma base
+  comum quebrava ~40 leitores (`var w := Simulation.world` + campos da ORIGIN → "Cannot infer the type").
+- Decisão: `Simulation.world: WorldState` (ORIGIN) e `Simulation.genesis: GenesisState` coexistem; só o estado do
+  cenário ativo recebe eventos; `Simulation.state` devolve o ativo (`ScenarioState`). `Scenario` registra roteiro,
+  tipos, estado e catálogo por id; `--scenario=` na linha de comando. Módulos GENESIS leem `Simulation.genesis`.
+- Consequência: mudança aditiva; na virada (Loop 4, Fase C) `world` pode ser retipado quando os consumidores da
+  ORIGIN saírem.

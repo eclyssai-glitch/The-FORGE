@@ -123,3 +123,11 @@ rótulos diegéticos em destaque.
 7. Vertical slice funcionando: testes verdes, smoke PASS, export Windows.
 8. Revisão visual forte: `art-critic` ≥ APROVADO COM RESSALVAS com nota ≥ 7 para "início de um universo autoral
    memorável", e auditoria técnica sem bloqueantes.
+
+## Notas de integração
+
+- Fase A · game-engineer integrado (`e854114`): `Simulation.world` continua `WorldState` (ORIGIN); o estado
+  GENESIS é `Simulation.genesis` (`GenesisState`), `Simulation.state` = ativo, `Simulation.scenario_changed`
+  (ADR-014). Módulos GENESIS leem `Simulation.genesis` + `Simulation.time`; a UI escuta `scenario_changed` e usa
+  `Scenario.entity_*`, `Mission.title_for`, `Simulation.state.phase_name()`. Nomes fictícios: planeta ILVARA-7,
+  luas ALMANAC/GLOSSARY, distantes NAUVE-2/KESTRE-4; tempos em `GenesisScript` (`docs/DEMO_EVENTS.md`).
