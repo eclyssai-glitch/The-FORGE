@@ -63,4 +63,14 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   banda pontilhado; motes; nervuras longas; `particle()` morto; invalidar cache do LightRig em `world_rebuilt`.
 - Retomada: Loop 3, etapa 1 (game-engineer) conforme `docs/contracts/loop-03.md`.
 
-## Loop 3 — Experiência interativa + build Windows · pendente
+## Loop 3 — Experiência interativa + build Windows · em andamento
+
+- Escopo e contratos: `docs/contracts/loop-03.md` (inclui pendências herdadas do Loop 2).
+- Progresso:
+  - Etapa 1 concluída: game-engineer (80fd37a — Shortcuts: Espaço/R/1/2/3/V/H/Esc/F11; `Session.focus`,
+    `hud_visible`, `entity_group`; capturas 10–12; smoke exige UI nativa (`ui=present`, transporte, selo 3/3);
+    sementes selecionáveis só no UNIVERSE). procedural-modeler (25dd4b3 — nervuras rentes à pilha). Suíte 132/132.
+  - Etapa 2 em andamento (worktrees paralelas): art-director (HUD nativo + pendências visuais), animator
+    (foco de câmera + pendências), game-engineer (destaque de seleção das sementes).
+- Retomada: merge das branches `worktree-agent-*` com commits "loop 03:"; se ausentes, relançar a etapa 2 pelo
+  contrato; depois etapa 3 (integração, export Windows, evidências `docs/evidence/loop-03/`, revisão + auditoria).
