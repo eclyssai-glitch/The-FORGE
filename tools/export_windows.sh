@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Exports the Windows x86_64 build to build/windows/ and zips it with a checksum.
 # Requires Godot 4.7.2 export templates (tools/setup_godot.sh, or Editor > Manage
-# Export Templates). The output folder is recreated on every run, and the zip is
-# reproducible (fixed timestamps = last commit time, no extra attributes).
+# Export Templates). The output folder is recreated on every run. A clean checkout of a
+# given commit yields byte-identical .exe and zip: scenes ship as text
+# (editor/export/convert_text_resources_to_binary=false in project.godot; the binary
+# conversion assigns random node IDs), and the zip has a fixed file order, no extra
+# attributes and timestamps = last commit time. Local uncommitted changes are exported as-is.
 #   tools/export_windows.sh            release build
 #   tools/export_windows.sh --debug    debug build (with console wrapper)
 set -euo pipefail

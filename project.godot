@@ -29,6 +29,10 @@ window/stretch/mode="disabled"
 window/stretch/aspect="expand"
 window/vsync/vsync_mode=1
 
+[editor]
+
+export/convert_text_resources_to_binary=false
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg")

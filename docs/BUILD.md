@@ -14,11 +14,30 @@ metadados de versão no executável. Excluídos do pacote: `addons/gut`, `tests`
 No Windows com o editor instalado: *Project → Export → Windows Desktop*, ou
 `Godot_v4.7.2-stable_win64.exe --headless --export-release "Windows Desktop" build/windows/KoriumUniverse.exe`.
 
+## Reprodutibilidade
+
+Um mesmo commit gera o mesmo `.exe` e o mesmo zip, byte a byte, em qualquer checkout limpo:
+
+- `project.godot` → `editor/export/convert_text_resources_to_binary=false`. Com a conversão ligada
+  (padrão do 4.7), o export carrega cada `.tscn` e o regrava como `.scn` binário em
+  `.godot/exported/`; nossas cenas não trazem `unique_id=` nos nós, então o carregamento sorteia um
+  ID por nó e o `.scn` (campo `node_ids`) muda a cada conversão — `hud.scn`, `main.scn` e `world.scn`
+  diferiam entre dois checkouts do mesmo commit. Sem a conversão, as cenas vão ao PCK como o texto
+  versionado e carregam normalmente (o smoke do pack as usa). Custo: poucos KB e parse de texto de
+  três cenas pequenas no carregamento.
+- Zip: arquivos em ordem fixa, `zip -X`, mtimes = data do último commit (`git log -1 --format=%ct`).
+- Pré-requisito: árvore sem mudanças locais (o export usa os arquivos do disco, não o commit).
+
+Verificação: dois checkouts limpos (`git worktree add`) do mesmo commit, cada um com `.godot/`
+importado do zero, rodando `tools/export_windows.sh`, e um terceiro export num deles após apagar
+`.godot/exported` → SHA-256 idênticos do `.exe` e do zip. Um editor Godot diferente de 4.7.2-stable
+ou outros templates mudam o binário.
+
 ## Validação no contêiner (automatizada)
 
 | Verificação | Comando |
 |---|---|
-| Export reproduzível (mesmo `.exe` e mesmo zip a cada execução) | `tools/export_windows.sh` duas vezes e comparar SHA-256 |
+| Export reproduzível (mesmo `.exe` e mesmo zip para o mesmo commit) | `tools/export_windows.sh` em dois checkouts limpos e comparar SHA-256 |
 | Pacote exato do `.exe` executado no renderizador real | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` |
 | Jogo a partir do código | `tools/smoke_test.sh` e `tools/capture_evidence.sh` |
 
@@ -53,11 +72,19 @@ drivers gráficos do Windows, janela) só é validado pelo checklist abaixo, num
 ## Validação local no Windows (checklist)
 
 1. Extraia o zip; confira o SHA-256 (`certutil -hashfile <zip> SHA256`) com o `.sha256`.
-2. Execute `KoriumUniverse.exe`. Esperado: janela maximizada, fade de entrada, selo **DEMO MODE**.
-3. (a partir do Loop 3) `Espaço` inicia/pausa, `R` reinicia, `1/2/3` alternam UNIVERSE/FORGE/OBSERVATORY,
-   `V` liga/desliga a câmera cinematográfica, `H` oculta/mostra o HUD, `Esc` limpa a seleção, `F11` tela cheia.
-4. (a partir do Loop 3) Assista à demo completa (~50 s): 7 fases visíveis; OBSERVATORY mostra 7/7 objetivos.
-5. Opcional, teste automatizado: `KoriumUniverse.exe -- --smoke-test` e leia
+2. Execute `KoriumUniverse.exe`. Esperado: janela maximizada, fade de entrada, selo **DEMO MODE ·
+   SIMULATED EVENTS** no canto superior esquerdo (visível em todos os modos, também com o HUD oculto).
+3. HUD: barra de modos no topo, SETTINGS no canto superior direito (qualidade AUTO/LOW/MEDIUM/HIGH/ULTRA,
+   câmera cinematográfica ON/OFF, lista de teclas), transporte embaixo (START ou PAUSE conforme o estado,
+   RESET, linha do tempo, tempo, fase, velocidade 0.5×/1×/2×/4×).
+4. Teclado: `Espaço` inicia/pausa, `R` reinicia, `1/2/3` alternam UNIVERSE/FORGE/OBSERVATORY, `V` liga/desliga
+   a câmera cinematográfica, `H` oculta/mostra o HUD, `Esc` limpa a seleção, `C` reposiciona a câmera,
+   `F11` alterna tela cheia. Mouse: arrastar orbita, roda aproxima/afasta.
+5. Painéis por modo: FORGE mostra CONSTRUCT (camadas) + EVENTS; UNIVERSE mostra SITES + EVENTS;
+   OBSERVATORY mostra a folha MISSION/VERIFICATION/ENTITIES/EVENT LOG. Clicar numa entidade (no mundo ou
+   numa lista) abre o inspetor à direita; **FOCUS** enquadra a entidade, `×` ou `Esc` limpa a seleção.
+6. Assista à demo completa (~50 s): 7 fases visíveis; OBSERVATORY mostra 7/7 objetivos.
+7. Opcional, teste automatizado: `KoriumUniverse.exe -- --smoke-test` e leia
    `%APPDATA%\Godot\app_userdata\KORIUM UNIVERSE\smoke_report.txt` (esperado `modules=9/9`,
    `ui=present` e `RESULT=PASS`; um módulo do mundo que não carregou ou a UI ausente reprova o smoke).
 
@@ -65,4 +92,4 @@ drivers gráficos do Windows, janela) só é validado pelo checklist abaixo, num
 
 | Versão | Commit de origem | Zip | SHA-256 |
 |---|---|---|---|
-| (o zip é reproduzível para um mesmo commit: timestamps = data do commit; hashes registrados por commit de origem) | | | |
+| (`.exe` e zip são reproduzíveis por commit — ver *Reprodutibilidade*; hashes registrados por commit de origem) | | | |
