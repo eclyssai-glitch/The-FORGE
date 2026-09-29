@@ -3,7 +3,7 @@ renderer=forward_plus adapter=llvmpipe (LLVM 20.1.2, 256 bits)
 quality=AUTO · LOW
 events_received=20 expected=20
 phase=COMPLETE layers=5/5
-frames=67 wall_seconds=7.14 avg_fps=9.4
+frames=64 wall_seconds=7.42 avg_fps=8.6
 mission_objectives=7/7
 pause_holds=true reset_ok=true
 RESULT=PASS

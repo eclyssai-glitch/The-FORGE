@@ -14,8 +14,8 @@ TPL_DIR="${HOME}/.local/share/godot/export_templates/${TPL_VERSION}"
 mkdir -p "$GODOT_HOME" "$TPL_DIR"
 cd "$GODOT_HOME"
 
-fetch() { [ -s "$1" ] || curl -fsSL --retry 4 -o "$1" "$BASE/$1"; }
-verify() { grep " $1\$" SHA512-SUMS.txt | sha512sum -c --quiet -; }
+fetch() { [ -s "$1" ] || { curl -fsSL --retry 4 -o "$1.part" "$BASE/$1" && mv "$1.part" "$1"; }; }
+verify() { grep " $1\$" SHA512-SUMS.txt | sha512sum -c --quiet - || { mv "$1" "$1.bad"; echo "SHA512 mismatch: $1" >&2; exit 1; }; }
 
 fetch SHA512-SUMS.txt
 if [ ! -x "Godot_v${VERSION}_linux.x86_64" ]; then
@@ -30,9 +30,11 @@ if [ ! -f "$TPL_DIR/windows_release_x86_64.exe" ]; then
     'templates/linux_*.x86_64' -d "$TPL_DIR"
 fi
 
-# Offline class reference of this exact version, for agents and developers.
-if [ ! -d "$GODOT_HOME/doc/doc/classes" ]; then
+# Offline class reference (signatures, members, enums — including built-in types)
+# of this exact version. Descriptions are not included by this binary: read them
+# at https://docs.godotengine.org/en/4.7/.
+if [ ! -f "$GODOT_HOME/doc/doc/classes/String.xml" ]; then
   mkdir -p "$GODOT_HOME/doc"
-  ( cd "$GODOT_HOME/doc" && "$GODOT_HOME/Godot_v${VERSION}_linux.x86_64" --headless --doctool . --no-docbase >/dev/null 2>&1 || true )
+  ( cd "$GODOT_HOME/doc" && "$GODOT_HOME/Godot_v${VERSION}_linux.x86_64" --headless --doctool . >/dev/null 2>&1 || true )
 fi
 echo "Godot $("$GODOT_HOME/Godot_v${VERSION}_linux.x86_64" --version) ready; templates in $TPL_DIR"

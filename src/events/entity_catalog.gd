@@ -32,11 +32,9 @@ static func info(id: StringName) -> Dictionary:
 			return _row(id, "SEED · VESPER", Kind.DORMANT, "Dormant site reserved for a future construct.")
 		&"seed_lattice":
 			return _row(id, "SEED · LATTICE", Kind.DORMANT, "Dormant site reserved for a future construct.")
-	var s := String(id)
-	if s.begins_with("layer_"):
-		var i := s.trim_prefix("layer_").to_int()
-		if i >= 0 and i < OriginChamberScript.LAYER_COUNT:
-			return _row(id, "LAYER %s · %s" % [OriginChamberScript.roman(i + 1), OriginChamberScript.LAYER_NAMES[i]],
+	var i := layer_index(id)
+	if i >= 0:
+		return _row(id, "LAYER %s · %s" % [OriginChamberScript.roman(i + 1), OriginChamberScript.LAYER_NAMES[i]],
 				Kind.LAYER, "Ring %d of the construct, assembled from fragments." % (i + 1))
 	return {}
 
@@ -62,10 +60,9 @@ static func status(id: StringName, w: WorldState) -> String:
 			return "STANDBY"
 		&"seed_aurel", &"seed_vesper", &"seed_lattice":
 			return "DORMANT"
-	var s := String(id)
-	if s.begins_with("layer_"):
-		var i := s.trim_prefix("layer_").to_int()
-		if i < 0 or i >= w.layer_times.size() or w.layer_times[i] < 0.0:
+	var i := layer_index(id)
+	if i >= 0:
+		if i >= w.layer_times.size() or w.layer_times[i] < 0.0:
 			return "PENDING"
 		if w.finalized_at >= 0.0:
 			return "FINAL"
@@ -73,6 +70,18 @@ static func status(id: StringName, w: WorldState) -> String:
 			return "VERIFIED"
 		return "FINISHED" if w.materials_at >= 0.0 else "RAW"
 	return "UNKNOWN"
+
+
+## Layer index encoded in an id like &"layer_3", or -1 if the id is not a valid layer.
+static func layer_index(id: StringName) -> int:
+	var s := String(id)
+	if not s.begins_with("layer_"):
+		return -1
+	var digits := s.trim_prefix("layer_")
+	if not digits.is_valid_int():
+		return -1
+	var i := digits.to_int()
+	return i if i >= 0 and i < OriginChamberScript.LAYER_COUNT else -1
 
 
 static func _row(id: StringName, title: String, kind: Kind, summary: String) -> Dictionary:

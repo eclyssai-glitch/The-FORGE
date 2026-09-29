@@ -3,7 +3,7 @@
 Dono: coordenador. Responsabilidade: estado persistente de cada loop — entregue, verificado,
 pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
 
-## Loop 1 — Fundação · em andamento (aguardando auditoria independente)
+## Loop 1 — Fundação · concluído
 
 - Escopo: ambiente, Godot + ferramentas, projeto independente, pesquisa, agentes/skills,
   sistema básico de cenas, sistema de eventos, exportação Windows.
@@ -20,14 +20,25 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
     hook SessionStart para a nuvem.
   - Export Windows (`tools/export_windows.sh`) com zip + SHA-256 e licenças.
 - Verificação:
-  - `tools/run_tests.sh`: 21/21 (423 asserts).
+  - `tools/run_tests.sh`: 30/30 (após correções da auditoria).
   - `tools/smoke_test.sh`: PASS (Forward+, llvmpipe) — 20/20 eventos, 7/7 objetivos, pausa e reset OK.
   - `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe`: PASS (pacote exato do .exe).
   - Captura `docs/evidence/loop-01/01_dormant_core.png`: pipeline 3D + selo DEMO MODE.
 - Limitações registradas: `.exe` não roda no Wine 9.0 do contêiner (ADR-007); repositório novo
   não pôde ser criado pela integração (ADR-006).
-- Auditoria: ver entrada abaixo.
-- Pendências → Loop 2: motor visual completo (substitui o esqueleto de `world.gd`).
+- Auditoria: technical-auditor — APROVADO COM RESSALVAS (0 bloqueantes, 2 importantes, 14 menores).
+  Corrigidos no loop: `--quality` não persiste mais (`Quality.override_for_session`); skills obsoletas
+  do scaffold web arquivado deixaram de ser carregadas (pasta renomeada); smoke com timeout e falha
+  por erro de script/sem RESULT; export limpa `build/windows` e gera zip reproduzível; setup com download
+  atômico e referência com tipos embutidos; `EventTimeline` ordena a entrada e rejeita velocidade negativa;
+  `EntityCatalog.layer_index` valida ids; limiar AUTO respeita a taxa de atualização; ícone do `.exe`;
+  `docs/.gdignore`; posse de arquivos completa; docs ENGINE/PROCEDURAL/ANIMATION criados (a preencher
+  pelos donos); controles marcados "a partir do Loop 3"; ADR-007 com evidência e cobertura explícita;
+  9 testes novos (autoloads, CLI, catálogo, timeline).
+  Adiado para o Loop 2 (registrado): núcleo dormente e selo usam EMBER — revisar com o art-director.
+- Pendências → Loop 2: motor visual completo (substitui o esqueleto de `world.gd`/`hud.gd`).
+- Retomada: iniciar Loop 2 pela Fase A (procedural-modeler + art-director em paralelo, áreas disjuntas),
+  contratos de interface registrados na entrada do Loop 2.
 
 ## Loop 2 — Motor visual · pendente
 

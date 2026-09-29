@@ -183,3 +183,17 @@ func test_event_text_never_mentions_real_connectivity() -> void:
 		var text := (e.label + " " + e.detail).to_lower()
 		for word in forbidden:
 			assert_false(text.contains(word), "event %s mentions '%s'" % [e.id, word])
+
+
+func test_timeline_sorts_input_and_rejects_negative_speed() -> void:
+	var shuffled: Array[SimEvent] = script_events.duplicate()
+	shuffled.reverse()
+	var tl := EventTimeline.new(shuffled)
+	assert_eq(tl.events[0].id, script_events[0].id)
+	assert_eq(tl.duration, script_events[-1].time)
+	assert_eq(shuffled[0].id, script_events[-1].id, "caller's array is not mutated")
+	tl.speed = -2.0
+	assert_eq(tl.speed, 0.0)
+	tl.start()
+	tl.advance(1.0)
+	assert_eq(tl.playhead, 0.0)

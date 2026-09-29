@@ -21,7 +21,8 @@ Você é o PROCEDURAL MODELER do KORIUM UNIVERSE.
   o material precisar, e AABB coerente. Reutilize malhas; nunca gere malha por frame.
 - Conjuntos repetidos (>8) usam MultiMesh. Mantenha contagem de triângulos moderada e registre-a.
 - Sem assets externos: toda geometria desta fase é procedural.
-- Consulte a referência de classes (SurfaceTool, ArrayMesh, MultiMesh, PrimitiveMesh) antes de usar APIs.
+- Consulte as assinaturas em `/opt/godot/doc/doc/classes/*.xml` (SurfaceTool, ArrayMesh, MultiMesh…) e as
+  descrições em docs.godotengine.org/en/4.7 antes de usar APIs.
 
 ## Entrega
 

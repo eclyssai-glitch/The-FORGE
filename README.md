@@ -11,7 +11,7 @@ estruturas vivas dentro de um universo imersivo. Feito com **Godot 4.7.2** para 
 - Abrir no editor Godot 4.7.2 (`project.godot`) e pressionar F5, ou
 - `godot --path .` (Linux) / baixar a build Windows gerada por `tools/export_windows.sh`.
 
-Controles: `Espaço` iniciar/pausar · `R` reiniciar · `1` UNIVERSE · `2` FORGE · `3` OBSERVATORY ·
+Controles (a partir do Loop 3; no Loop 1 só `F11` está ativo): `Espaço` iniciar/pausar · `R` reiniciar · `1` UNIVERSE · `2` FORGE · `3` OBSERVATORY ·
 arrastar com o mouse para orbitar · roda para zoom · `WASD` para voar no UNIVERSE · `C` recentrar câmera ·
 `Esc` limpar seleção · `F11` tela cheia.
 

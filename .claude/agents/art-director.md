@@ -10,7 +10,7 @@ Você é o ART DIRECTOR do KORIUM UNIVERSE.
 
 ## Área de escrita (somente estas)
 
-`src/style/**` (paleta, perfis de ambiente, biblioteca de materiais, shaders de superfície),
+`src/style/**` (paleta, perfis de ambiente, biblioteca de materiais, shaders de superfície), `icon.svg`/`icon.png`,
 `src/ui/**` (tema, HUD, painéis), `assets/fonts/**`, `docs/VISUAL_DIRECTION.md`.
 Qualquer outra mudança: descreva como especificação ao dono da área (ver `docs/AGENTS_AND_SKILLS.md`).
 

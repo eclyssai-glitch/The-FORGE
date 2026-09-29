@@ -3,7 +3,8 @@ extends Node
 ## automation when user arguments are passed after `--`:
 ##   --smoke-test            run the demo accelerated, verify it completes, exit 0/1
 ##   --capture=<dir>         save evidence screenshots of each demo phase to <dir>, then exit
-##   --quality=<low|medium|high|ultra>   force a quality level for this run
+##   --capture-only=<prefix> with --capture: only captures whose name starts with <prefix>
+##   --quality=<low|medium|high|ultra>   force a quality level for this run (not persisted)
 
 @onready var world: Node3D = $World
 @onready var hud: CanvasLayer = $HUD
@@ -15,7 +16,7 @@ func _ready() -> void:
 	if args.has("quality"):
 		var idx := QualityProfiles.LEVEL_NAMES.find(String(args["quality"]).to_upper())
 		if idx >= 0:
-			Quality.set_level(idx as QualityProfiles.Level)
+			Quality.override_for_session(idx as QualityProfiles.Level)
 	if args.has("smoke-test") or args.has("capture"):
 		var automation := preload("res://src/core/automation.gd").new()
 		automation.name = "Automation"

@@ -11,11 +11,14 @@ var playhead: float = 0.0
 ## Number of events already emitted (events[0 .. cursor-1]).
 var cursor: int = 0
 var status: Status = Status.IDLE
-var speed: float = 1.0
+var speed: float = 1.0:
+	set(value):
+		speed = maxf(value, 0.0)
 
 
 func _init(p_events: Array[SimEvent]) -> void:
-	events = p_events
+	events = p_events.duplicate()
+	events.sort_custom(func(a: SimEvent, b: SimEvent) -> bool: return a.time < b.time)
 	duration = events[-1].time if not events.is_empty() else 0.0
 
 

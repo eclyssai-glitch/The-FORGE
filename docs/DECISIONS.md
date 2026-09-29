@@ -41,6 +41,11 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
 - Contexto: no contêiner Linux, o Wine disponível (9.0) aborta em qualquer binário Godot 4.7.2 antes
   do `main`: o runtime MinGW chama `VirtualProtect(..., lpflOldProtect=NULL)`, que o Windows
   rejeita com erro e o `kernelbase` do Wine 9.0 derreferencia. Wine mais novo (WineHQ) está bloqueado pela rede.
-- Decisão: validar (1) o export estrutural e reprodutível do `.exe`, e (2) o **pacote exato embutido
-  no `.exe`**, executado com o runtime oficial 4.7.2 (`--main-pack`) no renderizador Forward+ real
-  (Vulkan/lavapipe). A execução nativa no Windows fica registrada como validação local (`docs/BUILD.md`).
+  Evidência: `docs/evidence/loop-01/wine_virtualprotect_trace.txt`. Numa reexecução da auditoria o Wine
+  travou em loop de `RPC_S_SERVER_UNAVAILABLE` em vez de abortar — ambos são falhas do Wine antes do jogo.
+- Decisão: validar (1) o export estrutural e reprodutível do `.exe` (PE32+ x86-64, PCK embutido,
+  recursos/ícone/versão), e (2) o **pacote exato embutido no `.exe`**, executado com o runtime oficial
+  4.7.2 (`--main-pack`, binário do editor Linux) no renderizador Forward+ real (Vulkan/lavapipe).
+- Cobertura: (2) valida todo o conteúdo do jogo (cenas, scripts, recursos). **Não** cobre o código
+  específico do Windows — o template `windows_release_x86_64`, drivers Vulkan/D3D12/OpenGL do Windows,
+  janela e ícone. Isso só é validado executando o `.exe` no Windows (checklist em `docs/BUILD.md`).

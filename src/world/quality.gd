@@ -35,6 +35,13 @@ func set_level(new_level: QualityProfiles.Level, keep_auto: bool = false) -> voi
 	_save()
 
 
+## Forces a level for this run only (command line); nothing is persisted.
+func override_for_session(new_level: QualityProfiles.Level) -> void:
+	auto = false
+	level = new_level
+	_apply()
+
+
 func set_auto(enabled: bool) -> void:
 	auto = enabled
 	_auto_steps = 0
@@ -61,7 +68,7 @@ func _process(delta: float) -> void:
 	var fps := _sample_frames / _sample_time
 	_sample_time = 0.0
 	_sample_frames = 0
-	if fps < QualityProfiles.AUTO_MIN_FPS:
+	if fps < QualityProfiles.auto_min_fps(DisplayServer.screen_get_refresh_rate()):
 		_auto_steps += 1
 		level = QualityProfiles.step_down(level)
 		print("[Quality] AUTO: %.1f fps, stepping down to %s" % [fps, QualityProfiles.LEVEL_NAMES[level]])

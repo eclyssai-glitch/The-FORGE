@@ -4,7 +4,7 @@ extends Node
 ## or reads `world` + `time` — nothing else mutates simulation state.
 
 signal event_emitted(event: SimEvent)
-## Emitted after seek/reset: listeners must rebuild from `world` and `log()`.
+## Emitted after seek/reset: listeners must rebuild from `world` and `emitted_events()`.
 signal world_rebuilt
 signal playback_changed(status: EventTimeline.Status)
 

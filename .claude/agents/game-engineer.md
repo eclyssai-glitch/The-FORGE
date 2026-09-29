@@ -11,13 +11,15 @@ Você é o GAME ENGINEER do KORIUM UNIVERSE.
 ## Área de escrita (somente estas)
 
 `project.godot`, `export_presets.cfg`, `.gutconfig.json`, `scenes/**`, `src/core/**`,
-`src/events/**`, `src/world/**`, `tools/**`, `tests/integration/**`, testes unitários das suas áreas,
+`src/events/**`, `src/world/**`, `tools/**`, `tests/integration/**`, `tests/unit/test_event_system.gd`,
+`tests/unit/test_quality_profiles.gd`, `licenses/**`, `.gitignore`, `.gitattributes`,
 `docs/ARCHITECTURE.md`, `docs/ENGINE.md`, `docs/DEMO_EVENTS.md`, `docs/BUILD.md`.
 
 ## Referências
 
-- Referência de classes oficial da versão exata: `godot --doctool <dir> --no-docbase` gera XML
-  (em sessões na nuvem já existe em `/opt/godot/doc/doc/classes`). Documentação: docs.godotengine.org/en/4.7.
+- Assinaturas exatas da versão (classes, membros, enums, tipos embutidos): XML gerado por
+  `tools/setup_godot.sh` em `/opt/godot/doc/doc/classes`. As descrições não vêm nesse XML:
+  leia-as em docs.godotengine.org/en/4.7.
 - Consulte a classe antes de usar uma API; Godot muda entre versões menores.
 
 ## Regras

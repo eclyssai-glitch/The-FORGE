@@ -5,7 +5,7 @@ extends Node
 const SMOKE_SPEED := 8.0
 const REPORT_NAME := "smoke_report.txt"
 
-## Capture points: [file name, simulation time, mode, settle seconds].
+## Capture points: [file name, simulation time, mode].
 const CAPTURES: Array = [
 	["01_dormant_core", 0.5, SessionState.Mode.FORGE],
 	["02_core_active", 5.0, SessionState.Mode.FORGE],

@@ -58,6 +58,14 @@ static func detect(adapter_type: RenderingDevice.DeviceType) -> Level:
 			return Level.LOW
 
 
+## FPS threshold for AUTO step-down; never above 75% of the display refresh rate,
+## so a vsync-capped low-refresh display does not trigger a downgrade.
+static func auto_min_fps(refresh_rate: float) -> float:
+	if refresh_rate <= 0.0:
+		return AUTO_MIN_FPS
+	return minf(AUTO_MIN_FPS, refresh_rate * 0.75)
+
+
 ## One step down, never below LOW.
 static func step_down(level: Level) -> Level:
 	return maxi(int(level) - 1, int(Level.LOW)) as Level

@@ -1,0 +1,13 @@
+# Wine 9.0 (Ubuntu 9.0~repack-4build3) — trecho de WINEDEBUG=+relay do KoriumUniverse.exe (Loop 1)
+# O runtime MinGW chama VirtualProtect(..., lpflOldProtect=NULL); kernelbase do Wine 9.0 falha com c0000005 antes do main().
+0024:Ret  ntdll.NtProtectVirtualMemory() retval=00000000 ret=6fffff4b05fb
+0024:Ret  KERNEL32.VirtualProtect() retval=00000001 ret=1400059c0
+0024:Call KERNEL32.VirtualProtect(6ffff85856f0,00000008,00000004,00000000) ret=1400059e0
+0024:Call ntdll.RtlRunOnceExecuteOnce(6fffff523780,6fffff4eb120,00000000,00000000) ret=6fffff4e7dba
+0024:Ret  ntdll.RtlRunOnceExecuteOnce() retval=00000000 ret=6fffff4e7dba
+0024:Call ntdll.wcscpy(7ffffe8ff694,6fffff5237b4 L"") ret=6fffff4ee3da
+0024:Ret  ntdll.wcscpy() retval=7ffffe8ff694 ret=6fffff4ee3da
+0024:Call ntdll.NtProtectVirtualMemory(ffffffffffffffff,7ffffe8ff7f0,7ffffe8ff7f8,00000004,00000000) ret=6fffff4b05fb
+0024:Ret  ntdll.NtProtectVirtualMemory() retval=c0000005 ret=6fffff4b05fb
+0024:Call ntdll.RtlNtStatusToDosError(c0000005) ret=6fffff4b0628
+wine: Unhandled page fault on read access to 0000000000000000 at address 00006FFFFF4B0608 (thread 0024), starting debugger...
