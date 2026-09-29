@@ -1,9 +1,10 @@
 [smoke]
 renderer=forward_plus adapter=llvmpipe (LLVM 20.1.2, 256 bits)
 quality=AUTO · LOW
+modules=9/9
 events_received=20 expected=20
 phase=COMPLETE layers=5/5
-frames=48 wall_seconds=13.00 avg_fps=3.7
+frames=48 wall_seconds=12.55 avg_fps=3.8
 mission_objectives=7/7
 pause_holds=true reset_ok=true
 RESULT=PASS
