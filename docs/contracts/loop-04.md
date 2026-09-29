@@ -131,3 +131,11 @@ rótulos diegéticos em destaque.
   (ADR-014). Módulos GENESIS leem `Simulation.genesis` + `Simulation.time`; a UI escuta `scenario_changed` e usa
   `Scenario.entity_*`, `Mission.title_for`, `Simulation.state.phase_name()`. Nomes fictícios: planeta ILVARA-7,
   luas ALMANAC/GLOSSARY, distantes NAUVE-2/KESTRE-4; tempos em `GenesisScript` (`docs/DEMO_EVENTS.md`).
+- Fase A · art-director integrado (`b90a604`): bíblia GENESIS em `docs/VISUAL_DIRECTION.md`, postmortem em
+  `docs/art/v0.1-postmortem.md`, lookdev em `docs/art/lookdev/`. `MaterialLibrary` devolve `ShaderMaterial`
+  **em cache** — use `.duplicate()` para estado por corpo; chame `MaterialLibrary.set_motion_time(MotionClock.now())`
+  uma vez por quadro e `apply_quality(profile)` ao trocar perfil. Progresso narrativo (`formation`, `heat`, `veins`…)
+  é escrito pelos módulos da Fase B. Luz: contraluz quente atrás de MIKU + rim ICE + key lateral ¾ (sem key frontal;
+  seção 4 da bíblia). Céu: atualizar `motion_time` do sky ≤ 5 Hz (radiância). Órbitas/fios: fitas cruzadas ou tubos
+  finos. Ressalvas para a Fase B: kintsugi uniforme demais (poucas bordas devem ser ouro), magma inicial com leitura
+  de "mancha", planeta herói carregado; crosta distante regular.
