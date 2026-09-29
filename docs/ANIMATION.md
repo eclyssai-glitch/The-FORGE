@@ -15,7 +15,8 @@ testadas); as entidades apenas empurram esses valores para nós e materiais.
 
 - **Tempo real** só para movimento ambiente (rotação lenta do casco do núcleo, flutuação e giro dos
   fragmentos soltos, poeira) — continua na pausa — e para a câmera (transições de `Palette.T_CINEMATIC`
-  com a curva de `Tween.interpolate_value` no relógio de parede — ver "Transições" abaixo).
+  com a curva de `Tween.interpolate_value` no relógio de parede — ver "Transições" abaixo). Esse
+  "tempo real" vem sempre de `MotionClock.now()` (ver "Relógio de movimento").
 - **Sem Tween** para progresso da simulação; **sem `TIME`** nos shaders; pulsos derivam de `Simulation.time`.
 - **Sem alocação por frame** nas entidades; MultiMesh e `Environment` só são escritos quando o valor
   muda (caches de custom data, twist por camada, uniformes e níveis de ambiente); segmentos
@@ -173,11 +174,29 @@ baixo atravessa o piso no meio). `clamp_rig` não mexe na distância (os limites
 `clamp_shot`), então uma transição entre modos mantém a curva de distância.
 
 O fator de blend segue a curva de um Tween (`Tween.interpolate_value`, `TRANS_SINE`/`EASE_IN_OUT`)
-com o tempo medido no relógio de parede (`Time.get_ticks_msec`), não no delta do quadro: o motor
+com o tempo medido no relógio de parede (`MotionClock.now()`), não no delta do quadro: o motor
 limita o delta de um quadro a `max_physics_steps_per_frame / physics_ticks_per_second` (8/60 s), e
 num renderizador lento (lavapipe ≈ 0,4 s por quadro) um Tween por delta corria ~3× mais devagar
 que o tempo real — um foco não assentava no tempo prometido. Em máquinas normais o resultado é
 idêntico ao de um Tween.
+
+### Relógio de movimento — `MotionClock` (`src/animation/motion_clock.gd`)
+
+Fonte única do tempo real da animação: `CameraDirector._now()` (blends) e o movimento ambiente de
+`OriginCore` (giro do casco e do coração, flutuação) e `FragmentStructure` (flutuação e giro dos
+fragmentos soltos) leem `MotionClock.now()` (segundos). Nada mais de animação lê `Time` direto.
+
+- **Jogo normal**: relógio de parede (`Time.get_ticks_msec`). A ADR-011 continua valendo como está:
+  fora do Movie Maker o blend dura `T_CINEMATIC` de parede em qualquer máquina.
+- **Movie Maker** (`--write-movie`, `Engine.get_write_movie_path() != ""`): cada quadro leva ~0,4 s
+  para renderizar e representa 1/fps s do vídeo, então o relógio de parede faria as transições
+  saírem quase instantâneas e o movimento ambiente acelerado ~12×. Aqui o relógio é o **tempo de jogo
+  acumulado** dos quadros: `delta` de processo (fixo, 1/`--fixed-fps`) × quadros decorridos
+  (`Engine.get_process_frames()`), somado uma vez por quadro — várias leituras no mesmo quadro dão o
+  mesmo valor; quadros sem leitura também contam; nunca volta. O relógio começa em 0 no quadro 0.
+- O passo de acumulação é a função pura `MotionClock.accumulate(game_time, last_frame, frame, delta)`,
+  testada sem gravar (`test_animation_motion_clock.gd`).
+- O progresso da simulação continua em `Simulation.time`; o `MotionClock` só rege câmera e ambiente.
 
 ### Foco numa entidade (`Session.focus_requested(id)`)
 
@@ -268,7 +287,9 @@ vazia; HIGH ≈ 2,5 fps.
 
 ## Verificação
 
-`tools/run_tests.sh`: `test_animation_motion.gd`, `test_animation_choreography.gd`,
+`tools/run_tests.sh`: `test_animation_motion.gd`, `test_animation_motion_clock.gd` (parede fora do
+Movie Maker; acumulação por quadro: uma vez por quadro, quadros pulados contam, não volta),
+`test_animation_choreography.gd`,
 `test_animation_camera_shots.gd` (planos, deixas, limites, UNIVERSE entre pilares com as sementes em
 quadro e fora do HUD em 1600×900 e 1280×720, OBSERVATORY na área livre, `clamp_rig` segura o blend
 acima do piso; foco: `fit_distance` preenche ~`FOCUS_FILL` com perspectiva, `focus_shot` mantém o modo e

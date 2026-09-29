@@ -67,7 +67,7 @@ func _process(delta: float) -> void:
 func _update(delta: float) -> void:
 	var w := Simulation.world
 	var t := Simulation.time
-	var rt := Time.get_ticks_msec() * 0.001
+	var rt := MotionClock.now()
 	var energy := Choreography.core_energy(w, t)
 	var pulse := Choreography.core_pulse(w, t)
 	var peak := Choreography.core_peak(w, t)
