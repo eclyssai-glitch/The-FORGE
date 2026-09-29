@@ -69,7 +69,8 @@ func _run_smoke() -> void:
 			ok = false
 			break
 	var elapsed := (Time.get_ticks_msec() - started) / 1000.0
-	var expected := OriginChamberScript.build().size()
+	var expected := Scenario.build_events(Simulation.scenario).size()
+	lines.append("scenario=%s" % Simulation.scenario)
 	lines.append("renderer=%s adapter=%s" % [RenderingServer.get_current_rendering_method(), RenderingServer.get_video_adapter_name()])
 	lines.append("quality=%s" % Quality.level_name())
 	# Every expected world module must have loaded: a missing entity/fx/camera script would
@@ -83,11 +84,11 @@ func _run_smoke() -> void:
 	if not missing.is_empty():
 		lines.append("FAIL modules missing: %s" % ", ".join(PackedStringArray(missing)))
 	lines.append("events_received=%d expected=%d" % [received.size(), expected])
-	lines.append("phase=%s layers=%d/%d" % [Simulation.world.phase_name(), Simulation.world.layers_built(), OriginChamberScript.LAYER_COUNT])
+	lines.append(phase_line(Simulation.state))
 	lines.append("frames=%d wall_seconds=%.2f avg_fps=%.1f" % [frames, elapsed, frames / maxf(elapsed, 0.001)])
-	var mission := Mission.evaluate(Simulation.emitted_events())
+	var mission := Mission.evaluate(Simulation.emitted_events(), Simulation.scenario)
 	lines.append("mission_objectives=%d/%d" % [Mission.completed_count(mission), mission.size()])
-	ok = ok and missing.is_empty() and received.size() == expected and Simulation.world.phase == WorldState.Phase.COMPLETE \
+	ok = ok and missing.is_empty() and received.size() == expected and Simulation.state.is_complete() \
 		and Mission.completed_count(mission) == mission.size()
 	# Exercise pause / reset on the live game.
 	Simulation.seek(20.0)
@@ -98,7 +99,7 @@ func _run_smoke() -> void:
 		await get_tree().process_frame
 	var pause_holds := is_equal_approx(paused_at, Simulation.time) and Simulation.status == EventTimeline.Status.PAUSED
 	Simulation.reset()
-	var reset_ok := Simulation.time == 0.0 and Simulation.world.phase == WorldState.Phase.DORMANT \
+	var reset_ok := Simulation.time == 0.0 and Simulation.state.phase_index() == 0 \
 		and Simulation.status == EventTimeline.Status.IDLE
 	ok = ok and pause_holds and reset_ok
 	lines.append("pause_holds=%s reset_ok=%s" % [pause_holds, reset_ok])
@@ -106,6 +107,18 @@ func _run_smoke() -> void:
 	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
 	_write_report(lines)
 	_quit(0 if ok else 1)
+
+
+## Report line with the final phase and the scenario's formation counters.
+static func phase_line(state: ScenarioState) -> String:
+	if state is GenesisState:
+		var g := state as GenesisState
+		return "phase=%s layers=%d/%d moons=%d/%d" % [g.phase_name(), g.layers_formed(), GenesisScript.LAYER_COUNT,
+			g.moons_formed(), GenesisScript.MOON_COUNT]
+	if state is WorldState:
+		var w := state as WorldState
+		return "phase=%s layers=%d/%d" % [w.phase_name(), w.layers_built(), OriginChamberScript.LAYER_COUNT]
+	return "phase=%s" % state.phase_name()
 
 
 ## Exercises the native UI through its groups: the transport buttons (Start -> Pause -> Reset,

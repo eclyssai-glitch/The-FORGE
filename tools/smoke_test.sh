@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Runs the real game (real renderer) with --smoke-test: the ORIGIN CHAMBER demo is
+# Runs the real game (real renderer) with --smoke-test: the active scenario (ORIGIN CHAMBER by
+# default; extra arguments reach the game, e.g. `tools/smoke_test.sh --scenario=genesis`) is
 # played at 8x, then pause and reset are exercised, then the native UI (transport buttons
 # Start/Pause/Reset of group "ui_transport", visible "demo_badge" with "DEMO" in every mode).
 # Exit 0 = PASS. A HUD without those groups fails (`ui=absent`) unless SMOKE_ALLOW_MISSING_UI=1,

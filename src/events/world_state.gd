@@ -1,9 +1,10 @@
 class_name WorldState
-extends RefCounted
-## Pure reduction of simulation events into the state of the world.
+extends ScenarioState
+## Pure reduction of ORIGIN CHAMBER simulation events into the state of the world.
 ## Every "*_at" field is the simulation time of the event, or -1.0 if not yet happened.
 ## Visual systems read these timestamps together with the current playhead, so
-## pause, seek and reset are always consistent.
+## pause, seek and reset are always consistent. `session_at`, `completed_at`, `since()` and
+## `progress()` come from ScenarioState.
 
 enum Phase { DORMANT, ACTIVATING, CORE_ONLINE, FRAGMENTS, BUILDING, FINISHING, VERIFYING, VERIFIED, FINAL, COMPLETE }
 
@@ -13,7 +14,6 @@ const PHASE_NAMES: Array[String] = [
 ]
 
 var phase: Phase = Phase.DORMANT
-var session_at := -1.0
 var core_activation_at := -1.0
 var core_online_at := -1.0
 var fragments_at := -1.0
@@ -27,7 +27,6 @@ var verification_at := -1.0
 var checks: Array[Dictionary] = []
 var verified_at := -1.0
 var finalized_at := -1.0
-var completed_at := -1.0
 
 
 func _init(layer_count: int = OriginChamberScript.LAYER_COUNT) -> void:
@@ -106,6 +105,5 @@ func phase_name() -> String:
 	return PHASE_NAMES[phase]
 
 
-## Seconds elapsed since `at` at simulation time `now`; negative if not happened.
-static func since(at: float, now: float) -> float:
-	return now - at if at >= 0.0 else -1.0
+func phase_index() -> int:
+	return phase

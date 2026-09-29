@@ -5,8 +5,88 @@ const MainScript := preload("res://src/core/main.gd")
 
 
 func after_each() -> void:
+	Simulation.set_scenario(Scenario.DEFAULT)
 	Simulation.reset()
 	Simulation.set_speed(1.0)
+
+
+func test_default_scenario_is_origin_chamber() -> void:
+	assert_eq(Simulation.scenario, Scenario.ORIGIN_CHAMBER)
+	assert_eq(Simulation.SCENARIOS, Scenario.IDS)
+	assert_eq(Simulation.state, Simulation.world)
+	assert_not_null(Simulation.genesis)
+	assert_eq(Simulation.genesis.phase, GenesisState.Phase.STILL, "inactive scenario rests")
+	assert_eq(Simulation.duration(), OriginChamberScript.build()[-1].time)
+
+
+func test_set_scenario_swaps_timeline_and_world() -> void:
+	Simulation.set_speed(2.0)
+	Simulation.seek(20.0)
+	watch_signals(Simulation)
+	assert_true(Simulation.set_scenario(Scenario.GENESIS))
+	assert_signal_emitted_with_parameters(Simulation, "scenario_changed", [Scenario.GENESIS])
+	assert_signal_emitted(Simulation, "world_rebuilt")
+	assert_signal_emitted(Simulation, "playback_changed")
+	assert_eq(Simulation.scenario, Scenario.GENESIS)
+	assert_eq(Simulation.state, Simulation.genesis)
+	assert_eq(Simulation.world.phase, WorldState.Phase.DORMANT, "ORIGIN state rests while GENESIS plays")
+	assert_eq(Simulation.time, 0.0)
+	assert_eq(Simulation.status, EventTimeline.Status.IDLE)
+	assert_eq(Simulation.duration(), GenesisScript.DURATION)
+	assert_eq(Simulation.emitted_events().size(), 0)
+	assert_eq(Simulation.timeline.speed, 2.0, "playback speed survives the switch")
+	# Selecting the active scenario again is a no-op.
+	Simulation.seek(10.0)
+	assert_true(Simulation.set_scenario(Scenario.GENESIS))
+	assert_eq(Simulation.time, 10.0)
+	assert_signal_emit_count(Simulation, "scenario_changed", 1)
+	# Unknown ids change nothing.
+	assert_false(Simulation.set_scenario(&"nope"))
+	assert_eq(Simulation.scenario, Scenario.GENESIS)
+	assert_push_warning_count(1)
+	# And back.
+	assert_true(Simulation.set_scenario(Scenario.ORIGIN_CHAMBER))
+	assert_eq(Simulation.state, Simulation.world)
+	assert_eq(Simulation.genesis.phase, GenesisState.Phase.STILL)
+	assert_eq(Simulation.duration(), OriginChamberScript.build()[-1].time)
+
+
+func test_genesis_playback_seek_and_reset_are_consistent() -> void:
+	Simulation.set_scenario(Scenario.GENESIS)
+	var received: Array[SimEvent] = []
+	var on_event := func(e: SimEvent) -> void: received.append(e)
+	Simulation.event_emitted.connect(on_event)
+	Simulation.start()
+	for i in 300:
+		Simulation._process(0.1)
+	assert_almost_eq(Simulation.time, 30.0, 1e-6)
+	var live := Simulation.genesis
+	assert_eq(live.layers_formed(), 2)
+	Simulation.seek(Simulation.time)
+	var derived := Simulation.genesis
+	assert_ne(derived, live, "seek rebuilds the state")
+	assert_eq(derived.phase, live.phase)
+	assert_eq(derived.planet_layer_times, live.planet_layer_times)
+	assert_eq(derived.seeded_at, live.seeded_at)
+	assert_eq(Simulation.emitted_events().size(), received.size())
+	Simulation.seek(12.0)
+	assert_eq(Simulation.genesis.phase, GenesisState.Phase.SUMMONING)
+	assert_eq(Simulation.genesis.dust_at, -1.0)
+	Simulation.start()
+	for i in 600:
+		Simulation._process(0.1)
+	assert_eq(Simulation.status, EventTimeline.Status.COMPLETE)
+	assert_true(Simulation.state.is_complete())
+	assert_eq(Simulation.state.phase_name(), "COMPLETE")
+	assert_eq(Simulation.world.phase, WorldState.Phase.DORMANT, "GENESIS events never reach the ORIGIN state")
+	var mission := Mission.evaluate(Simulation.emitted_events(), Simulation.scenario)
+	assert_eq(Mission.completed_count(mission), mission.size())
+	Simulation.reset()
+	assert_eq(Simulation.time, 0.0)
+	assert_eq(Simulation.state.phase_index(), 0)
+	assert_eq(Simulation.scenario, Scenario.GENESIS, "reset keeps the scenario")
+	assert_eq(Simulation.state, Simulation.genesis)
+	Simulation.event_emitted.disconnect(on_event)
 
 
 func test_simulation_start_pause_reset_and_seek() -> void:
@@ -76,8 +156,9 @@ func test_session_mode_and_selection_signals() -> void:
 
 
 func test_parse_args() -> void:
-	var a := MainScript._parse_args(PackedStringArray(["--smoke-test", "--capture=docs/x", "--quality=high", "stray"]))
+	var a := MainScript._parse_args(PackedStringArray(["--smoke-test", "--capture=docs/x", "--quality=high", "--scenario=genesis", "stray"]))
 	assert_eq(a["smoke-test"], true)
+	assert_eq(a["scenario"], "genesis")
 	assert_eq(a["capture"], "docs/x")
 	assert_eq(a["quality"], "high")
 	assert_false(a.has("stray"))
