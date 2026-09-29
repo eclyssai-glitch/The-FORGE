@@ -41,6 +41,12 @@ O jogador pode iniciar, pausar, reiniciar, navegar no tempo e observar de qualqu
 | 7 | Testes e documentação | GUT + smoke + docs atualizados por loop |
 | 8 | Build Windows exportada | `tools/export_windows.sh`; zip + SHA-256; pacote executado (ver `docs/BUILD.md`) |
 
+## Estado de aceitação (v0.1.0, fechamento do Loop 3)
+
+Critérios 1–7 atendidos com evidência em `docs/evidence/loop-03/` e auditoria em `docs/LOOPS.md`.
+Critério 8 atendido no contêiner (export determinístico, SHA-256 registrado, pacote exato executado no
+renderizador real); a execução nativa no Windows aguarda validação local pelo checklist de `docs/BUILD.md`.
+
 ## Fora de escopo nesta versão
 
 Integrações reais, multiplayer, salvamento de progresso, áudio, localização, conteúdo além da ORIGIN CHAMBER.

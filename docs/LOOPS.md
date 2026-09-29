@@ -63,19 +63,35 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   banda pontilhado; motes; nervuras longas; `particle()` morto; invalidar cache do LightRig em `world_rebuilt`.
 - Retomada: Loop 3, etapa 1 (game-engineer) conforme `docs/contracts/loop-03.md`.
 
-## Loop 3 — Experiência interativa + build Windows · em andamento
+## Loop 3 — Experiência interativa + build Windows · concluído
 
-- Escopo e contratos: `docs/contracts/loop-03.md` (inclui pendências herdadas do Loop 2).
-- Progresso:
-  - Etapa 1 concluída: game-engineer (80fd37a — Shortcuts: Espaço/R/1/2/3/V/H/Esc/F11; `Session.focus`,
-    `hud_visible`, `entity_group`; capturas 10–12; smoke exige UI nativa (`ui=present`, transporte, selo 3/3);
-    sementes selecionáveis só no UNIVERSE). procedural-modeler (25dd4b3 — nervuras rentes à pilha). Suíte 132/132.
-  - Etapa 2 concluída: art-director (2f4832a — HUD nativo completo), animator (145cb26 — foco de câmera; ADR-011),
-    game-engineer (b100ef8 — destaque das sementes). Suíte 169/169.
-  - Etapa 3: smoke com UI obrigatória PASS (fonte e pack do .exe); export reproduzível; 12+12 capturas em
-    `docs/evidence/loop-03/`. Revisão final art-director APROVADO COM RESSALVAS (P1 semente selecionada);
-    auditoria final technical-auditor APROVADO COM RESSALVAS (critérios 1–6 atendidos; 7–8 parciais por registros;
-    I-1 scroll atravessa HUD; 680 checks de robustez sem falhas).
-  - Rodada final de correção: `docs/contracts/loop-03-fixes.md`.
-- Retomada: executar `docs/contracts/loop-03-fixes.md` (art-director, game-engineer, animator em paralelo) → merge →
-  recapturar `docs/evidence/loop-03/` (+ 1280×720 e HUD oculto) → export → registrar build → reauditoria → checkpoint.
+- Escopo: UNIVERSE / FORGE / OBSERVATORY integrados, UI nativa, ORIGIN CHAMBER jogável de ponta a ponta,
+  DEMO MODE sempre identificado, build Windows validada. Contratos: `docs/contracts/loop-03.md` e
+  `docs/contracts/loop-03-fixes.md`.
+- Entregue:
+  - game-engineer: atalhos (Espaço/R/1/2/3/V/H/Esc/C/F11), `Session.focus`/`hud_visible`/`entity_group`,
+    automação com capturas 01–13 e `--resolution`, smoke que exige UI nativa, seleção das sementes só no UNIVERSE,
+    hover limpo sobre a UI, vocabulário ACTIVE/CORE STABLE, export determinístico (ADR-012), build registrada.
+  - art-director: HUD nativo completo (selo DEMO MODE BONE sempre visível, barra de modos, transporte com timeline
+    marcada por fases e velocidades, feed, inspector com FOCUS, painéis por modo, OBSERVATORY com missão/verificações/
+    entidades/log, configurações de qualidade e câmera), isolamento da roda do mouse, uniform de seleção das sementes,
+    piso com borda dissolvida, conciliação LOW×HIGH.
+  - animator: foco de câmera em qualquer entidade (ADR-011), planos UNIVERSE/OBSERVATORY cientes da UI, câmera sempre
+    acima do piso inclusive em transições, banda de verificação contínua, poeira, sombras no LOW.
+  - procedural-modeler: nervuras rentes à pilha.
+- Verificação: `tools/run_tests.sh` 182/182; smoke com UI obrigatória PASS (fonte e pack); build final do commit
+  `214a02a` (zip `26af2ef5…c1e95f`, exe `a4fcdc5b…ec6a81`) reproduzida em checkouts limpos pelo game-engineer e pelo
+  auditor; evidências 13 HIGH + 13 LOW + 13 em 1280×720 em `docs/evidence/loop-03/`; probe com HUD 678 checks sem falhas
+  nem vazamentos.
+- Auditoria: art-director APROVADO COM RESSALVAS (P1 resolvido na rodada final); technical-auditor — auditoria final
+  APROVADO COM RESSALVAS → fechamento APROVADO COM RESSALVAS (0 bloqueantes, 0 importantes; critérios 1–8 atendidos
+  no contêiner).
+- Decisões: ADR-011 (transições de câmera no relógio de parede), ADR-012 (export determinístico).
+- Limitação: execução nativa do `.exe` no Windows depende de validação local (ADR-007; checklist em `docs/BUILD.md`).
+- Backlog (próxima versão, todos MENOR):
+  - animator: em 1280×720 o painel EVENTS cobre ~40 px da ponta da banda PALE (captura `720p/06`) — plano FORGE ciente da UI em 720p.
+  - art-director: traços brancos curtos nas tampas da camada selecionada no LOW (`low/10`).
+  - animator/procedural: guias de construção pontilhadas no LOW (`low/04`, geometria subpixel sem MSAA).
+  - animator/art-director: degrau suave residual na sombra do anel inferior no LOW.
+  - Validar o `.exe` numa máquina Windows e registrar o resultado em `docs/BUILD.md`.
+- Retomada: versão 0.1.0 concluída; próximos passos dependem de decisão de produto (novo conteúdo além da ORIGIN CHAMBER).
