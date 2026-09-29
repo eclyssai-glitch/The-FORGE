@@ -95,6 +95,7 @@ func test_mode_changes_fog() -> void:
 
 
 func test_universe_has_three_pickable_seeds() -> void:
+	Session.set_mode(SessionState.Mode.UNIVERSE)
 	var u: Universe = world.universe
 	assert_eq(u.seed_ids(), [&"seed_aurel", &"seed_vesper", &"seed_lattice"] as Array[StringName])
 	for id in u.seed_ids():
@@ -182,6 +183,7 @@ func test_picker_click_logic() -> void:
 
 
 func test_picker_raycast_hits_seed_and_misses_void() -> void:
+	Session.set_mode(SessionState.Mode.UNIVERSE)
 	await wait_physics_frames(2)
 	var target := world.universe.seed_node(&"seed_lattice").global_position
 	var from := target + Vector3(0.0, 0.0, 12.0)
@@ -190,6 +192,7 @@ func test_picker_raycast_hits_seed_and_misses_void() -> void:
 
 
 func test_click_selects_and_empty_click_clears() -> void:
+	Session.set_mode(SessionState.Mode.UNIVERSE)
 	var cam := Camera3D.new()
 	world.add_child(cam)
 	var target := world.universe.seed_node(&"seed_aurel").global_position
@@ -220,13 +223,93 @@ func test_click_selects_and_empty_click_clears() -> void:
 	_click(center, center)
 	await wait_physics_frames(2)
 	assert_eq(Session.selected, &"")
-	# Deselect action.
-	Session.select(&"seed_vesper")
-	var esc := InputEventAction.new()
-	esc.action = &"deselect"
-	esc.pressed = true
-	world.picker._unhandled_input(esc)
-	assert_eq(Session.selected, &"")
+
+
+func test_seed_roots_join_their_entity_group() -> void:
+	var u: Universe = world.universe
+	for id in u.seed_ids():
+		var group := SessionState.entity_group(id)
+		assert_eq(group, StringName("entity_" + String(id)))
+		var nodes := get_tree().get_nodes_in_group(group)
+		assert_eq(nodes.size(), 1, "%s: one node in its entity group" % id)
+		if nodes.size() == 1:
+			assert_eq(nodes[0], u.seed_node(id), "%s: the group holds the seed root (moves with the drift)" % id)
+
+
+func test_seeds_pickable_only_in_universe() -> void:
+	assert_true(Universe.seeds_pickable_in(SessionState.Mode.UNIVERSE))
+	assert_false(Universe.seeds_pickable_in(SessionState.Mode.FORGE))
+	assert_false(Universe.seeds_pickable_in(SessionState.Mode.OBSERVATORY))
+	var u: Universe = world.universe
+	for mode: SessionState.Mode in [SessionState.Mode.FORGE, SessionState.Mode.UNIVERSE, SessionState.Mode.OBSERVATORY, SessionState.Mode.UNIVERSE]:
+		Session.set_mode(mode)
+		assert_eq(u.seeds_pickable(), mode == SessionState.Mode.UNIVERSE, "pickable in %s" % Session.mode_name())
+		for id in u.seed_ids():
+			var body := u.seed_node(id).get_node("Pick") as StaticBody3D
+			assert_eq(body.collision_layer, Universe.PICK_LAYER if mode == SessionState.Mode.UNIVERSE else 0,
+				"%s layer in %s" % [id, Session.mode_name()])
+	# Every seed lies beyond the end of the FORGE/OBSERVATORY depth fog: invisible there.
+	var forge_end := float(EnvironmentProfile.mode_fog(SessionState.Mode.FORGE)["fog_depth_end"])
+	var obs_end := float(EnvironmentProfile.mode_fog(SessionState.Mode.OBSERVATORY)["fog_depth_end"])
+	for s in Universe.SEEDS:
+		assert_gt(Universe.seed_base_position(s).length() - float(s["size"]) * Universe.PICK_RADIUS_SCALE,
+			maxf(forge_end, obs_end), "%s beyond the fog end" % s["id"])
+
+
+## Loop 2 audit: seeds hidden by the fog must not be selectable from the FORGE camera. The camera
+## sits on the FORGE mode shot (CameraShots.mode_shot) and turns straight at each seed.
+func test_forge_camera_cannot_pick_hidden_seeds() -> void:
+	var shot := CameraShots.mode_shot(SessionState.Mode.FORGE, CameraShots.Shot.new())
+	var cam := Camera3D.new()
+	cam.fov = shot.fov
+	cam.far = 600.0
+	world.add_child(cam)
+	cam.global_position = shot.position()
+	cam.make_current()
+	var center := world.get_viewport().get_visible_rect().size * 0.5
+	var u: Universe = world.universe
+	for id in u.seed_ids():
+		cam.look_at(u.seed_node(id).global_position)
+		Session.set_mode(SessionState.Mode.FORGE)
+		await wait_physics_frames(2)
+		assert_ne(world.picker.pick_at(center), id, "%s not pickable from the FORGE camera in FORGE" % id)
+		assert_eq(world.picker.pick_ray(cam.global_position, u.seed_node(id).global_position), &"",
+			"%s: nothing pickable on the ray to it in FORGE" % id)
+		Session.set_mode(SessionState.Mode.OBSERVATORY)
+		await wait_physics_frames(2)
+		assert_ne(world.picker.pick_at(center), id, "%s not pickable in OBSERVATORY" % id)
+		Session.set_mode(SessionState.Mode.UNIVERSE)
+		await wait_physics_frames(2)
+		assert_eq(world.picker.pick_at(center), id, "%s pickable along the same ray in UNIVERSE" % id)
+	# The whole FORGE frame (mode shot, not turned) never yields a seed.
+	Session.set_mode(SessionState.Mode.FORGE)
+	cam.look_at(shot.target)
+	await wait_physics_frames(2)
+	var size := world.get_viewport().get_visible_rect().size
+	for gx in 17:
+		for gy in 9:
+			var hit := world.picker.pick_at(Vector2(size.x * (gx + 0.5) / 17.0, size.y * (gy + 0.5) / 9.0))
+			assert_false(String(hit).begins_with("seed_"), "FORGE frame picks no seed (%d,%d)" % [gx, gy])
+
+
+## From the UNIVERSE mode shot a click on each seed selects it. (Whether every seed falls inside
+## the frame is the animator's framing, tested with CameraShots; here the ray is what matters.)
+func test_universe_camera_picks_seeds() -> void:
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	var shot := CameraShots.mode_shot(SessionState.Mode.UNIVERSE, CameraShots.Shot.new())
+	var cam := Camera3D.new()
+	cam.fov = shot.fov
+	cam.far = 600.0
+	world.add_child(cam)
+	cam.global_position = shot.position()
+	cam.look_at(shot.target)
+	cam.make_current()
+	await wait_physics_frames(2)
+	var u: Universe = world.universe
+	for id in u.seed_ids():
+		var p := u.seed_node(id).global_position
+		assert_false(cam.is_position_behind(p), "%s in front of the UNIVERSE camera" % id)
+		assert_eq(world.picker.pick_at(cam.unproject_position(p)), id, "%s picked in UNIVERSE" % id)
 
 
 func _click(press: Vector2, release: Vector2, via: Array = []) -> void:

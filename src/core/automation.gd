@@ -9,7 +9,9 @@ const SMOKE_SPEED := 8.0
 const EXIT_WATCHDOG_SECONDS := 3.0
 const REPORT_NAME := "smoke_report.txt"
 
-## Capture points: [file name, simulation time, mode].
+## Capture points: [file name, simulation time, mode, (selected id), (focused id)].
+## Without a selected id the selection is cleared; a focused id is requested after the camera
+## snapped to the mode shot, and gets FOCUS_SETTLE seconds to frame it.
 const CAPTURES: Array = [
 	["01_dormant_core", 0.5, SessionState.Mode.FORGE],
 	["02_core_active", 5.0, SessionState.Mode.FORGE],
@@ -20,7 +22,20 @@ const CAPTURES: Array = [
 	["07_final_form", 49.0, SessionState.Mode.FORGE],
 	["08_universe", 49.0, SessionState.Mode.UNIVERSE],
 	["09_observatory", 49.0, SessionState.Mode.OBSERVATORY],
+	["10_forge_inspector", 30.5, SessionState.Mode.FORGE, &"layer_2"],
+	["11_observatory_mid", 37.0, SessionState.Mode.OBSERVATORY],
+	["12_universe_seed_focus", 49.0, SessionState.Mode.UNIVERSE, &"seed_aurel", &"seed_aurel"],
 ]
+## Real seconds a capture waits after seek/mode change (and after a focus request).
+const CAPTURE_SETTLE := 2.4
+const FOCUS_SETTLE := 3.6
+
+## UI contract (docs/ARCHITECTURE.md): transport buttons and the DEMO badge, found by group.
+const UI_TRANSPORT_GROUP := &"ui_transport"
+const UI_BADGE_GROUP := &"demo_badge"
+const UI_BUTTONS: Array[String] = ["Start", "Pause", "Reset"]
+## Real seconds the badge may take to become visible after a mode change (UI transitions).
+const UI_BADGE_WAIT := 1.5
 
 var options: Dictionary = {}
 
@@ -84,9 +99,101 @@ func _run_smoke() -> void:
 		and Simulation.status == EventTimeline.Status.IDLE
 	ok = ok and pause_holds and reset_ok
 	lines.append("pause_holds=%s reset_ok=%s" % [pause_holds, reset_ok])
+	ok = await _smoke_ui(lines) and ok
 	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
 	_write_report(lines)
 	_quit(0 if ok else 1)
+
+
+## Exercises the native UI through its groups: the transport buttons (Start -> Pause -> Reset,
+## via pressed.emit()) must drive Simulation.status, and a visible "demo_badge" node with "DEMO"
+## in its text must exist in every mode. Report line `ui=present|absent`. A UI with neither group
+## is `ui=absent`: a failure unless the run was started with --allow-missing-ui.
+func _smoke_ui(lines: PackedStringArray) -> bool:
+	var transports := get_tree().get_nodes_in_group(UI_TRANSPORT_GROUP)
+	var badges := get_tree().get_nodes_in_group(UI_BADGE_GROUP)
+	if transports.is_empty() and badges.is_empty():
+		var allowed := options.has("allow-missing-ui")
+		lines.append("ui=absent")
+		if not allowed:
+			lines.append("FAIL ui absent: no \"%s\" / \"%s\" nodes (pass --allow-missing-ui to tolerate)" % [UI_TRANSPORT_GROUP, UI_BADGE_GROUP])
+		return allowed
+	lines.append("ui=present")
+	var ok := true
+	# Transport buttons.
+	var buttons := {}
+	for n in UI_BUTTONS:
+		var b := find_ui_button(transports, n)
+		if b == null:
+			lines.append("FAIL ui_transport: no button named %s" % n)
+			ok = false
+		else:
+			buttons[n] = b
+	if buttons.size() == UI_BUTTONS.size():
+		Simulation.reset()
+		Simulation.set_speed(1.0)
+		(buttons["Start"] as BaseButton).pressed.emit()
+		for i in 5:
+			await get_tree().process_frame
+		var start_ok := Simulation.status == EventTimeline.Status.PLAYING and Simulation.time > 0.0
+		(buttons["Pause"] as BaseButton).pressed.emit()
+		await get_tree().process_frame
+		var paused_at := Simulation.time
+		for i in 5:
+			await get_tree().process_frame
+		var pause_ok := Simulation.status == EventTimeline.Status.PAUSED and is_equal_approx(paused_at, Simulation.time)
+		(buttons["Reset"] as BaseButton).pressed.emit()
+		await get_tree().process_frame
+		var reset_ok := Simulation.status == EventTimeline.Status.IDLE and Simulation.time == 0.0
+		lines.append("ui_transport start=%s pause=%s reset=%s" % [start_ok, pause_ok, reset_ok])
+		ok = ok and start_ok and pause_ok and reset_ok
+	# DEMO badge, visible in every mode.
+	var badge_modes: PackedStringArray = []
+	for m: SessionState.Mode in [SessionState.Mode.UNIVERSE, SessionState.Mode.FORGE, SessionState.Mode.OBSERVATORY]:
+		Session.set_mode(m)
+		var until := Time.get_ticks_msec() + int(UI_BADGE_WAIT * 1000.0)
+		var seen := visible_demo_badge(get_tree().get_nodes_in_group(UI_BADGE_GROUP))
+		while not seen and Time.get_ticks_msec() < until:
+			await get_tree().process_frame
+			seen = visible_demo_badge(get_tree().get_nodes_in_group(UI_BADGE_GROUP))
+		if seen:
+			badge_modes.append(Session.mode_name())
+		else:
+			lines.append("FAIL demo_badge: no visible node with \"DEMO\" in %s" % Session.mode_name())
+			ok = false
+	lines.append("ui_demo_badge=%d/3 (%s)" % [badge_modes.size(), ",".join(badge_modes)])
+	Session.set_mode(SessionState.Mode.FORGE)
+	return ok
+
+
+## Button named `button_name` among the nodes of the transport group (or their descendants).
+static func find_ui_button(roots: Array, button_name: String) -> BaseButton:
+	for r: Node in roots:
+		if r is BaseButton and r.name == button_name:
+			return r
+		var found := r.find_child(button_name, true, false)
+		if found is BaseButton:
+			return found
+	return null
+
+
+## True when one of `nodes` is visible in the tree and it (or a descendant) shows text with "DEMO".
+static func visible_demo_badge(nodes: Array) -> bool:
+	for n: Node in nodes:
+		var ci := n as CanvasItem
+		if ci == null or not ci.is_visible_in_tree():
+			continue
+		if _text_has_demo(n):
+			return true
+		for c in n.find_children("*", "", true, false):
+			if c is CanvasItem and (c as CanvasItem).is_visible_in_tree() and _text_has_demo(c):
+				return true
+	return false
+
+
+static func _text_has_demo(n: Node) -> bool:
+	var t: Variant = n.get(&"text")
+	return t is String and (t as String).to_upper().contains("DEMO")
 
 
 func _run_capture(dir: String) -> void:
@@ -103,12 +210,17 @@ func _run_capture(dir: String) -> void:
 			continue
 		Session.set_mode(c[2])
 		Simulation.seek(c[1])
+		Session.select(c[3] if c.size() > 3 else &"")
 		_snap_cameras()
-		await _settle(2.4)
+		if c.size() > 4:
+			Session.focus(c[4])
+			await _settle(FOCUS_SETTLE)
+		else:
+			await _settle(CAPTURE_SETTLE)
 		var img := get_viewport().get_texture().get_image()
 		var path := abs_dir.path_join("%s.png" % c[0])
 		img.save_png(path)
-		print("[capture] %s (t=%.1f, %s)" % [path, c[1], Session.mode_name()])
+		print("[capture] %s (t=%.1f, %s, selected=%s)" % [path, c[1], Session.mode_name(), Session.selected])
 	_quit(0)
 
 

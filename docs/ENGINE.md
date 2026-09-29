@@ -71,12 +71,21 @@ primeiro aos nós mais abaixo da árvore):
   Malhas de `MeshBuilder.icosphere`/`ring` (seção do anel proporcional ao size: `RING_THICKNESS`,
   `RING_WIDTH`); materiais `MaterialLibrary.dormant_seed()` (compartilhado) e uma cópia de `halo()`
   (BONE, `HALO_STRENGTH` 0,18; sem energia, sem EMBER). Cada semente
-  tem um `StaticBody3D` (`collision_layer = 2`, máscara 0, `meta entity_id`) com esfera de colisão
-  generosa (`PICK_RADIUS_SCALE`).
+  tem um `StaticBody3D` (nó `Pick`, máscara 0, `meta entity_id`) com esfera de colisão
+  generosa (`PICK_RADIUS_SCALE`). A raiz de cada semente entra no grupo `entity_<id>`
+  (`SessionState.entity_group(id)`), alvo de foco da câmera.
+- **Seleção só onde é visível** (pendência [IMPORTANTE] do Loop 2): fora do UNIVERSE a névoa de
+  profundidade termina em 34 (FORGE) / 30 (OBSERVATORY) e as sementes (60–70) ficam invisíveis. Por
+  isso `Universe.apply_mode(mode)` chama `set_seeds_pickable(seeds_pickable_in(mode))`: no UNIVERSE os
+  corpos ficam na camada 2; em FORGE/OBSERVATORY, `collision_layer = 0` (o raio do Picker atravessa).
+  Estado inicial: não selecionáveis até o primeiro `apply_mode` (o mundo aplica no `_ready`).
+  Testado com a câmera do plano FORGE (`CameraShots.mode_shot`) virada para cada semente e com uma
+  varredura 17×9 do quadro FORGE; sem a correção a varredura seleciona `seed_*`.
 - **Deriva**: oscilação lenta (período ~46 s, ±0,35 un.) e giro lento, em tempo real. É respiração
   ambiente, não estado de simulação: não depende de `Simulation.time` e não precisa de seek.
 - API: `seed_ids()`, `seed_node(id)`, `seed_base_position(s)`, `drift_offset(t, phase)`,
-  `make_sky_material()`, `apply_sky(env)`, `apply_mode(mode)`, `star_intensity_for(mode)`, `sky_material`.
+  `make_sky_material()`, `apply_sky(env)`, `apply_mode(mode)`, `star_intensity_for(mode)`, `sky_material`,
+  `seeds_pickable_in(mode) -> bool` (estático), `set_seeds_pickable(enabled)`, `seeds_pickable() -> bool`.
 
 ## Seleção (`src/world/picker.gd`, `class_name Picker`)
 
@@ -86,7 +95,8 @@ primeiro aos nós mais abaixo da árvore):
   `InputTuning.is_drag(travel)`), compartilhado com a câmera. Conta o **percurso acumulado** do
   ponteiro entre press e release (soma de cada movimento), não o deslocamento líquido: um arrasto
   de ida e volta (160 px) que termina onde começou continua sendo arrasto e não seleciona; 3 px
-  seleciona. Clique no vazio → `Session.select(&"")`. Ação `deselect` (Esc) limpa.
+  seleciona. Clique no vazio → `Session.select(&"")`. A ação `deselect` (Esc) é do `Shortcuts`
+  (`src/core/shortcuts.gd`), não do Picker.
 - Movimento do mouse → `Session.hover(id)` (congelado durante arrasto).
 - Usa `_unhandled_input`: eventos consumidos pela UI não chegam; o Picker nunca marca eventos como
   tratados, para a câmera receber os mesmos arrastos.
@@ -95,10 +105,40 @@ primeiro aos nós mais abaixo da árvore):
 - API: `pick_at(screen_pos)`, `pick_ray(from, to)`, `path_length(points)`, `is_click_path(points)`,
   `entity_id_of_hit(hit)`, `entity_id_of(collider)`.
 
+## Atalhos, foco e visibilidade do HUD
+
+- `src/core/shortcuts.gd` (`class_name Shortcuts`), nó `Shortcuts` adicionado por `main.gd` como
+  último filho de `Main` (o primeiro a ver `_unhandled_input`). Mapeia ações do `project.godot` para
+  os autoloads: `demo_toggle` (Espaço) → `Simulation.toggle()`; `demo_reset` (R) → `Simulation.reset()`;
+  `mode_universe/forge/observatory` (1/2/3) → `Session.set_mode`; `deselect` (Esc) → `Session.select(&"")`;
+  `toggle_fullscreen` (F11, saiu de `main.gd`); `toggle_cinematic` (V) → `Session.set_cinematic(!cinematic)`;
+  `toggle_hud` (H) → `Session.toggle_hud()`.
+- Só teclas pressionadas, sem eco, modificadores exatos (Ctrl+R não reinicia). Tecla que dispara um
+  atalho é marcada como tratada. Com `LineEdit`/`TextEdit`/`Range` (Slider, SpinBox) da UI em foco
+  (`get_viewport().gui_get_focus_owner()`), atalhos são ignorados e o evento segue intocado.
+  Teclas de câmera (WASD, C, mouse) continuam do `CameraDirector`.
+- `Session.focus(id)` emite `focus_requested(id)` sempre (repetido também); não seleciona.
+  `Session.hud_visible` + `hud_visibility_changed(visible)` (emite só quando muda); o mundo 3D ignora.
+- API estática testável: `Shortcuts.action_for(event)`, `Shortcuts.blocks_shortcuts(focus_owner)`,
+  `Shortcuts.apply(action) -> bool`, `Shortcuts.ACTIONS`.
+
 ## Automação
 
-`src/core/automation.gd` (capturas): depois de `Session.set_mode` + `Simulation.seek`, chama
-`snap_to_mode_shot()` em todos os nós do grupo `camera_director` antes de esperar o assentamento.
+`src/core/automation.gd` (capturas): depois de `Session.set_mode` + `Simulation.seek`, aplica a
+seleção da captura (`Session.select`, vazia se não houver), chama `snap_to_mode_shot()` em todos os
+nós do grupo `camera_director` e, se a captura pede foco, `Session.focus(id)` e espera
+`FOCUS_SETTLE` (3,6 s) em vez de `CAPTURE_SETTLE` (2,4 s). Entrada de `CAPTURES`:
+`[nome, t, modo, (selecionado), (foco)]`. Loop 3: `10_forge_inspector` (t=30,5, FORGE, `layer_2`),
+`11_observatory_mid` (t=37, OBSERVATORY), `12_universe_seed_focus` (t=49, UNIVERSE, seleciona e foca
+`seed_aurel`).
+
+Smoke (`--smoke-test`), depois da demo e de pausa/reinício: exercita a UI real por grupos —
+`ui_transport` (botões `Start`, `Pause`, `Reset` via `pressed.emit()`, conferindo
+`Simulation.status` PLAYING → PAUSED (tempo parado) → IDLE (t=0)) e `demo_badge` (um nó visível com
+"DEMO" no `text`, dele ou de um descendente, em UNIVERSE/FORGE/OBSERVATORY, até 1,5 s por modo).
+Linhas `ui=present|absent`, `ui_transport start= pause= reset=`, `ui_demo_badge=N/3`. Sem nenhum dos
+dois grupos → `ui=absent` e FAIL, exceto com `--allow-missing-ui` (só `SMOKE_ALLOW_MISSING_UI=1` no
+`tools/smoke_test.sh`, para branches sem a UI). UI presente mas incompleta/oculta reprova sempre.
 
 ## Testes
 
@@ -107,6 +147,13 @@ removido, módulo ausente pulado, ordem dos módulos presentes, relatório de m�
 scripts, sempre há câmera ativa, qualidade liga/desliga SSAO/SSIL/volumétrica, modo altera a névoa
 e o brilho das estrelas, uniform `radiance_lift` presente, 3 sementes com colisores/metas/distância
 60–72 e fora do piso, anéis nunca verticais, deriva limitada, lógica de clique (limiar, percurso
-acumulado), raycast e clique/arrasto/ida-e-volta/vazio/Esc via `_unhandled_input`.
+acumulado), raycast e clique/arrasto/ida-e-volta/vazio via `_unhandled_input`, grupos `entity_<id>` das
+sementes, sementes selecionáveis só no UNIVERSE (camada por modo, além do fim da névoa FORGE/OBSERVATORY,
+câmera do plano FORGE virada para cada semente + varredura do quadro FORGE, câmera do plano UNIVERSE).
+`tests/integration/test_interaction_flow.gd`: ações e teclas (V, H, Espaço, R, 1/2/3, Esc, F11; soltar,
+eco e Ctrl não disparam), atalhos alteram `Simulation`/`Session`, `focus` emite sempre, `hud_visible`
+alterna com sinal, `LineEdit`/`HSlider` em foco bloqueiam e `Button` não, `main.tscn` compõe `Shortcuts`
+e a UI sobrevive a modos/seleção/foco/HUD em headless, `CAPTURES` 10–12, e o smoke de UI
+(`_smoke_ui`: ausente reprova sem a flag; UI conforme de teste passa; selo oculto reprova).
 `tests/unit/test_quality_profiles.gd`: perfis completos (inclui `shadow_splits`), custo monotônico,
 `shadow_splits` LOW 2 e demais 4.
