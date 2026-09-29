@@ -1,15 +1,19 @@
 class_name DustField
 extends GPUParticles3D
 ## Sparse cold dust suspended in the chamber air: gives scale and depth to the dark volume.
-## Owner: animator. Ambient (real time, not tied to events); very slow drift, ASH, low alpha,
-## round soft discs (MaterialLibrary.mote). Discreet by design: few, tiny, faint — texture of the
-## air, never a pattern. Count scales with Quality.profile["particles"] through amount_ratio.
+## Owner: animator. Ambient (real time, not tied to events); very slow drift, low alpha, round
+## soft discs (MaterialLibrary.mote). Discreet by design: few, faint — texture of the air, never
+## a pattern. They must still read as dust and not as stars: stars are sharp ASH points, motes
+## are larger soft BONE discs (out-of-focus specks catching the chamber light).
+## Count scales with Quality.profile["particles"] through amount_ratio.
 
 const MAX_AMOUNT := 220
 const EXTENTS := Vector3(9.0, 5.5, 9.0)
 ## Mote quad edge (world units) and the particle scale range applied over it.
-const MOTE_SIZE := 0.03
-const SCALE_RANGE := Vector2(0.5, 1.0)
+const MOTE_SIZE := 0.055
+const SCALE_RANGE := Vector2(0.6, 1.0)
+## Mote colour (Palette): BONE, a warmer tone than the ASH star field.
+const COLOR := Palette.BONE
 ## Peak alpha of a mote (colour ramp fades in/out around it over the lifetime).
 const PEAK_ALPHA := 0.16
 ## View distance (m): hidden at x, fully visible from y — motes never bloom in front of the lens.
@@ -52,7 +56,7 @@ func _ready() -> void:
 
 	var quad := QuadMesh.new()
 	quad.size = Vector2(MOTE_SIZE, MOTE_SIZE)
-	var mat := MaterialLibrary.mote(Palette.ASH).duplicate() as ShaderMaterial
+	var mat := MaterialLibrary.mote(COLOR).duplicate() as ShaderMaterial
 	mat.set_shader_parameter("near_fade", NEAR_FADE)
 	quad.material = mat
 	draw_pass_1 = quad

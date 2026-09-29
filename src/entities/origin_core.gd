@@ -8,6 +8,7 @@ extends Node3D
 ## Ambient motion (slow shell rotation, float) uses real time and keeps going while paused.
 ## Selection: StaticBody3D (layer 2) with meta entity_id = &"origin_core"; highlight raises the
 ## BONE fresnel of the shell.
+## Focus: the node joins SessionState.entity_group(ENTITY_ID); bounds = the shell sphere.
 
 const ENTITY_ID := &"origin_core"
 const SHELL_RADIUS := StructureBlueprint.CORE_RADIUS
@@ -29,6 +30,8 @@ var _last := Vector4(-1, -1, -1, -1)
 
 
 func _ready() -> void:
+	add_to_group(SessionState.entity_group(ENTITY_ID))
+	set_meta(CameraDirector.FOCUS_BOUNDS_META, AABB(-Vector3.ONE * SHELL_RADIUS, Vector3.ONE * SHELL_RADIUS * 2.0))
 	_shell_mat = MaterialLibrary.core_shell()
 	_heart_mat = MaterialLibrary.core_heart()
 	heart = MeshInstance3D.new()

@@ -14,7 +14,8 @@ animação que possa divergir da simulação. Toda regra de tempo está em `Chor
 testadas); as entidades apenas empurram esses valores para nós e materiais.
 
 - **Tempo real** só para movimento ambiente (rotação lenta do casco do núcleo, flutuação e giro dos
-  fragmentos soltos, poeira) — continua na pausa — e para a câmera (Tweens de `Palette.T_CINEMATIC`).
+  fragmentos soltos, poeira) — continua na pausa — e para a câmera (transições de `Palette.T_CINEMATIC`
+  com a curva de `Tween.interpolate_value` no relógio de parede — ver "Transições" abaixo).
 - **Sem Tween** para progresso da simulação; **sem `TIME`** nos shaders; pulsos derivam de `Simulation.time`.
 - **Sem alocação por frame** nas entidades; MultiMesh e `Environment` só são escritos quando o valor
   muda (caches de custom data, twist por camada, uniformes e níveis de ambiente); segmentos
@@ -38,10 +39,10 @@ funcionam sozinhos lendo os autoloads `Simulation`, `Session`, `Quality`.
 | Script | Classe | Papel |
 |---|---|---|
 | `src/entities/light_rig.gd` | `LightRig` | key/fill/rim direcionais + luz EMBER do núcleo; `var environment: Environment` (atribuir antes do `add_child`) recebe ambient, exposure (× `exposure_scale` do modo) e densidade volumétrica do estágio |
-| `src/entities/chamber_architecture.gd` | `ChamberArchitecture` | piso escuro, anel de pilares (MultiMesh), óculo (anel escuro alto), inlay BONE no piso |
+| `src/entities/chamber_architecture.gd` | `ChamberArchitecture` | piso escuro, anel de pilares (MultiMesh), óculo (anel escuro alto; oculto no UNIVERSE), inlay BONE no piso |
 | `src/entities/origin_core.gd` | `OriginCore` | casco facetado em placas separadas (`core_shell`) + coração (`core_heart`) visível pelas frestas |
 | `src/entities/fragment_structure.gd` | `FragmentStructure` | uma MultiMesh por camada (instância k = `layer_first_segment(l)+k`), nervuras (MultiMesh), guias de construção |
-| `src/entities/verification_array.gd` | `VerificationArray` | anel físico estacionado abaixo da estrutura + fita PALE vertical (`scan_ring`); alimenta `scan_y`/`scan_strength` |
+| `src/entities/verification_array.gd` | `VerificationArray` | anel físico estacionado abaixo da estrutura + fita PALE vertical (`scan_ring`) apoiada sobre ele (`BAND_LIFT`); alimenta `scan_y`/`scan_strength` |
 | `src/fx/activation_pulse.gd` | `ActivationPulse` | ondas EMBER no plano do núcleo + halo EMBER da forma final |
 | `src/fx/dust_field.gd` | `DustField` | poeira fria esparsa, redonda e discreta (ambiente) |
 | `src/fx/emission_sparks.gd` | `EmissionSparks` | estilhaços EMBER na emissão de fragmentos (determinístico) |
@@ -73,6 +74,9 @@ Entre parênteses, as constantes de `Choreography` (segundos de simulação / n�
 - **`verification.started`** — o anel sobe do estacionamento e varre de baixo a cima e volta
   (`SCAN_*`), com a fita PALE contida (`VerificationArray.BAND_LEVEL`, `BAND_WIDTH`: linha de
   varredura calma, sem florescer) e a banda na estrutura (`scan_y`, `scan_strength`); estágio `verify`.
+  A fita fica **sobre** a borda superior do anel físico (`BAND_LIFT`; centro da fita = `scan_y`):
+  coplanares, o anel opaco escondia o meio da fita no lado próximo e sobravam duas lascas
+  subpixel que liam como fio pontilhado.
 - **`verification.check_passed`** — flash PALE (`g`) que parte da altura do anel naquele instante e
   se propaga por camada (`FLASH_*`).
 - **`verification.passed`** — a banda apaga e o anel volta ao estacionamento (`SCAN_EXIT`).
@@ -119,10 +123,12 @@ mudar a perspectiva). Grupo `camera_director`; `camera.current = true`.
   centro óptico, horizonte baixo.
 - **UNIVERSE** (`UNIVERSE_*`) — de fora do anel de pilares, com o yaw exatamente num vão entre dois
   pilares, de frente para as três sementes (`Universe.SEEDS`, além da câmara): a câmara é o ponto
-  quente no meio-baixo do quadro e as sementes se abrem à esquerda, ao alto e à direita. Pitch alto
-  o bastante para que o topo dos pilares da frente fique abaixo da estrutura na tela (nenhum pilar
-  corta o quadro nem o sujeito). Exposição do modo: `exposure_scale` de `EnvironmentProfile.mode_fog`,
-  aplicada pelo `LightRig`.
+  quente no meio-baixo do quadro e as sementes se abrem à esquerda, ao alto e à direita. Mais perto
+  e mais fechado que no Loop 2 (a estrutura lia pequena), ainda com as três sementes no quadro. Pitch
+  alto o bastante para que o topo dos pilares da frente fique abaixo da estrutura na tela (nenhum
+  pilar corta o quadro nem o sujeito). O óculo, que nesse plano lia como um anel solto sobre a
+  câmara, fica oculto no UNIVERSE (malha e forma de seleção; `ChamberArchitecture.apply_mode`).
+  Exposição do modo: `exposure_scale` de `EnvironmentProfile.mode_fog`, aplicada pelo `LightRig`.
 - **OBSERVATORY** — alto e oblíquo; sujeito no centro dos 62 % à direita (painel à esquerda).
 
 `test_animation_camera_shots.gd` fixa essas leituras: planos dentro dos limites, yaw do UNIVERSE entre
@@ -135,9 +141,55 @@ da estrutura.
 (recuo) → `cue_building` (órbita lenta, `BUILD_ORBIT`) → `cue_finishing` (mesma órbita, mais perto)
 → `cue_verification` (ângulo baixo) → `cue_final` (órbita de revelação, `FINAL_ORBIT`).
 O yaw das deixas é função do tempo de simulação (seek dá o mesmo enquadramento). Troca de deixa,
-de modo, de `cinematic` e `camera_reset` = Tween de um fator de blend (tempo real,
+de modo, de `cinematic` e `camera_reset` = transição de um fator de blend (tempo real,
 `Palette.T_CINEMATIC`, seno in-out) de um instantâneo para o alvo **vivo** (órbitas continuam
-suaves). `Simulation.world_rebuilt` (seek/reset) → `snap_to_mode_shot()` sem tween.
+suaves). `Simulation.world_rebuilt` (seek/reset) → `snap_to_mode_shot()` sem tween — exceto quando
+um enquadramento do usuário/foco está valendo fora de deixa (UNIVERSE, OBSERVATORY, FORGE sem
+cinematic): aí ele fica (arrastar a linha do tempo não joga fora o foco numa semente).
+
+### Transições
+
+O fator de blend segue a curva de um Tween (`Tween.interpolate_value`, `TRANS_SINE`/`EASE_IN_OUT`)
+com o tempo medido no relógio de parede (`Time.get_ticks_msec`), não no delta do quadro: o motor
+limita o delta de um quadro a `max_physics_steps_per_frame / physics_ticks_per_second` (8/60 s), e
+num renderizador lento (lavapipe ≈ 0,4 s por quadro) um Tween por delta corria ~3× mais devagar
+que o tempo real — um foco não assentava no tempo prometido. Em máquinas normais o resultado é
+idêntico ao de um Tween.
+
+### Foco numa entidade (`Session.focus_requested(id)`)
+
+- **Alvo**: nós do grupo `SessionState.entity_group(id)`. Limites = AABB local em
+  `set_meta(CameraDirector.FOCUS_BOUNDS_META, aabb)` quando o nó a define, senão a união das AABBs
+  dos `VisualInstance3D` descendentes (caso das sementes do `Universe`).
+
+  | id | Nó do grupo | Limites |
+  |---|---|---|
+  | `origin_core` | `OriginCore` | esfera do casco |
+  | `layer_0..4` | `MultiMeshInstance3D` da camada | o anel da camada (raio externo, altura, `y`) |
+  | `fragment_field` | `FragmentStructure` | casca de dispersão (contém também a estrutura montada) |
+  | `verification_array` | anel físico (`VerificationArray.ring`) | anel + fita, na altura do anel no pedido |
+  | `origin_chamber` | `ChamberArchitecture` | anel de pilares, do piso ao topo |
+  | `seed_*` | raiz da semente (`Universe`, do game-engineer) | união das malhas |
+
+- **Enquadramento** (`CameraShots.focus_shot`, lógica pura): alvo = centro dos limites; mantém o
+  modo (fov e `offset` do plano do modo, limites de `clamp_shot`) e o yaw atual (a câmera vai até a
+  entidade em vez de girar em volta dela). A distância (`fit_distance`) trata a entidade como
+  cilindro vertical (raio = metade do lado horizontal maior, sem inflar anéis pelos cantos da AABB)
+  e, com perspectiva, faz a borda próxima ocupar no máximo `FOCUS_FILL` da meia-altura e da
+  meia-largura úteis (descontado o `offset`). FORGE olha de cima ao menos `FOCUS_MIN_PITCH` (anel lê
+  como anel); OBSERVATORY mantém pitch alto e o sujeito à direita do painel.
+- **Alcance** (`FOCUS_REACH`): em FORGE/OBSERVATORY o alvo precisa estar na câmara (a distância
+  fica no limite do modo); um pedido fora do alcance (semente vista do FORGE) é ignorado. No
+  UNIVERSE o alcance vai até as sementes (`FLY_RADIUS`, com folga para a deriva).
+- **Sementes** (UNIVERSE, alvo além de `FOCUS_FAR`): vistas de fora, `SEED_FOCUS_YAW` fora da linha
+  radial, `SEED_FOCUS_OFFSET` na tela e `SEED_FOCUS_PITCH`: a semente no terço esquerdo, a câmara
+  acesa ao fundo no terço direito — a semente dormente lida contra o lugar onde os constructos nascem.
+- **Comportamento**: transição `T_CINEMATIC` do rig atual ao alvo do foco. O foco conta como input
+  do usuário: a deixa só retoma `USER_HOLD` s depois de o enquadramento assentar; fora de deixa o
+  foco fica até `camera_reset`, troca de modo ou novo input (que para a transição onde está e passa
+  o controle ao usuário). Pedido repetido reenquadra. `focused()` / `focus_goal()` para testes/HUD.
+- A captura `12_universe_seed_focus` (automação) pede o foco e espera 3,6 s: a transição (2,6 s de
+  relógio) assenta antes.
 
 ### Input (`_unhandled_input`: a UI consome primeiro)
 
@@ -159,9 +211,11 @@ suaves). `Simulation.world_rebuilt` (seek/reset) → `snap_to_mode_shot()` sem t
 - **EmissionSparks**: estilhaços (`MeshBuilder.shard`) em MultiMesh com `MaterialLibrary.spark(EMBER)`,
   direções fixas por seed, trajetória cúbica ease-out e encolhimento — função do tempo desde
   `fragments_at`. `visible_instance_count` escala com `Quality.profile.particles` (com mínimo).
-- **DustField**: discos redondos e suaves (`MaterialLibrary.mote(ASH)`), poucos, minúsculos e de
-  alfa baixo — textura do ar, nunca padrão. Fade de entrada/saída na vida; `near_fade` apaga os que
-  passam perto da lente; `amount_ratio` = `Quality.profile.particles` (sem reiniciar).
+- **DustField**: discos redondos e suaves (`MaterialLibrary.mote(BONE)`), poucos e de alfa baixo —
+  textura do ar, nunca padrão. Precisam ler como poeira e não como estrela: as estrelas são pontos
+  nítidos ASH; os motes são discos maiores e macios (`MOTE_SIZE`), de tom BONE (partículas fora de
+  foco pegando a luz da câmara). Fade de entrada/saída na vida; `near_fade` apaga os que passam
+  perto da lente; `amount_ratio` = `Quality.profile.particles` (sem reiniciar).
 - Sombras: a key projeta sombras se `Quality.profile.shadows`, com os splits de
   `Quality.profile.shadow_splits` (`LightRig.shadow_mode_for`) e normal bias/blur de `LightRig`;
   luz do núcleo sem sombra (fica dentro do casco).
@@ -174,9 +228,11 @@ final em `finalized_at`), cada passo em `T_CINEMATIC`, partindo do nível corren
 Cada luz recebe `EnvironmentProfile.FOG_LIGHT` em `light_volumetric_fog_energy`. Direções: key alta
 pela frente-esquerda, fill baixa e fria pela frente-direita, rim alta por trás (o reflexo do rim
 no piso fica fora de quadro). Luz do núcleo (`LightRig.CORE_*`): ilumina as faces internas dos anéis
-e cai antes das paredes externas; especular baixo (sem ponto quente no metal); modulada pelo pulso.
-O `LightRig` só escreve no `Environment` quando ambient/exposure/fog mudam e lê o `exposure_scale`
-do modo na troca de modo (não por frame).
+e cai antes das paredes externas; especular baixo (`CORE_SPECULAR`: o reflexo cobre num único
+segmento lia como seleção — agora é um brilho quente e macio espalhado pelo anel sob o núcleo);
+modulada pelo pulso. O `LightRig` só escreve no `Environment` quando ambient/exposure/fog mudam, lê
+o `exposure_scale` do modo na troca de modo (não por frame) e esquece o cache em
+`Simulation.world_rebuilt` (o quadro seguinte reescreve o ambiente).
 
 ## Custo
 
@@ -188,7 +244,12 @@ vazia; HIGH ≈ 2,5 fps.
 
 `tools/run_tests.sh`: `test_animation_motion.gd`, `test_animation_choreography.gd`,
 `test_animation_camera_shots.gd` (planos, deixas, limites, UNIVERSE entre pilares com as sementes em
-quadro), `test_animation_entities.gd` (composição headless na ordem do world.gd, corpos de seleção e
-piso não selecionável, câmera e limiar de arrasto compartilhado, seek, `segment_state` antes da
-emissão, luz → ambiente com `exposure_scale` e cache, splits por qualidade, varredura → material,
-seleção, input). Capturas de todas as fases e modos: `tools/capture_evidence.sh`.
+quadro; foco: `fit_distance` preenche ~`FOCUS_FILL` com perspectiva, `focus_shot` mantém o modo e
+centra a entidade, distância limitada à câmara, alcance por modo, semente com a câmara ao fundo no
+terço oposto), `test_animation_entities.gd` (composição headless na ordem do world.gd, corpos de
+seleção e piso não selecionável, câmera e limiar de arrasto compartilhado, seek, `segment_state` antes
+da emissão, luz → ambiente com `exposure_scale` e cache — zerado em `world_rebuilt`, splits por
+qualidade, varredura → material, fita sobre o anel, óculo só fora do UNIVERSE, seleção, input; foco:
+grupos de todas as entidades e limites, foco na camada suspende a deixa e `camera_reset` volta,
+alvos desconhecidos/fora de alcance ignorados, input durante o foco devolve o controle, foco
+sobrevive a seek fora de deixa). Capturas de todas as fases e modos: `tools/capture_evidence.sh`.

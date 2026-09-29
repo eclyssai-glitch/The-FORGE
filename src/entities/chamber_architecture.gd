@@ -8,6 +8,9 @@ extends Node3D
 ## Selection: the built architecture — pillars and oculus — is one StaticBody3D (layer 2), meta
 ## entity_id = &"origin_chamber". The floor is deliberately NOT pickable: it lies under every
 ## FORGE view, so a click on empty space must reach nothing and clear the selection.
+## Focus: the node joins SessionState.entity_group(ENTITY_ID); bounds = the pillar ring.
+## The oculus only ever enters the frame in UNIVERSE, where it read as a loose ring floating
+## above the chamber: it is hidden there (mesh and its pick shape).
 
 const ENTITY_ID := &"origin_chamber"
 const FLOOR_Y := CameraShots.FLOOR_Y
@@ -29,12 +32,16 @@ var oculus: MeshInstance3D
 var inlay: MeshInstance3D
 var body: StaticBody3D
 
+var _oculus_shape: CollisionShape3D
+
 var _inlay_mat: ShaderMaterial
 var _highlight := 0.0
 var _last := -1.0
 
 
 func _ready() -> void:
+	add_to_group(SessionState.entity_group(ENTITY_ID))
+	set_meta(CameraDirector.FOCUS_BOUNDS_META, focus_bounds())
 	floor_mesh = MeshInstance3D.new()
 	floor_mesh.name = "Floor"
 	var disc := CylinderMesh.new()
@@ -96,8 +103,28 @@ func _ready() -> void:
 	ring_shape.shape = oculus.mesh.create_trimesh_shape()
 	ring_shape.position = oculus.position
 	body.add_child(ring_shape)
+	_oculus_shape = ring_shape
 	add_child(body)
+	Session.mode_changed.connect(apply_mode)
+	apply_mode(Session.mode)
 	_update(0.0)
+
+
+## Per-mode visibility: the oculus is hidden (and not pickable) in UNIVERSE.
+func apply_mode(mode: SessionState.Mode) -> void:
+	var on := oculus_visible_in(mode)
+	oculus.visible = on
+	_oculus_shape.set_deferred("disabled", not on)
+
+
+static func oculus_visible_in(mode: SessionState.Mode) -> bool:
+	return mode != SessionState.Mode.UNIVERSE
+
+
+## Local focus bounds of the chamber: the pillar ring from the floor to the pillar tops.
+static func focus_bounds() -> AABB:
+	var r := PILLAR_RADIUS + PILLAR_SIZE.x
+	return AABB(Vector3(-r, FLOOR_Y, -r), Vector3(2.0 * r, PILLAR_SIZE.y, 2.0 * r))
 
 
 ## Pose of pillar p: on the ring of PILLAR_RADIUS at TAU·(p + 0.5)/PILLAR_COUNT, standing on the floor.
