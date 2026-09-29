@@ -42,7 +42,11 @@ const RIB_COUNT := 12
 const RIB_RADIUS := 2.15
 const RIB_WIDTH := 0.055
 const RIB_DEPTH := 0.08
-const RIB_OVERHANG := 0.12
+## How far each rib tip is recessed *into* the outermost rings (world units, >= 0). The ribs span
+## exactly from the bottom face of the lowest ring to the top face of the highest ring, minus this
+## inset at each end, so the tips are buried in the ring body (no protruding "rebar", and no
+## coplanar cap fighting the ring face). Must stay below half the pole ring height (0.07).
+const RIB_INSET := 0.02
 ## Scatter shell ("loose fragments"): segment centroids at this distance from the core.
 const SCATTER_MIN := 3.5
 const SCATTER_MAX := 4.8
@@ -230,7 +234,8 @@ func _make_scatter(i: int, rng: RandomNumberGenerator) -> Transform3D:
 
 ## Transforms of the vertical ribs (RIB_COUNT) that appear in the final form. Each rib mesh
 ## (MeshBuilder.rib(**rib_mesh_params())) is placed at RIB_RADIUS, its flat back (+Z) facing
-## outwards, aligned with every other gap of the middle ring, spanning all layers.
+## outwards, aligned with every other gap of the middle ring, spanning all layers. The origin is
+## the vertical midpoint of the ring stack, so scaling Y about it (rib growth) stays inside it.
 func rib_transforms() -> Array[Transform3D]:
 	var out: Array[Transform3D] = []
 	var mid := layers[layers.size() >> 1]
@@ -243,13 +248,14 @@ func rib_transforms() -> Array[Transform3D]:
 	return out
 
 
-## Arguments for MeshBuilder.rib: {"height", "width", "depth"}.
+## Arguments for MeshBuilder.rib: {"height", "width", "depth"}. height = ring-stack span (bottom
+## face of the lowest ring → top face of the highest) − 2·RIB_INSET.
 func rib_mesh_params() -> Dictionary:
 	var bottom := layers[0]
 	var top := layers[layers.size() - 1]
 	var span := float(top["y"]) + float(top["height"]) * 0.5 \
 		- (float(bottom["y"]) - float(bottom["height"]) * 0.5)
-	return {"height": span + 2.0 * RIB_OVERHANG, "width": RIB_WIDTH, "depth": RIB_DEPTH}
+	return {"height": span - 2.0 * RIB_INSET, "width": RIB_WIDTH, "depth": RIB_DEPTH}
 
 
 ## Largest outer radius of any ring.

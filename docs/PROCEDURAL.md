@@ -76,8 +76,12 @@ externo máximo 3,05 (≤ 3,2); anéis sem sobreposição vertical; núcleo no c
 
 `rib_transforms()` → 12 transforms no raio 2,15 (dentro de [r_int, r_ext] de **todas** as camadas, por
 isso atravessam todos os anéis), alinhadas a cada segunda junta do anel equatorial; +Z local (dorso
-plano da lâmina) aponta para fora. `rib_mesh_params()` → `{height: 4,06, width: 0,055, depth: 0,08}`
-(cobre da base do anel inferior ao topo do superior + 0,12 de cada lado).
+plano da lâmina) aponta para fora. `rib_mesh_params()` → `{height: 3,78, width: 0,055, depth: 0,08}`:
+a pilha de anéis vai de y = −1,91 (face inferior do anel mais baixo) a +1,91 (face superior do mais
+alto), 3,82; a nervura recua `RIB_INSET` = 0,02 em cada ponta, ficando de −1,89 a +1,89 — as pontas
+ficam embutidas nos anéis polares (altura 0,14), sem sobra acima/abaixo da pilha ("vergalhão", revisão
+de arte do Loop 2) e sem tampa coplanar à face do anel (z-fighting). A origem da nervura é o meio da
+pilha (y = 0), então o crescimento `rib_growth` (escala Y em torno da origem) nunca sai da pilha.
 
 ### Variação por seed
 
@@ -98,7 +102,7 @@ futuras), altere as constantes de perfil ou `layer_count` (a soma continua 96).
 | `shard(size, seed)` | bipirâmide triangular irregular (~size em Y, ≤ 0,5·size em XZ) | por faceta | **18 / 6** |
 
 AABB das malhas do blueprint (seed 7): segmento da camada 2 ≈ 0,74 × 0,19 × 0,97 (x × y × z, z de
-2,085 a 3,05); nervura 0,055 × 4,06 × 0,08.
+2,085 a 3,05); nervura 0,055 × 3,78 × 0,08.
 
 ## Orçamento por consumidor (medido)
 
