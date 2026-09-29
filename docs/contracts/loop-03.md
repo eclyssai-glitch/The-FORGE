@@ -71,3 +71,15 @@ Doc: `docs/ANIMATION.md`.
 Coordenador: merge, `tools/run_tests.sh`, `tools/smoke_test.sh`, capturas 01–12 em `docs/evidence/loop-03/`,
 `tools/export_windows.sh`, smoke do pack, registro em `docs/BUILD.md` (zip + SHA-256 + commit),
 revisão `art-director` + auditoria `technical-auditor`, correções pelos donos, checkpoint, README/PRODUCT.
+
+## Pendências herdadas do Loop 2 (revisão art-director: APROVADO COM RESSALVAS)
+
+- [P1] animator + art-director: UNIVERSE subexposto (p99 8/255) e estrutura pequena — `exposure_scale` UNIVERSE
+  1.25→~1.6; plano UNIVERSE distance 90→~78, fov 40→~38 (sementes no quadro); ancorar os pilares (contorno BONE
+  fraco no piso/inlay no modo UNIVERSE); óculo solto (esconder no UNIVERSE ou baixar pitch).
+- [P2] art-director: flash de verificação e estado verificado ainda contornam cada segmento (leitura de grade) —
+  `flash_edge_energy` ~0.7 e máscara `outer` como a do `final_lock`; borda verificada −40%.
+- [P2] art-director/animator: reflexo cobre do núcleo num único segmento lê como "selecionado" — roughness do acabado
+  0.34→0.42 ou `core.light_specular` 0.35→0.2.
+- [P2] animator: fio da banda de verificação pontilhado (largura mínima em px); motes quase invisíveis (alfa 0.16 ou tom distinto das estrelas).
+- [P2] procedural-modeler: nervuras ultrapassam topo/base da pilha — limitar a altura.
