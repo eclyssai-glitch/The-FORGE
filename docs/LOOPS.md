@@ -56,8 +56,14 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
     12 nervuras, builders de malha; 34 testes novos) e `art-director` (1453376 — MaterialLibrary, 5 shaders,
     EnvironmentProfile com luz por estágio; regra do selo e do núcleo dormente). Suíte: 57/57.
     Provas visuais revisadas pelo coordenador (estrutura "lanterna" arquitetônica; metal escuro com arcos EMBER finos).
-  - Fase B em andamento: `animator` e `game-engineer` em worktrees paralelas.
-- Retomada: se interrompido, verificar branches `worktree-agent-*` com commits "loop 02:" e fazer merge;
-  depois Fase C (capturas de todas as fases, revisão art-director, auditoria).
+  - Fase B concluída e integrada: `game-engineer` (c4e8eff — world, universo, picker) e `animator`
+    (4772814 — 9 módulos, câmera, coreografia). Suíte 105/105; smoke PASS; capturas em `docs/evidence/loop-02/`.
+  - Fase C: revisão `art-director` REPROVADO (fase lit escura, arcos como wireframe, sementes dentro da câmara);
+    auditoria `technical-auditor` APROVADO COM RESSALVAS (clique×arrasto + 9 menores; robustez de seek/pausa/reset
+    confirmada, sem vazamentos). Rodada de correção especificada em `docs/contracts/loop-02-fixes.md`.
+  - Contêiner reiniciado durante a 1ª tentativa da rodada (sem trabalho perdido: worktrees vazias removidas).
+- Retomada: executar `docs/contracts/loop-02-fixes.md` — etapa 1 (art-director, game-engineer,
+  procedural-modeler) → merge → etapa 2 (animator) → merge → recapturar `docs/evidence/loop-02/` →
+  reauditoria (art-director + technical-auditor) → checkpoint.
 
 ## Loop 3 — Experiência interativa + build Windows · pendente
