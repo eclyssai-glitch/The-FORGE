@@ -23,7 +23,11 @@ No Windows com o editor instalado: *Project → Export → Windows Desktop*, ou
 | Jogo a partir do código | `tools/smoke_test.sh` e `tools/capture_evidence.sh` |
 
 O smoke reprova se: `RESULT=FAIL`, falta a linha `RESULT`, há `SCRIPT ERROR`/`Parse Error` no log,
-a linha `modules=N/M` tem N ≠ M (script de entidade, fx ou câmera ausente/quebrado) ou o tempo esgota.
+a linha `modules=N/M` tem N ≠ M (script de entidade, fx ou câmera ausente/quebrado), falta a linha
+`ui=` ou ela é `ui=absent` (HUD sem os grupos `ui_transport`/`demo_badge`), ou o tempo esgota.
+Com UI presente, o jogo aciona `Start`/`Pause`/`Reset` do transporte e exige o selo DEMO visível nos três
+modos. `SMOKE_ALLOW_MISSING_UI=1 tools/smoke_test.sh` passa `--allow-missing-ui` ao jogo e tolera
+apenas `ui=absent` (branches em que a UI ainda não existe); nunca usar para validar uma entrega.
 
 Encerramento robusto (Xvfb + lavapipe às vezes não encerra o Godot após o último quadro):
 
@@ -48,11 +52,12 @@ drivers gráficos do Windows, janela) só é validado pelo checklist abaixo, num
 
 1. Extraia o zip; confira o SHA-256 (`certutil -hashfile <zip> SHA256`) com o `.sha256`.
 2. Execute `KoriumUniverse.exe`. Esperado: janela maximizada, fade de entrada, selo **DEMO MODE**.
-3. (a partir do Loop 3) `Espaço` inicia/pausa, `R` reinicia, `1/2/3` alternam UNIVERSE/FORGE/OBSERVATORY.
+3. (a partir do Loop 3) `Espaço` inicia/pausa, `R` reinicia, `1/2/3` alternam UNIVERSE/FORGE/OBSERVATORY,
+   `V` liga/desliga a câmera cinematográfica, `H` oculta/mostra o HUD, `Esc` limpa a seleção, `F11` tela cheia.
 4. (a partir do Loop 3) Assista à demo completa (~50 s): 7 fases visíveis; OBSERVATORY mostra 7/7 objetivos.
 5. Opcional, teste automatizado: `KoriumUniverse.exe -- --smoke-test` e leia
-   `%APPDATA%\Godot\app_userdata\KORIUM UNIVERSE\smoke_report.txt` (esperado `modules=9/9` e
-   `RESULT=PASS`; um módulo do mundo que não carregou reprova o smoke).
+   `%APPDATA%\Godot\app_userdata\KORIUM UNIVERSE\smoke_report.txt` (esperado `modules=9/9`,
+   `ui=present` e `RESULT=PASS`; um módulo do mundo que não carregou ou a UI ausente reprova o smoke).
 
 ## Builds registradas
 

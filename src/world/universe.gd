@@ -3,8 +3,11 @@ extends Node3D
 ## The universe around the ORIGIN CHAMBER: a procedural sky (VOID background, sparse cold
 ## stars, a barely visible distant dust band) and the three dormant seeds of future constructs,
 ## placed beyond the chamber (60–70 units from the centre; the floor ends at 34).
-## Seeds are pickable (StaticBody3D on collision layer 2 with meta "entity_id") and drift
-## slowly in real time — an ambient breath that carries no simulation state.
+## Each seed root joins the group Session.entity_group(id) ("entity_<id>", focus target). Seeds
+## are pickable (StaticBody3D with meta "entity_id") only in UNIVERSE: elsewhere they sit beyond
+## the end of the depth fog (invisible), so their bodies leave collision layer 2 (see
+## apply_mode / seeds_pickable_in). They drift slowly in real time — an ambient breath that
+## carries no simulation state.
 
 const SKY_SHADER := preload("res://src/world/universe_sky.gdshader")
 
@@ -42,9 +45,11 @@ const STAR_INTENSITY := {
 
 var sky_material: ShaderMaterial
 
-var _seeds: Dictionary = {}  # id -> {"root": Node3D, "body": Node3D, "rings": Node3D, "base": Vector3, "phase": float}
+var _seeds: Dictionary = {}  # id -> {"root", "body", "rings": Node3D, "pick": StaticBody3D, "base": Vector3, "phase": float}
 var _elapsed := 0.0
 var _halo: ShaderMaterial
+## Seeds start unpickable until apply_mode() says otherwise (the default mode is FORGE).
+var _pickable := false
 
 
 func _init() -> void:
@@ -78,9 +83,29 @@ func apply_sky(env: Environment) -> void:
 	env.background_mode = Environment.BG_SKY
 
 
-## Per-mode sky settings (called by the world on Session.mode_changed and at start).
+## Per-mode settings (called by the world on Session.mode_changed and at start): sky star
+## brightness and whether the seeds can be picked.
 func apply_mode(mode: SessionState.Mode) -> void:
 	sky_material.set_shader_parameter("star_intensity", star_intensity_for(mode))
+	set_seeds_pickable(seeds_pickable_in(mode))
+
+
+## Seeds are only selectable where they are visible: UNIVERSE (fog ends at 220). In FORGE and
+## OBSERVATORY the depth fog ends at 34/30 units and the seeds (60–70) are fully hidden.
+static func seeds_pickable_in(mode: SessionState.Mode) -> bool:
+	return mode == SessionState.Mode.UNIVERSE
+
+
+## Puts every seed pick body on (or off) the pick layer. Off = collision_layer 0: rays of the
+## Picker (mask 2) pass through.
+func set_seeds_pickable(enabled: bool) -> void:
+	_pickable = enabled
+	for id: StringName in _seeds:
+		(_seeds[id]["pick"] as StaticBody3D).collision_layer = PICK_LAYER if enabled else 0
+
+
+func seeds_pickable() -> bool:
+	return _pickable
 
 
 static func star_intensity_for(mode: SessionState.Mode) -> float:
@@ -132,6 +157,7 @@ func _build_seed(s: Dictionary) -> void:
 	var root := Node3D.new()
 	root.name = String(id)
 	root.position = seed_base_position(s)
+	root.add_to_group(SessionState.entity_group(id))
 	add_child(root)
 
 	var body := Node3D.new()
@@ -166,7 +192,7 @@ func _build_seed(s: Dictionary) -> void:
 
 	var pick := StaticBody3D.new()
 	pick.name = "Pick"
-	pick.collision_layer = PICK_LAYER
+	pick.collision_layer = PICK_LAYER if _pickable else 0
 	pick.collision_mask = 0
 	pick.set_meta(&"entity_id", id)
 	var shape := CollisionShape3D.new()
@@ -176,7 +202,7 @@ func _build_seed(s: Dictionary) -> void:
 	pick.add_child(shape)
 	root.add_child(pick)
 
-	_seeds[id] = {"root": root, "body": body, "rings": rings, "base": root.position, "phase": float(s["phase"])}
+	_seeds[id] = {"root": root, "body": body, "rings": rings, "pick": pick, "base": root.position, "phase": float(s["phase"])}
 
 
 ## Thin halo ring of `radius_factor`·size; cross-section scales with the seed so the rings keep

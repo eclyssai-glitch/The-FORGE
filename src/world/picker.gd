@@ -5,7 +5,8 @@ extends Node
 ## hit's `entity_id` meta to `Session.select` (left click) or `Session.hover` (mouse motion).
 ## A left press whose accumulated travel (every movement between press and release, not just
 ## the net displacement) reaches InputTuning.DRAG_THRESHOLD_PX is a camera orbit drag, not a
-## click. Clicking empty space clears the selection; the `deselect` action too.
+## click. Clicking empty space clears the selection (the `deselect` action is handled by
+## Shortcuts, src/core/shortcuts.gd).
 ## Uses `_unhandled_input`, so events consumed by the UI never reach it; it never marks events
 ## as handled, so the camera rig still receives the same drags.
 ## Physics queries run in `_physics_process` (the safe place to use the direct space state).
@@ -28,9 +29,6 @@ func _init() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("deselect"):
-		Session.select(&"")
-		return
 	var mb := event as InputEventMouseButton
 	if mb and mb.button_index == MOUSE_BUTTON_LEFT:
 		if mb.pressed:

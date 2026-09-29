@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Runs the real game (real renderer) with --smoke-test: the ORIGIN CHAMBER demo is
-# played at 8x, then pause and reset are exercised. Exit 0 = PASS.
+# played at 8x, then pause and reset are exercised, then the native UI (transport buttons
+# Start/Pause/Reset of group "ui_transport", visible "demo_badge" with "DEMO" in every mode).
+# Exit 0 = PASS. A HUD without those groups fails (`ui=absent`) unless SMOKE_ALLOW_MISSING_UI=1,
+# which passes --allow-missing-ui to the game (only for branches where the UI does not exist yet).
 # Fails on: RESULT=FAIL, missing RESULT line (e.g. a script failed to load),
 # any SCRIPT ERROR / Parse Error in the log, a `modules=N/M` line with N != M (a world module
 # — entity, fx or camera script — failed to load), or the TIMEOUT (seconds, default 240) expiring.
@@ -16,15 +19,17 @@ source tools/_proc.sh
 pack=""
 if [ "${1:-}" = "--pack" ]; then pack="$2"; shift 2; fi
 TIMEOUT="${TIMEOUT:-240}"
+game_flags=(--smoke-test)
+if [ "${SMOKE_ALLOW_MISSING_UI:-0}" = "1" ]; then game_flags+=(--allow-missing-ui); fi
 GRACE="${SMOKE_GRACE:-15}"
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
 log="$(mktemp)"
 PROC_ON_EXIT='rm -f "$log"'
 trap 'rm -f "$log"' EXIT
 if [ -n "$pack" ]; then
-  cmd=(tools/godot.sh --main-pack "$pack" -- --smoke-test "$@")
+  cmd=(tools/godot.sh --main-pack "$pack" -- "${game_flags[@]}" "$@")
 else
-  cmd=(tools/godot.sh --path . -- --smoke-test "$@")
+  cmd=(tools/godot.sh --path . -- "${game_flags[@]}" "$@")
 fi
 has_result() { grep -qE "^RESULT=(PASS|FAIL)" "$log"; }
 proc_start "$log" tools/_display.sh "${cmd[@]}"
@@ -47,6 +52,11 @@ if [ -z "$modules_line" ]; then echo "smoke_test: no modules= line." >&2; exit 1
 loaded="${modules_line#modules=}"; total="${loaded#*/}"; loaded="${loaded%/*}"
 if [ "$loaded" != "$total" ]; then
   echo "smoke_test: only $loaded of $total world modules loaded — failing." >&2; exit 1
+fi
+ui_line="$(grep -oE "^ui=[a-z]+" "$log" | tail -n1 || true)"
+if [ -z "$ui_line" ]; then echo "smoke_test: no ui= line." >&2; exit 1; fi
+if [ "$ui_line" = "ui=absent" ] && [ "${SMOKE_ALLOW_MISSING_UI:-0}" != "1" ]; then
+  echo "smoke_test: native UI absent (ui=absent) — failing (SMOKE_ALLOW_MISSING_UI=1 tolerates it)." >&2; exit 1
 fi
 grep -q "^RESULT=PASS" "$log" || { echo "smoke_test: no RESULT=PASS line." >&2; exit 1; }
 exit "$status"

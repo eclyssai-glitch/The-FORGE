@@ -5,15 +5,22 @@ extends Node
 ##   --capture=<dir>         save evidence screenshots of each demo phase to <dir>, then exit
 ##   --capture-only=<prefix> with --capture: only captures whose name starts with <prefix>
 ##   --quality=<low|medium|high|ultra>   force a quality level for this run (not persisted)
+##   --allow-missing-ui      with --smoke-test: a HUD without the "ui_transport"/"demo_badge"
+##                           groups is reported as `ui=absent` instead of failing
+## Global keyboard shortcuts live in the "Shortcuts" child (src/core/shortcuts.gd).
 
 @onready var world: Node3D = $World
 @onready var hud: CanvasLayer = $HUD
 @onready var fade: ColorRect = $FadeLayer/Fade
 
+var shortcuts: Shortcuts
+
 var _fade_tween: Tween
 
 
 func _ready() -> void:
+	shortcuts = Shortcuts.new()
+	add_child(shortcuts)
 	var args := _parse_args(OS.get_cmdline_user_args())
 	if args.has("quality"):
 		var idx := QualityProfiles.LEVEL_NAMES.find(String(args["quality"]).to_upper())
@@ -36,12 +43,6 @@ func finish_fade() -> void:
 		_fade_tween.kill()
 	fade.color.a = 0.0
 	fade.hide()
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("toggle_fullscreen"):
-		var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED if full else DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 
 static func _parse_args(raw: PackedStringArray) -> Dictionary:
