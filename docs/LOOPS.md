@@ -106,3 +106,20 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   17,5 MB, sem áudio; gravado em 26 min por renderização em software (Forward+, HIGH). Não versionado (build/).
   Quadros conferidos em todos os trechos do roteiro. Reproduzir: `tools/record_review.sh`.
 - Verificação: `tools/run_tests.sh` 193/193.
+
+## Loop 4 — ART DIRECTION RESET · em andamento
+
+- Motivo: v0.1.0 aprovada tecnicamente, **reprovada na direção artística** (parece protótipo técnico; sem VFX/SFX
+  memoráveis). Nova visão: MIKU (agente central original) suspensa no espaço, mãos auxiliares gigantes formando
+  corpos celestes, planetas = subagentes, luas = documentação, anéis = skills, cinturões = memória, lógica
+  relacional de vault em astronomia visual; estética contemplativa, cósmica, poética, cinematográfica.
+- Brief e contratos: `docs/contracts/loop-04.md`. Novos agentes: `sound-designer`, `art-critic` (somente leitura).
+  Decisão: ADR-013 (escultura/áudio offline, venv `/opt/korium-py`).
+- Arquitetura congelada e reaproveitada: `Simulation`/`Session`/`Quality`, padrão `EventTimeline`/estado derivado,
+  automação/smoke/capturas, export determinístico. Estética v0.1 (câmara, anéis, HUD de painéis) substituível.
+- Fases: A (postmortem + bíblia + shaders · esculturas · áudio · eventos GENESIS) → B (cena animada, VFX, câmeras,
+  UI diegética, mixagem) → C (virada para GENESIS, style frames, capturas, vídeo com áudio, art-critic +
+  technical-auditor, correções, export, checkpoint).
+- Retomada: ver o estado das fases abaixo; worktrees de agentes interrompidos sem commits podem ser removidas e
+  relançadas a partir do contrato.
+- Estado: Fase A iniciada.

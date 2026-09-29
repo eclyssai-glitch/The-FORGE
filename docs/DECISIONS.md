@@ -85,3 +85,15 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
 - Cobertura: (2) valida todo o conteúdo do jogo (cenas, scripts, recursos). **Não** cobre o código
   específico do Windows — o template `windows_release_x86_64`, drivers Vulkan/D3D12/OpenGL do Windows,
   janela e ícone. Isso só é validado executando o `.exe` no Windows (checklist em `docs/BUILD.md`).
+
+## ADR-013 — Escultura e áudio gerados offline (venv de ferramentas)
+- Contexto: o Loop 4 (ART DIRECTION RESET) exige personagem e mãos esculturais e som original. Primitivas
+  montadas em runtime não alcançam formas orgânicas; raymarching de SDF em runtime custa caro no LOW/iGPU;
+  amostras ou geradores comerciais (inclusive as ferramentas Higgsfield disponíveis na sessão) violam as regras
+  de originalidade/sem API comercial sem autorização.
+- Decisão: ferramentas Python offline, determinísticas (seed fixa), em `tools/sculpt/` (SDF → marching cubes →
+  OBJ com AO por vértice em `assets/meshes/`) e `tools/audio/` (síntese → OGG Vorbis em `assets/audio/`).
+  Os resultados são **versionados**; o jogo não roda Python. Venv `/opt/korium-py` (numpy, scipy, scikit-image,
+  fora do repositório, criado pelo hook SessionStart). Nenhum asset de terceiros.
+- Consequência: assets reproduzíveis a partir do código; regenerá-los exige o venv; o export continua offline e
+  determinístico.

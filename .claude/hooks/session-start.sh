@@ -12,4 +12,10 @@ if ! command -v xvfb-run >/dev/null || ! dpkg -s mesa-vulkan-drivers >/dev/null 
     || { apt-get update -qq >/dev/null 2>&1 || true; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb xauth mesa-vulkan-drivers libgl1-mesa-dri libvulkan1 zip >/dev/null; }
 fi
 tools/setup_godot.sh
+# Offline asset tooling (ADR-013): sculpt bake + audio synthesis. Not needed by the game itself.
+if [ ! -x /opt/korium-py/bin/python ] || ! /opt/korium-py/bin/python -c 'import numpy, scipy, skimage' >/dev/null 2>&1; then
+  python3 -m venv /opt/korium-py >/dev/null 2>&1 \
+    && /opt/korium-py/bin/pip install -q numpy scipy scikit-image >/dev/null 2>&1 \
+    || echo "warning: /opt/korium-py tooling venv unavailable (only needed to regenerate assets)" >&2
+fi
 godot --headless --import --path . >/dev/null 2>&1 || true
