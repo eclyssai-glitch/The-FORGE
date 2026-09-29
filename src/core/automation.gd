@@ -9,9 +9,11 @@ const SMOKE_SPEED := 8.0
 const EXIT_WATCHDOG_SECONDS := 3.0
 const REPORT_NAME := "smoke_report.txt"
 
-## Capture points: [file name, simulation time, mode, (selected id), (focused id)].
-## Without a selected id the selection is cleared; a focused id is requested after the camera
-## snapped to the mode shot, and gets FOCUS_SETTLE seconds to frame it.
+## Capture points: [file name, simulation time, mode, (selected id), (focused id), (options)].
+## Without a selected id the selection is cleared; a non-empty focused id is requested after the
+## camera snapped to the mode shot, and gets FOCUS_SETTLE seconds to frame it. The optional
+## trailing Dictionary holds per-shot options: {"hud": false} hides the HUD for that shot
+## (Session.set_hud_visible; the DEMO badge must stay). Every other shot shows the HUD.
 const CAPTURES: Array = [
 	["01_dormant_core", 0.5, SessionState.Mode.FORGE],
 	["02_core_active", 5.0, SessionState.Mode.FORGE],
@@ -25,6 +27,7 @@ const CAPTURES: Array = [
 	["10_forge_inspector", 30.5, SessionState.Mode.FORGE, &"layer_2"],
 	["11_observatory_mid", 37.0, SessionState.Mode.OBSERVATORY],
 	["12_universe_seed_focus", 49.0, SessionState.Mode.UNIVERSE, &"seed_aurel", &"seed_aurel"],
+	["13_hud_hidden", 49.0, SessionState.Mode.FORGE, {"hud": false}],
 ]
 ## Real seconds a capture waits after seek/mode change (and after a focus request).
 const CAPTURE_SETTLE := 2.4
@@ -210,18 +213,37 @@ func _run_capture(dir: String) -> void:
 			continue
 		Session.set_mode(c[2])
 		Simulation.seek(c[1])
-		Session.select(c[3] if c.size() > 3 else &"")
+		Session.select(capture_selected(c))
+		Session.set_hud_visible(bool(capture_options(c).get("hud", true)))
 		_snap_cameras()
-		if c.size() > 4:
-			Session.focus(c[4])
+		var focus_id := capture_focus(c)
+		if focus_id != &"":
+			Session.focus(focus_id)
 			await _settle(FOCUS_SETTLE)
 		else:
 			await _settle(CAPTURE_SETTLE)
 		var img := get_viewport().get_texture().get_image()
 		var path := abs_dir.path_join("%s.png" % c[0])
 		img.save_png(path)
-		print("[capture] %s (t=%.1f, %s, selected=%s)" % [path, c[1], Session.mode_name(), Session.selected])
+		print("[capture] %s (t=%.1f, %s, selected=%s, hud=%s, %dx%d)" % [path, c[1], Session.mode_name(),
+			Session.selected, Session.hud_visible, img.get_width(), img.get_height()])
+	Session.set_hud_visible(true)
 	_quit(0)
+
+
+## Selected id of a capture entry (&"" = clear the selection).
+static func capture_selected(c: Array) -> StringName:
+	return StringName(c[3]) if c.size() > 3 and not (c[3] is Dictionary) else &""
+
+
+## Focused id of a capture entry (&"" = none).
+static func capture_focus(c: Array) -> StringName:
+	return StringName(c[4]) if c.size() > 4 and not (c[4] is Dictionary) else &""
+
+
+## Per-shot options of a capture entry: its trailing Dictionary, or {}.
+static func capture_options(c: Array) -> Dictionary:
+	return c.back() if c.size() > 3 and c.back() is Dictionary else {}
 
 
 ## Ends an automation run. quit() normally ends the main loop at the end of this frame; if

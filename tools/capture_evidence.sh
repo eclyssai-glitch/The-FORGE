@@ -2,7 +2,8 @@
 # Captures evidence screenshots of every demo phase and every mode from the real
 # game (see src/core/automation.gd CAPTURES).
 #   tools/capture_evidence.sh docs/evidence/loop-02 [--quality=high] [--capture-only=<prefix>]
-#                                                   [--timeout=<s>]
+#                                                   [--resolution=WxH] [--timeout=<s>]
+# --resolution=WxH: window (and Xvfb screen) size, default 1600x900 (e.g. 1280x720).
 # Total time limit: --timeout=<s> or CAPTURE_TIMEOUT (default 900 s).
 # Exit 0 = every expected PNG (CAPTURES, filtered by --capture-only) was written by this run —
 # even if the engine hung on exit and had to be killed ("forced exit after captures" on
@@ -15,14 +16,19 @@ dir="${1:-docs/evidence/latest}"; shift || true
 timeout_s="${CAPTURE_TIMEOUT:-900}"
 grace_s="${CAPTURE_GRACE:-15}"
 only=""
+resolution="1600x900"
 game_args=()
 for a in "$@"; do
   case "$a" in
     --timeout=*) timeout_s="${a#--timeout=}" ;;
+    --resolution=*) resolution="${a#--resolution=}" ;;
     --capture-only=*) only="${a#--capture-only=}"; game_args+=("$a") ;;
     *) game_args+=("$a") ;;
   esac
 done
+if ! [[ "$resolution" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
+  echo "capture_evidence: --resolution must be WxH (e.g. 1280x720), got '$resolution'." >&2; exit 2
+fi
 mkdir -p "$dir"
 
 # Expected files: names of src/core/automation.gd CAPTURES, same prefix filter as the game.
@@ -51,8 +57,8 @@ all_written() {
 }
 
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
-proc_start "$log" env SCREEN="${SCREEN:-1600x900x24}" tools/_display.sh \
-  tools/godot.sh --path . --resolution 1600x900 -- "--capture=$dir" "${game_args[@]}"
+proc_start "$log" env SCREEN="${SCREEN:-${resolution}x24}" tools/_display.sh \
+  tools/godot.sh --path . --resolution "$resolution" -- "--capture=$dir" "${game_args[@]}"
 proc_supervise "$timeout_s" "$grace_s" all_written
 
 missing=()
@@ -69,5 +75,5 @@ case "$PROC_OUTCOME" in
   timeout) echo "capture_evidence: forced exit after captures (total timeout ${timeout_s}s)." >&2 ;;
   *) [ "$PROC_STATUS" -eq 0 ] || echo "capture_evidence: engine exited with status $PROC_STATUS after all captures." >&2 ;;
 esac
-echo "capture_evidence: ${#expected[@]}/${#expected[@]} captures in $dir"
+echo "capture_evidence: ${#expected[@]}/${#expected[@]} captures in $dir (${resolution})"
 ls -la "${expected[@]}"

@@ -85,10 +85,11 @@ primeiro aos nós mais abaixo da árvore):
   `HOVER_LEVEL` 0,5 se `Session.hovered == id`, 0 caso contrário **ou fora do UNIVERSE**
   (`highlight_target(id, selected, hovered, pickable)`, estático). O nível anda em tempo real
   (`move_toward`, 0→1 em `Palette.T_FAST`) em `update_highlight(delta)`, chamado do `_process`, e só
-  escreve uniformes quando muda. Efeito, sempre BONE: fresnel `cold_color` ASH→BONE e `cold_energy`
-  `COLD_ENERGY_BASE` 0,55 → `COLD_ENERGY_SELECTED` 1,5; halo `strength` 0,18 → `HALO_STRENGTH_SELECTED`
-  0,6. `energy` fica em 0 (nunca EMBER, nunca PALE). Usa só uniformes existentes do `dormant_seed`
-  (sem uniform dedicado de seleção; ver pedido ao `art-director` no relatório do Loop 3).
+  escreve uniformes quando muda. `_apply_highlight` escreve **só** o uniform `select` (= nível) do
+  corpo e o `strength` do halo (0,18 → `HALO_STRENGTH_SELECTED` 0,3). Cor e intensidade da seleção
+  (`select_color` BONE, `select_energy`) são do `MaterialLibrary.dormant_seed()` (art-director); o
+  repouso do corpo (`cold_color`, `cold_energy`) nunca é tocado pelo destaque e o `universe.gd` não
+  usa `Palette.BONE/ASH` no corpo. `energy` fica em 0 (nunca EMBER, nunca PALE).
 - **Deriva**: oscilação lenta (período ~46 s, ±0,35 un.) e giro lento, em tempo real. É respiração
   ambiente, não estado de simulação: não depende de `Simulation.time` e não precisa de seek.
 - API: `seed_ids()`, `seed_node(id)`, `seed_base_position(s)`, `drift_offset(t, phase)`,
@@ -110,6 +111,12 @@ primeiro aos nós mais abaixo da árvore):
 - Movimento do mouse → `Session.hover(id)` (congelado durante arrasto).
 - Usa `_unhandled_input`: eventos consumidos pela UI não chegam; o Picker nunca marca eventos como
   tratados, para a câmera receber os mesmos arrastos.
+- Hover sobre a UI (Loop 3, M-2): `_input` (antes da UI) marca cada movimento como "não chegou";
+  `_unhandled_input` marca "chegou". Se o último movimento de um passo de física não chegou ao mundo
+  (um painel STOP, slider etc. o consumiu), `Session.hovered` é limpo — um painel sobre uma semente
+  não a deixa destacada. `NOTIFICATION_WM_MOUSE_EXIT` (ponteiro sai da janela) também limpa.
+  Detecção por consumo em vez de `gui_get_hovered_control()`: vale para qualquer controle que
+  consuma o evento e é testável headless (lá a GUI não roteia o ponteiro, sem janela sob o mouse).
 - Contrato para quem é selecionável: `StaticBody3D` com `collision_layer = 2` e
   `set_meta("entity_id", StringName)` (ids de `EntityCatalog`).
 - API: `pick_at(screen_pos)`, `pick_ray(from, to)`, `path_length(points)`, `is_click_path(points)`,
@@ -138,9 +145,14 @@ primeiro aos nós mais abaixo da árvore):
 seleção da captura (`Session.select`, vazia se não houver), chama `snap_to_mode_shot()` em todos os
 nós do grupo `camera_director` e, se a captura pede foco, `Session.focus(id)` e espera
 `FOCUS_SETTLE` (3,6 s) em vez de `CAPTURE_SETTLE` (2,4 s). Entrada de `CAPTURES`:
-`[nome, t, modo, (selecionado), (foco)]`. Loop 3: `10_forge_inspector` (t=30,5, FORGE, `layer_2`),
+`[nome, t, modo, (selecionado), (foco), (opções)]` — o Dictionary final opcional traz opções por
+captura (`{"hud": false}` esconde o HUD via `Session.set_hud_visible`; as demais capturas mostram o
+HUD, e ele volta visível no fim). Leitura por `capture_selected(c)`, `capture_focus(c)`,
+`capture_options(c)` (estáticos). Loop 3: `10_forge_inspector` (t=30,5, FORGE, `layer_2`),
 `11_observatory_mid` (t=37, OBSERVATORY), `12_universe_seed_focus` (t=49, UNIVERSE, seleciona e foca
-`seed_aurel`).
+`seed_aurel`), `13_hud_hidden` (t=49, FORGE, HUD oculto — o selo DEMO continua).
+`tools/capture_evidence.sh --resolution=WxH` (padrão 1600x900) define janela e tela Xvfb; o conjunto
+1280×720 usa `--resolution=1280x720`. O log `[capture]` registra `hud=` e o tamanho da imagem.
 
 Smoke (`--smoke-test`), depois da demo e de pausa/reinício: exercita a UI real por grupos —
 `ui_transport` (botões `Start`, `Pause`, `Reset` via `pressed.emit()`, conferindo
@@ -160,12 +172,14 @@ e o brilho das estrelas, uniform `radiance_lift` presente, 3 sementes com coliso
 acumulado), raycast e clique/arrasto/ida-e-volta/vazio via `_unhandled_input`, grupos `entity_<id>` das
 sementes, sementes selecionáveis só no UNIVERSE (camada por modo, além do fim da névoa FORGE/OBSERVATORY,
 câmera do plano FORGE virada para cada semente + varredura do quadro FORGE, câmera do plano UNIVERSE),
-destaque de seleção/hover das sementes (materiais próprios, transição gradual, hover 0,5, seleção 1 com
-fresnel BONE, desmarcar volta ao repouso, `energy` 0 e halo BONE, nenhum destaque fora do UNIVERSE).
+destaque de seleção/hover das sementes (materiais próprios, transição gradual, `select` 0,5 no hover e 1
+na seleção, `cold_color`/`cold_energy` fixos no valor da biblioteca, halo 0,3, desmarcar volta ao repouso,
+`energy` 0 e halo BONE, nenhum destaque fora do UNIVERSE), hover limpo quando a UI consome o movimento
+ou o ponteiro sai da janela.
 `tests/integration/test_interaction_flow.gd`: ações e teclas (V, H, Espaço, R, 1/2/3, Esc, F11; soltar,
 eco e Ctrl não disparam), atalhos alteram `Simulation`/`Session`, `focus` emite sempre, `hud_visible`
 alterna com sinal, `LineEdit`/`HSlider` em foco bloqueiam e `Button` não, `main.tscn` compõe `Shortcuts`
-e a UI sobrevive a modos/seleção/foco/HUD em headless, `CAPTURES` 10–12, e o smoke de UI
+e a UI sobrevive a modos/seleção/foco/HUD em headless, `CAPTURES` 10–13 (13 com HUD oculto), e o smoke de UI
 (`_smoke_ui`: ausente reprova sem a flag; UI conforme de teste passa; selo oculto reprova).
 `tests/unit/test_quality_profiles.gd`: perfis completos (inclui `shadow_splits`), custo monotônico,
 `shadow_splits` LOW 2 e demais 4.

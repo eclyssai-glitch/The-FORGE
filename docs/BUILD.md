@@ -39,6 +39,8 @@ Encerramento robusto (Xvfb + lavapipe às vezes não encerra o Godot após o úl
   `CAPTURES` em `src/core/automation.gd` (filtrada por `--capture-only`); só contam PNG gravados
   nesta execução. Todos presentes → saída 0, mesmo se foi preciso encerrar o motor
   ("forced exit after captures", `CAPTURE_GRACE` s após o último, padrão 15); falta algum → saída 1.
+  `--resolution=WxH` (padrão 1600x900) define a janela do jogo e a tela do Xvfb (ex.: conjunto
+  1280×720 com `--resolution=1280x720`); formato inválido → saída 2.
 - No jogo (`automation.gd`, só em `--capture`/`--smoke-test`): o fade de entrada é concluído antes da
   1ª captura (brilho determinístico) e, se `quit()` não encerrar o laço principal em 3 s, o processo
   se mata (`OS.kill`).

@@ -10,9 +10,10 @@ extends Node3D
 ## carries no simulation state.
 ## Selection/hover highlight (only where seeds are pickable, i.e. UNIVERSE): each seed owns a
 ## duplicate of MaterialLibrary.dormant_seed() and of its halo. Selected = 1, hovered =
-## HOVER_LEVEL; the level eases in real time (Palette.T_FAST) and raises the fresnel
-## (cold_color ASH -> BONE, cold_energy) and the halo strength (BONE). `energy` stays 0: never
-## EMBER, never PALE.
+## HOVER_LEVEL; the level eases in real time (Palette.T_FAST) and drives only the shader's
+## `select` uniform (its colour/energy, `select_color`/`select_energy`, belong to
+## MaterialLibrary) and the halo strength (BONE). The body's rest look (`cold_color`,
+## `cold_energy`) is never touched here. `energy` stays 0: never EMBER, never PALE.
 
 const SKY_SHADER := preload("res://src/world/universe_sky.gdshader")
 
@@ -41,11 +42,9 @@ const RING_THICKNESS := 0.04
 const RING_WIDTH := 0.12
 ## Halo ring strength (BONE, dormant: no energy, no EMBER).
 const HALO_STRENGTH := 0.18
-## Highlight: level when hovered (selected = 1); fresnel and halo at rest and at full highlight.
+## Highlight: level when hovered (selected = 1); halo strength at full highlight.
 const HOVER_LEVEL := 0.5
-const COLD_ENERGY_BASE := 0.55
-const COLD_ENERGY_SELECTED := 1.5
-const HALO_STRENGTH_SELECTED := 0.6
+const HALO_STRENGTH_SELECTED := 0.3
 ## Star brightness of the sky per mode: full in UNIVERSE, quiet behind the chamber.
 const STAR_INTENSITY := {
 	SessionState.Mode.UNIVERSE: 0.55,
@@ -122,9 +121,9 @@ func seed_halo_material(id: StringName) -> ShaderMaterial:
 	return _seeds[id]["halo_mat"] if _seeds.has(id) else null
 
 
+## Highlight level h (0..1) -> the seed's `select` uniform and halo strength; nothing else.
 static func _apply_highlight(body_mat: ShaderMaterial, halo_mat: ShaderMaterial, h: float) -> void:
-	body_mat.set_shader_parameter("cold_color", Palette.ASH.lerp(Palette.BONE, h))
-	body_mat.set_shader_parameter("cold_energy", lerpf(COLD_ENERGY_BASE, COLD_ENERGY_SELECTED, h))
+	body_mat.set_shader_parameter("select", h)
 	halo_mat.set_shader_parameter("strength", lerpf(HALO_STRENGTH, HALO_STRENGTH_SELECTED, h))
 
 

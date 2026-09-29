@@ -172,14 +172,26 @@ func test_capture_list_has_loop3_shots() -> void:
 	for c: Array in AutomationScript.CAPTURES:
 		names.append(String(c[0]))
 		assert_between(float(c[1]), 0.0, Simulation.duration(), "%s time inside the demo" % c[0])
-		if c.size() > 3:
-			assert_false(EntityCatalog.info(c[3]).is_empty(), "%s selects a catalog entity" % c[0])
-	for n in ["10_forge_inspector", "11_observatory_mid", "12_universe_seed_focus"]:
+		var sel := AutomationScript.capture_selected(c)
+		if sel != &"":
+			assert_false(EntityCatalog.info(sel).is_empty(), "%s selects a catalog entity" % c[0])
+	for n in ["10_forge_inspector", "11_observatory_mid", "12_universe_seed_focus", "13_hud_hidden"]:
 		assert_has(names, n)
 	var c12: Array = AutomationScript.CAPTURES[names.find("12_universe_seed_focus")]
 	assert_eq(c12[2], SessionState.Mode.UNIVERSE)
-	assert_eq(c12[3], &"seed_aurel")
-	assert_eq(c12[4], &"seed_aurel")
+	assert_eq(AutomationScript.capture_selected(c12), &"seed_aurel")
+	assert_eq(AutomationScript.capture_focus(c12), &"seed_aurel")
+	assert_true(AutomationScript.capture_options(c12).is_empty())
+	# 13: final form in FORGE with the HUD hidden (the DEMO badge stays, see test_ui_*).
+	var c13: Array = AutomationScript.CAPTURES[names.find("13_hud_hidden")]
+	assert_eq(float(c13[1]), 49.0)
+	assert_eq(c13[2], SessionState.Mode.FORGE)
+	assert_eq(AutomationScript.capture_selected(c13), &"")
+	assert_eq(AutomationScript.capture_focus(c13), &"")
+	assert_false(bool(AutomationScript.capture_options(c13).get("hud", true)), "13 hides the HUD")
+	for c: Array in AutomationScript.CAPTURES:
+		if String(c[0]) != "13_hud_hidden":
+			assert_true(bool(AutomationScript.capture_options(c).get("hud", true)), "%s shows the HUD" % c[0])
 
 
 func test_smoke_ui_helpers() -> void:

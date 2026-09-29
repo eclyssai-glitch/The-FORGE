@@ -17,7 +17,7 @@ static func build() -> Array[SimEvent]:
 	e.append(SimEvent.new(&"ev-001", 1.5, SimEvent.CORE_ACTIVATION,
 		"CORE ACTIVATION", "Activation sequence started on the origin core.", &"origin_core"))
 	e.append(SimEvent.new(&"ev-002", 4.0, SimEvent.CORE_ONLINE,
-		"CORE ONLINE", "Origin core reached a stable energy state.", &"origin_core"))
+		"CORE STABLE", "Origin core reached a stable energy state.", &"origin_core"))
 	e.append(SimEvent.new(&"ev-003", 6.0, SimEvent.FRAGMENTS_EMITTED,
 		"FRAGMENTS EMITTED", "%d geometric fragments released into the chamber." % FRAGMENT_COUNT,
 		&"fragment_field", {"count": FRAGMENT_COUNT}))
