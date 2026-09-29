@@ -1,0 +1,189 @@
+extends GutTest
+## World composition: environment, quality and mode wiring, missing modules, universe seeds and
+## picking. Works whether or not the animator's modules (entities/fx/camera) are present.
+
+const WorldScene := preload("res://scenes/world.tscn")
+const WorldScript := preload("res://src/world/world.gd")
+
+var world: WorldScript
+var _prev_level: QualityProfiles.Level
+var _prev_auto: bool
+var _prev_mode: SessionState.Mode
+
+
+func before_each() -> void:
+	_prev_level = Quality.level
+	_prev_auto = Quality.auto
+	_prev_mode = Session.mode
+	world = WorldScene.instantiate()
+	add_child_autofree(world)
+
+
+func after_each() -> void:
+	Quality.override_for_session(_prev_level)
+	Quality.auto = _prev_auto
+	Session.set_mode(_prev_mode)
+	Session.select(&"")
+	Session.hover(&"")
+
+
+func test_environment_is_configured() -> void:
+	var we := world.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	assert_not_null(we, "WorldEnvironment exists")
+	var env: Environment = world.environment
+	assert_not_null(env)
+	assert_eq(we.environment, env)
+	assert_eq(env.tonemap_mode, Environment.TONE_MAPPER_AGX)
+	assert_true(env.fog_enabled, "depth fog on")
+	assert_eq(env.background_mode, Environment.BG_SKY, "universe sky installed")
+	assert_not_null(env.sky)
+	assert_eq(env.sky.sky_material, world.universe.sky_material)
+
+
+func test_loop1_skeleton_is_gone() -> void:
+	assert_eq(world.find_children("*", "OmniLight3D", false, false).size(), 0, "no loose EMBER omni light at the world root")
+	assert_eq(world.find_children("*", "MeshInstance3D", false, false).size(), 0, "no placeholder sphere at the world root")
+
+
+func test_missing_module_is_skipped() -> void:
+	assert_null(WorldScript.load_module("res://src/entities/__does_not_exist__.gd"))
+	assert_null(WorldScript.load_module("res://src/world/quality_profiles.gd"), "RefCounted is not a module")
+
+
+func test_present_modules_are_composed_in_order() -> void:
+	var last := -1
+	for m in WorldScript.MODULES:
+		var node := world.get_node_or_null(NodePath(m[0]))
+		assert_eq(node != null, ResourceLoader.exists(m[1]), "%s present iff its script exists" % m[0])
+		if node:
+			assert_gt(node.get_index(), last, "%s after the previous module" % m[0])
+			last = node.get_index()
+	assert_gt(world.universe.get_index(), last, "universe after the chamber modules")
+	assert_eq(world.picker.get_index(), world.get_child_count() - 1, "picker is last")
+
+
+func test_there_is_always_a_current_camera() -> void:
+	var cam := world.get_viewport().get_camera_3d()
+	assert_not_null(cam)
+	assert_true(world.is_ancestor_of(cam), "the active camera belongs to the world")
+	if ResourceLoader.exists(WorldScript.CAMERA_DIRECTOR[1]):
+		assert_null(world.fallback_camera)
+		assert_true(world.modules["CameraDirector"].is_in_group(WorldScript.CAMERA_GROUP))
+	else:
+		assert_eq(cam, world.fallback_camera)
+
+
+func test_quality_toggles_costly_effects() -> void:
+	var env: Environment = world.environment
+	Quality.override_for_session(QualityProfiles.Level.LOW)
+	assert_false(env.ssao_enabled, "LOW: no SSAO")
+	assert_false(env.volumetric_fog_enabled, "LOW: no volumetric fog")
+	assert_false(env.ssil_enabled)
+	Quality.override_for_session(QualityProfiles.Level.ULTRA)
+	assert_true(env.ssao_enabled, "ULTRA: SSAO")
+	assert_true(env.volumetric_fog_enabled, "ULTRA: volumetric fog")
+	assert_true(env.ssil_enabled, "ULTRA: SSIL")
+
+
+func test_mode_changes_fog() -> void:
+	var env: Environment = world.environment
+	Session.set_mode(SessionState.Mode.FORGE)
+	var forge_end := env.fog_depth_end
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	assert_eq(env.fog_depth_end, float(EnvironmentProfile.mode_fog(SessionState.Mode.UNIVERSE)["fog_depth_end"]))
+	assert_gt(env.fog_depth_end, forge_end, "UNIVERSE sees farther than FORGE")
+
+
+func test_universe_has_three_pickable_seeds() -> void:
+	var u: Universe = world.universe
+	assert_eq(u.seed_ids(), [&"seed_aurel", &"seed_vesper", &"seed_lattice"] as Array[StringName])
+	for id in u.seed_ids():
+		var root := u.seed_node(id)
+		assert_not_null(root, String(id))
+		var d := root.global_position.length()
+		assert_between(d, 18.0, 30.0, "%s distance from the chamber" % id)
+		var bodies := root.find_children("*", "StaticBody3D", true, false)
+		assert_eq(bodies.size(), 1, "%s has one pick body" % id)
+		var body := bodies[0] as StaticBody3D
+		assert_eq(body.collision_layer, 2)
+		assert_eq(body.get_meta(&"entity_id"), id)
+		var shapes := body.find_children("*", "CollisionShape3D", true, false)
+		assert_eq(shapes.size(), 1)
+		assert_not_null((shapes[0] as CollisionShape3D).shape)
+		assert_true(EntityCatalog.all_ids().has(id), "%s is a catalog entity" % id)
+
+
+func test_seeds_drift_slowly_within_range() -> void:
+	var u: Universe = world.universe
+	var root := u.seed_node(&"seed_vesper")
+	var before := root.position
+	u._process(7.0)
+	var moved := root.position.distance_to(before)
+	assert_gt(moved, 0.0, "seeds drift")
+	assert_lt(moved, 1.0, "drift is slight")
+	for t in [0.0, 13.0, 29.0, 61.0]:
+		assert_lt(Universe.drift_offset(t, 1.0).length(), Universe.DRIFT_AMPLITUDE * 1.2)
+
+
+func test_picker_click_logic() -> void:
+	assert_true(Picker.is_click(Vector2(100, 100), Vector2(103, 104)))
+	assert_false(Picker.is_click(Vector2(100, 100), Vector2(106, 100)), "6 px is an orbit drag")
+	assert_eq(Picker.entity_id_of_hit({}), &"")
+	var body := StaticBody3D.new()
+	body.set_meta(&"entity_id", &"seed_aurel")
+	assert_eq(Picker.entity_id_of(body), &"seed_aurel")
+	var child := StaticBody3D.new()
+	body.add_child(child)
+	assert_eq(Picker.entity_id_of(child), &"seed_aurel", "falls back to the parent's meta")
+	body.free()
+
+
+func test_picker_raycast_hits_seed_and_misses_void() -> void:
+	await wait_physics_frames(2)
+	var target := world.universe.seed_node(&"seed_lattice").global_position
+	var from := target + Vector3(0.0, 0.0, 12.0)
+	assert_eq(world.picker.pick_ray(from, target), &"seed_lattice")
+	assert_eq(world.picker.pick_ray(Vector3(0, 200, 0), Vector3(0, 400, 0)), &"", "empty space")
+
+
+func test_click_selects_and_empty_click_clears() -> void:
+	var cam := Camera3D.new()
+	world.add_child(cam)
+	var target := world.universe.seed_node(&"seed_aurel").global_position
+	cam.global_position = target + Vector3(0.0, 0.0, 10.0)
+	cam.look_at(target)
+	cam.make_current()
+	await wait_physics_frames(2)
+	var center := world.get_viewport().get_visible_rect().size * 0.5
+	_click(center, center + Vector2(2, 1))
+	await wait_physics_frames(2)
+	assert_eq(Session.selected, &"seed_aurel", "click on a seed selects it")
+	# A drag (orbit) does not change the selection.
+	_click(Vector2(1, 1), Vector2(80, 1))
+	await wait_physics_frames(2)
+	assert_eq(Session.selected, &"seed_aurel")
+	# Click in the void clears the selection.
+	cam.look_at(target + Vector3(0.0, 40.0, 0.0))
+	_click(center, center)
+	await wait_physics_frames(2)
+	assert_eq(Session.selected, &"")
+	# Deselect action.
+	Session.select(&"seed_vesper")
+	var esc := InputEventAction.new()
+	esc.action = &"deselect"
+	esc.pressed = true
+	world.picker._unhandled_input(esc)
+	assert_eq(Session.selected, &"")
+
+
+func _click(press: Vector2, release: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = press
+	world.picker._unhandled_input(down)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = release
+	world.picker._unhandled_input(up)
