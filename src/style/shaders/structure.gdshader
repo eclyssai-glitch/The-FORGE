@@ -45,7 +45,15 @@ uniform float lock_edge_share : hint_range(0.0, 1.0) = 0.5;
 uniform float lock_px_scale : hint_range(1.0, 3.0) = 1.6;
 uniform float pale_edge_energy = 2.4;
 // Per-segment verify flash (INSTANCE_CUSTOM.g): lower than the sweep so it never reads as a grid.
-uniform float flash_edge_energy = 0.6;
+// Masked to the outer wall (v_outer), like the lock ring: a lampejo along the ring, not a grid.
+uniform float flash_edge_energy = 0.7;
+// Finished hairline + chamfer (albedo mix, BONE): the finished/verified surface outline.
+// Kept low so the lit ring reads as one surface, not as a grid of outlined blocks.
+uniform float finished_line : hint_range(0.0, 1.0) = 0.18;
+uniform float finished_chamfer : hint_range(0.0, 1.0) = 0.08;
+// Width multiplier of the selection/hover hairline: a 1 px line breaks into dashes on grazing
+// caps without MSAA (LOW); a slightly wider line stays continuous.
+uniform float select_px_scale : hint_range(1.0, 3.0) = 1.5;
 
 varying flat vec4 v_custom;
 varying vec3 v_world;
@@ -94,10 +102,12 @@ void fragment() {
 	vec3 albedo = mix(raw_color, finished_color, f);
 	// Raw: faint darker seams read the cut. Finished: light-catching lighter hairline.
 	albedo *= 1.0 - 0.28 * line * (1.0 - f);
-	albedo = mix(albedo, edge_color, (0.10 * chamfer + 0.30 * line) * f);
+	albedo = mix(albedo, edge_color, (finished_chamfer * chamfer + finished_line * line) * f);
 	ALBEDO = albedo;
 	METALLIC = mix(0.0, 0.35, f);
-	ROUGHNESS = mix(0.9, 0.34, f) - 0.18 * chamfer * f;
+	// 0.42 finished: broad enough that the core's EMBER reflection spreads over the ring instead of
+	// lighting one single segment (which read as "selected").
+	ROUGHNESS = mix(0.9, 0.42, f) - 0.18 * chamfer * f;
 	SPECULAR = mix(0.35, 0.5, f);
 
 	// --- Emission (every term has a narrative owner) ---
@@ -115,10 +125,12 @@ void fragment() {
 	float dy = (v_world.y - scan_y) / scan_half_width;
 	float band = exp(-dy * dy) * clamp(scan_strength, 0.0, 1.0);
 	emit += pale_color * band * (line * pale_edge_energy + chamfer * 0.45 + 0.05);
-	emit += pale_color * flash * (line * flash_edge_energy + 0.08);
+	emit += pale_color * flash * (line * v_outer * flash_edge_energy + 0.08);
 
-	// BONE: selection / hover.
-	emit += select_color * highlight * (line * 1.2 + fres * 0.18);
+	// BONE: selection / hover (a slightly wider hairline, see select_px_scale).
+	float sel_w = edge_px * select_px_scale;
+	float sel_line = (1.0 - smoothstep(sel_w - 0.5, sel_w + 0.5, d_px)) * far_fade;
+	emit += select_color * highlight * (sel_line * 1.2 + fres * 0.18);
 
 	EMISSION = emit;
 }

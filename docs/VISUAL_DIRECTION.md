@@ -60,12 +60,42 @@ Antes de `CORE_ACTIVATION` o núcleo **não tem EMBER**: casco `core_shell` com 
 luz do núcleo desligada (`LIGHT.dormant.core`). O que o revela é só o contraluz frio (`RIM_COLOR`)
 e o fresnel do casco — uma silhueta no escuro. EMBER entra com a ativação, subindo `energy`.
 
-### Selo DEMO MODE (implementação na UI do Loop 3)
+### Selo DEMO MODE
 
-O selo é informação permanente, não energia: **texto BONE** em IBM Plex Mono, rótulo curto em
-maiúsculas espaçadas, sobre fundo `PANEL` com contorno `PANEL_LINE`; opcionalmente um marcador
-quadrado ASH à esquerda. Nunca EMBER (sugeriria atividade/alerta) e nunca PALE (é da verificação).
-Fica num canto, pequeno, sempre visível e legível em 1280×720.
+O selo é informação permanente, não energia: **texto BONE** em IBM Plex Mono ("DEMO MODE", + "SIMULATED
+EVENTS" em tom apagado), sobre fundo `PANEL` com contorno `PANEL_LINE` e um marcador quadrado ASH à esquerda.
+Nunca EMBER (sugeriria atividade/alerta) e nunca PALE (é da verificação). Canto superior esquerdo, pequeno,
+sempre visível — inclusive com o HUD oculto (H) — e legível em 1280×720 (`src/ui/demo_badge.gd`).
+
+## UI (HUD nativo, `src/ui/`)
+
+Nós `Control` + `Theme` construídos em código (`UiTheme`, a partir de `Palette` e das fontes embarcadas);
+a UI só conversa com o mundo por `Simulation`, `Session` e `Quality`.
+
+- **Composição**: a UI mora nas bordas, o centro é do mundo. Topo: selo (esquerda), modos (centro, com as
+  teclas 1/2/3 discretas), SETTINGS (direita). Esquerda: painel do modo. Direita: inspector (quando há
+  seleção) e feed de eventos acima do transporte. Base: transporte em faixa única.
+- **Por modo**: FORGE — lista CONSTRUCT (núcleo, camadas I–V, verificação; clique seleciona).
+  UNIVERSE — SITES (câmara + 3 sementes; clique seleciona e enquadra) + dica de navegação.
+  OBSERVATORY — folha à esquerda (38% da largura, sem feed): missão com ✓ e progresso, verificação (checks com
+  tempo), entidades, log completo rolável e rodapé "SIMULATED DATA"; o inspector desce para o canto inferior
+  direito para não cobrir a estrutura enquadrada à direita.
+- **Hierarquia de texto**: rótulos em Inter maiúsculas espaçadas (`Caption` apagado 11 px, `RowText` 11 px,
+  `Title` 13–15 px); dados, tempos e status em IBM Plex Mono (`Data` BONE, `DataDim` apagado). Prosa só no
+  resumo do inspector e no detalhe do log (`Body`). Nada de texto decorativo.
+- **Cor**: tudo VOID→BONE. Painéis `PANEL` translúcido + hairline `PANEL_LINE`; hover/seleção são lavagens BONE
+  (`PANEL_HOVER`/`PANEL_ACTIVE`) com um fio BONE à esquerda da linha selecionada; texto secundário `TEXT_DIM`.
+  **A UI nunca usa EMBER nem PALE** (teste `test_ui_theme`).
+- **Linha do tempo**: fio fino; trecho decorrido ASH; uma marca por mudança de fase (derivada dos eventos),
+  BONE quando já passou; cabeça BONE. Arrastar/clicar faz `Simulation.seek`.
+- **Movimento**: troca de modo faz cross-fade dos painéis (`T_BASE` entrando, `T_FAST` saindo); H esmaece tudo
+  menos o selo. Tempo/fase atualizam a 10 Hz (`T_UI_REFRESH`); listas só em eventos e `world_rebuilt`.
+- **Input**: nós de layout com `MOUSE_FILTER_IGNORE` (órbita e picking livres fora dos painéis); painéis
+  param o mouse só no próprio retângulo. Nenhum botão pega foco de teclado (Espaço/R/1–3 sempre chegam aos
+  atalhos globais).
+- **Nada sugere conexão real**: nenhum vocabulário de rede/conta (connect, sync, cloud, server, login —
+  teste `test_ui_hud`); o rodapé do OBSERVATORY diz
+  "SIMULATED DATA · LOCAL · DETERMINISTIC".
 
 ## Materiais (`MaterialLibrary`)
 
@@ -85,7 +115,6 @@ Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.ti
 | `dormant_seed()` | sementes do UNIVERSE | corpo quase preto com fresnel ASH frio; `energy` aquece para EMBER |
 | `mote(color)` | poeira (quad de `GPUParticles3D`) | `ShaderMaterial` (`particle_mote.gdshader`): unshaded, aditivo, billboard de partículas (mantém escala/giro), disco redondo e suave, alpha pela rampa de cor do sistema; `near_fade` (Vector2, metros de vista) esconde o que passa rente à lente; cache por cor |
 | `spark(color)` | faíscas sólidas (malha `shard`, sem billboard) | `StandardMaterial3D` unshaded, aditivo, dupla face, cor só do material; cache por cor |
-| `particle(color)` | **obsoleto** | quad quadrado; mantido só até `src/fx` migrar para `mote()`/`spark()` |
 
 ### Estrutura: estados
 
@@ -96,8 +125,10 @@ Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.ti
 - **Bruto**: cinza fosco claro (ASH→BONE), dielétrico, com costuras finas mais escuras que leem o corte.
   **Opaco de propósito**: translucidez num MultiMesh de 96 instâncias sobrepostas não ordena entre instâncias
   (artefatos), perde sombras e SSAO e custa overdraw em hardware modesto; o "inacabado" é dito pelo valor claro e fosco.
-- **Acabado**: meio-metal escuro (SLATE puxado para ASH), rugosidade baixa-média, chanfro fino de tamanho físico
-  que pega a luz e hairline BONE. Metal demais com albedo escuro vira buraco: sem nada para refletir, a parede
+- **Acabado**: meio-metal escuro (SLATE puxado para ASH), rugosidade média (0.42: o reflexo EMBER do núcleo se
+  espalha pelo anel em vez de acender um só segmento, que lia como "selecionado"), chanfro fino de tamanho físico
+  que pega a luz e hairline BONE discreta (`finished_line` 0.18, `finished_chamfer` 0.08: o anel acabado/verificado
+  lê como uma superfície, não como grade de blocos contornados). Metal demais com albedo escuro vira buraco: sem nada para refletir, a parede
   some no VOID. Por isso o metal é parcial (a key ainda ilumina o difuso) e o ambiente reflete o céu
   (`reflected_light_source = SKY`, cujo passe de radiância é um VOID levemente erguido — dono: game-engineer).
   O acabamento só vale para segmentos assentados (`finish × r`).
@@ -109,7 +140,10 @@ Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.ti
   As paredes externas dos segmentos se unem num círculo contínuo. Tampas, bordas internas e laterais ficam
   sem EMBER: nada de contorno de "wireframe".
 - **Varredura**: banda gaussiana em Y que acende hairlines e chanfros em PALE. O flash `g` marca checagens com
-  energia própria (`flash_edge_energy`, abaixo da banda) para ler como um lampejo, não como grade.
+  energia própria (`flash_edge_energy` 0.7, abaixo da banda) e só na parede externa (máscara `v_outer`, a mesma
+  do `final_lock`), para ler como um lampejo ao longo do anel, não como grade.
+- **Seleção/hover** (`b`): hairline BONE um pouco mais larga que a das arestas (`select_px_scale` 1.5), para não
+  se quebrar em tracejado nas tampas rasantes sem MSAA (LOW), + fresnel leve.
 
 ### Contrato de malha com os consumidores
 
@@ -147,7 +181,10 @@ A luz conta a história; o `LightRig` interpola os níveis (em `Palette.T_CINEMA
 - `apply_quality(env, profile)`: liga/desliga SSAO, SSIL, glow e volumétrica pelo perfil de `Quality`;
   sem volumétrica (LOW) a névoa de profundidade começa mais perto para manter a profundidade.
 - `mode_fog(mode)` / `apply_mode_fog(env, mode)`: FORGE fechado, OBSERVATORY recua o mundo atrás do painel,
-  UNIVERSE vê longe (sementes além da câmara, a 60–70 unidades, legíveis) e um pouco mais claro.
+  UNIVERSE vê longe (sementes além da câmara, a 60–70 unidades, legíveis) e mais claro (`exposure_scale` 1.5).
+  No UNIVERSE o volume volumétrico é curto (`UNIVERSE_VOLUMETRIC_LENGTH`): visto a ~80 unidades, um volume que
+  alcançava a câmara absorvia a maior parte da luz dela — o HIGH ficava muito mais escuro que o LOW (sem
+  volumétrica). Com o volume curto os dois perfis leem igual (mediana do centro 10 vs 12/255, p99 43 vs 49).
   A chave `exposure_scale` (todos os modos; não é propriedade do `Environment`, `apply_mode_fog` a ignora)
   é multiplicada pelo `LightRig` sobre a exposição do estágio.
 - **Reflexos**: `reflected_light_source = SKY` explícito (ver "Acabado").
