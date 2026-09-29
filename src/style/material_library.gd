@@ -18,7 +18,7 @@ static func structure() -> ShaderMaterial:
 	if not _cache.has(&"structure"):
 		var m := _shader_material("structure")
 		m.set_shader_parameter("raw_color", Palette.ASH.lerp(Palette.BONE, 0.55))
-		m.set_shader_parameter("finished_color", Palette.SLATE)
+		m.set_shader_parameter("finished_color", Palette.SLATE.lerp(Palette.ASH, 0.65))
 		m.set_shader_parameter("edge_color", Palette.BONE)
 		m.set_shader_parameter("ember_color", Palette.EMBER)
 		m.set_shader_parameter("pale_color", Palette.PALE)
@@ -62,7 +62,7 @@ static func scan_ring() -> ShaderMaterial:
 		var m := _shader_material("emissive_band")
 		m.set_shader_parameter("color", Palette.PALE)
 		m.set_shader_parameter("strength", 0.0)
-		m.set_shader_parameter("intensity", 1.8)
+		m.set_shader_parameter("intensity", 1.0)
 		m.set_shader_parameter("softness", 0.85)
 		_cache[&"scan_ring"] = m
 	return _cache[&"scan_ring"]
@@ -119,8 +119,23 @@ static func dormant_seed() -> ShaderMaterial:
 	return _cache[&"dormant_seed"]
 
 
-## Particle material: unshaded, additive, billboarded by the particle system, alpha from the
-## particle colour ramp (vertex colour). `color` must be a Palette colour; cached per colour.
+## Mote material for billboarded particles (GPUParticles3D draw pass on a QuadMesh): unshaded,
+## additive, round soft disc (shaders/particle_mote.gdshader), alpha from the particle colour
+## ramp (vertex colour). Uniform `near_fade` (Vector2, view metres: hidden -> visible), default
+## (3.5, 8.0). `color` must be a Palette colour; cached per colour — duplicate() to tune near_fade.
+static func mote(color: Color) -> ShaderMaterial:
+	var key := StringName("mote_" + color.to_html(true))
+	if not _cache.has(key):
+		var m := _shader_material("particle_mote")
+		m.set_shader_parameter("color", color)
+		m.set_shader_parameter("near_fade", Vector2(3.5, 8.0))
+		_cache[key] = m
+	return _cache[key]
+
+
+## DEPRECATED — kept only so current callers (src/fx) keep working until they migrate:
+## dust -> mote(color) (round soft disc; set `near_fade` instead of distance_fade_*),
+## sparks -> spark(color). Remove once nothing calls it. Draws square quads: do not use for new work.
 static func particle(color: Color) -> StandardMaterial3D:
 	var key := StringName("particle_" + color.to_html(true))
 	if not _cache.has(key):
@@ -130,6 +145,23 @@ static func particle(color: Color) -> StandardMaterial3D:
 		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 		m.vertex_color_use_as_albedo = true
+		m.albedo_color = color
+		m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+		m.disable_receive_shadows = true
+		_cache[key] = m
+	return _cache[key]
+
+
+## Solid emissive shard (non-billboard meshes such as the emission sparks): unshaded, additive,
+## double-sided, colour from the material only. `color` must be a Palette colour; cached per colour.
+static func spark(color: Color) -> StandardMaterial3D:
+	var key := StringName("spark_" + color.to_html(true))
+	if not _cache.has(key):
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		m.albedo_color = color
 		m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 		m.disable_receive_shadows = true

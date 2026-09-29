@@ -59,7 +59,6 @@ Antes de `CORE_ACTIVATION` o núcleo **não tem EMBER**: casco `core_shell` com 
 (metal GRAPHITE com fresnel BONE mínimo), coração `core_heart` com `energy = 0` (negro),
 luz do núcleo desligada (`LIGHT.dormant.core`). O que o revela é só o contraluz frio (`RIM_COLOR`)
 e o fresnel do casco — uma silhueta no escuro. EMBER entra com a ativação, subindo `energy`.
-A luz âmbar pontual do esqueleto do Loop 1 (`src/world/world.gd`) deve sair (pedido ao game-engineer).
 
 ### Selo DEMO MODE (implementação na UI do Loop 3)
 
@@ -84,7 +83,9 @@ Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.ti
 | `floor()` | piso da câmara | quase preto, rugoso, especular baixo (leve reflexo) |
 | `architecture()` | pilares, colunas, óculo | GRAPHITE fosco; nunca mais brilhante que a estrutura |
 | `dormant_seed()` | sementes do UNIVERSE | corpo quase preto com fresnel ASH frio; `energy` aquece para EMBER |
-| `particle(color)` | poeira/faíscas | unshaded, aditivo, billboard de partículas, alpha pela cor do sistema |
+| `mote(color)` | poeira (quad de `GPUParticles3D`) | `ShaderMaterial` (`particle_mote.gdshader`): unshaded, aditivo, billboard de partículas (mantém escala/giro), disco redondo e suave, alpha pela rampa de cor do sistema; `near_fade` (Vector2, metros de vista) esconde o que passa rente à lente; cache por cor |
+| `spark(color)` | faíscas sólidas (malha `shard`, sem billboard) | `StandardMaterial3D` unshaded, aditivo, dupla face, cor só do material; cache por cor |
+| `particle(color)` | **obsoleto** | quad quadrado; mantido só até `src/fx` migrar para `mote()`/`spark()` |
 
 ### Estrutura: estados
 
@@ -95,14 +96,20 @@ Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.ti
 - **Bruto**: cinza fosco claro (ASH→BONE), dielétrico, com costuras finas mais escuras que leem o corte.
   **Opaco de propósito**: translucidez num MultiMesh de 96 instâncias sobrepostas não ordena entre instâncias
   (artefatos), perde sombras e SSAO e custa overdraw em hardware modesto; o "inacabado" é dito pelo valor claro e fosco.
-- **Acabado**: metal escuro SLATE, rugosidade média, chanfro fino de tamanho físico que pega a luz e hairline BONE.
+- **Acabado**: meio-metal escuro (SLATE puxado para ASH), rugosidade baixa-média, chanfro fino de tamanho físico
+  que pega a luz e hairline BONE. Metal demais com albedo escuro vira buraco: sem nada para refletir, a parede
+  some no VOID. Por isso o metal é parcial (a key ainda ilumina o difuso) e o ambiente reflete o céu
+  (`reflected_light_source = SKY`, cujo passe de radiância é um VOID levemente erguido — dono: game-engineer).
   O acabamento só vale para segmentos assentados (`finish × r`).
 - **Arestas**: vêm do UV (0..1 por face, garantido pelo MeshBuilder): distância à borda convertida em pixels →
   hairlines de largura constante, com fade quando a face fica pequena na tela (sem cintilação à distância).
 - **Montagem** (`a`): todas as arestas do segmento em EMBER, transitório.
-- **Forma final** (`final_lock`): EMBER só nas arestas de **arco** (bordas v), que se unem em anéis contínuos
-  ao redor da estrutura — discreto, sem contorno de "wireframe".
-- **Varredura**: banda gaussiana em Y que acende hairlines e chanfros em PALE; o flash `g` marca checagens.
+- **Forma final** (`final_lock`): **um anel EMBER por camada** — só a borda superior da **parede externa**
+  (máscara `v_outer` calculada no espaço da malha, cuja origem é o eixo do anel; `lock_px_scale` alarga a linha).
+  As paredes externas dos segmentos se unem num círculo contínuo. Tampas, bordas internas e laterais ficam
+  sem EMBER: nada de contorno de "wireframe".
+- **Varredura**: banda gaussiana em Y que acende hairlines e chanfros em PALE. O flash `g` marca checagens com
+  energia própria (`flash_edge_energy`, abaixo da banda) para ler como um lampejo, não como grade.
 
 ### Contrato de malha com os consumidores
 
@@ -118,12 +125,15 @@ A luz conta a história; o `LightRig` interpola os níveis (em `Palette.T_CINEMA
 | Estágio | Eventos | Leitura |
 |---|---|---|
 | `dormant` | até `CORE_ACTIVATION` | quase escuro: só contraluz frio e ambiente mínimo; sem EMBER |
-| `active` | `CORE_ACTIVATION` → `MATERIALS_APPLIED` | o núcleo é a fonte: luz EMBER local, key mal existe |
+| `active` | `CORE_ACTIVATION` → `LIGHTING_APPLIED` | o núcleo é a fonte: luz EMBER local, key mal existe |
 | `lit` | `LIGHTING_APPLIED` | key BONE sobe, a estrutura acabada aparece inteira |
 | `verify` | `VERIFICATION_STARTED` → `VERIFICATION_PASSED` | key recua um pouco para a banda PALE ler |
 | `final` | `STRUCTURE_FINALIZED` em diante | nível mais alto, núcleo pleno, arcos EMBER |
 
-- Cores: `KEY_COLOR` (BONE, quente-neutro), `FILL_COLOR` e `RIM_COLOR` (ASH, frios), `CORE_COLOR` (EMBER, a única luz quente).
+- Cores: `KEY_COLOR` (BONE, quente-neutro), `FILL_COLOR` e `RIM_COLOR` (ASH, frios), `CORE_COLOR` (EMBER, a única luz quente),
+  `AMBIENT_COLOR` (ASH: o ambiente só pesa quando a energia do estágio sobe — `lit`/`final` revelam as paredes
+  que a key não alcança; em `dormant` continua desprezível).
+- As paredes de frente para a câmera FORGE recebem pouca key: quem as desenha é o fill (frio) e o ambiente.
 - `FOG_LIGHT`: as direcionais quase não entram na névoa volumétrica (é o que a tornaria leitosa);
   o volume ganha corpo só em volta do núcleo.
 
@@ -137,9 +147,12 @@ A luz conta a história; o `LightRig` interpola os níveis (em `Palette.T_CINEMA
 - `apply_quality(env, profile)`: liga/desliga SSAO, SSIL, glow e volumétrica pelo perfil de `Quality`;
   sem volumétrica (LOW) a névoa de profundidade começa mais perto para manter a profundidade.
 - `mode_fog(mode)` / `apply_mode_fog(env, mode)`: FORGE fechado, OBSERVATORY recua o mundo atrás do painel,
-  UNIVERSE vê longe (sementes a 18–30 unidades legíveis).
+  UNIVERSE vê longe (sementes além da câmara, a 60–70 unidades, legíveis) e um pouco mais claro.
+  A chave `exposure_scale` (todos os modos; não é propriedade do `Environment`, `apply_mode_fog` a ignora)
+  é multiplicada pelo `LightRig` sobre a exposição do estágio.
+- **Reflexos**: `reflected_light_source = SKY` explícito (ver "Acabado").
 
 ## Custo
 
-Estrutura: um único draw (MultiMesh), opaco, algumas derivadas por pixel, sem texturas. Emissivos de anel são
+Estrutura: 5 MultiMesh (um por camada) + nervuras, opacos, algumas derivadas por pixel, sem texturas. Emissivos de anel são
 aditivos sem escrita de profundidade. Os efeitos caros (volumétrica, SSAO, SSIL, glow) obedecem ao perfil de `Quality`.
