@@ -6,7 +6,7 @@ extends CanvasLayer
 ## Composition (UI at the edges, the centre belongs to the world):
 ##   top-left     DemoBadge (always visible, also with the HUD hidden)
 ##   top-centre   ModeBar                       top-right   SettingsMenu
-##   left         ForgePanel (FORGE) | UniversePanel (UNIVERSE) | ObservatoryPanel sheet (~38%, OBSERVATORY)
+##   left         ForgePanel (FORGE) | UniversePanel (UNIVERSE) | ObservatoryPanel sheet (24 px margin → 38%, OBSERVATORY)
 ##   right        Inspector (when something is selected; top-right, bottom-right in OBSERVATORY)
 ##                · EventFeed (FORGE / UNIVERSE, above the transport)
 ##   bottom       Transport (buttons, timeline, time, phase, speed)
@@ -53,8 +53,11 @@ func _ready() -> void:
 	var edge := float(Palette.UI_EDGE)
 
 	observatory_panel = ObservatoryPanel.new()
+	# The sheet keeps the chrome margin on the left (like every panel); its right edge stays at the
+	# OBSERVATORY share of the width.
 	_anchor(observatory_panel, 0.0, 0.0, Palette.OBSERVATORY_PANEL_SHARE, 1.0)
-	observatory_panel.offset_top = TOP_BAND
+	observatory_panel.offset_left = edge
+	observatory_panel.offset_top = TOP_BAND + 8.0
 	chrome.add_child(observatory_panel)
 
 	forge_panel = ForgePanel.new()

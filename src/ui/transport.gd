@@ -22,7 +22,7 @@ var _speed_group := ButtonGroup.new()
 func _init() -> void:
 	name = "Transport"
 	theme_type_variation = &"HudPanel"
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	add_to_group(GROUP)
 	add_theme_stylebox_override("panel", UiTheme.box(Palette.PANEL, Palette.PANEL_LINE, Vector4i.ONE, 12, 8))
 	var row := UiKit.hbox(10)

@@ -24,7 +24,7 @@ var _id: StringName = &""
 func _init() -> void:
 	name = "Inspector"
 	theme_type_variation = &"HudPanel"
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	var v := UiKit.vbox(6)
 	add_child(v)
 	var head := UiKit.hbox()

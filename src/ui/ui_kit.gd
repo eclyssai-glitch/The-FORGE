@@ -2,7 +2,16 @@ class_name UiKit
 extends RefCounted
 ## Small factories shared by the HUD components, so every control gets the same defaults:
 ## keyboard focus off (Space/R/1-3 always reach the global Shortcuts, a clicked button never keeps
-## the keys), layout nodes never catch the mouse (orbit/picking stay free outside panels).
+## the keys), layout nodes never catch the mouse (orbit/picking stay free outside panels), and
+## whatever catches the mouse also keeps the wheel (see catch_mouse).
+
+
+## Makes `c` catch the mouse over its own rect, including the wheel: Godot lets scroll events
+## through MOUSE_FILTER_STOP by default (mouse_force_pass_scroll_events), which would zoom the
+## camera while scrolling over a panel. Every HUD control that catches the mouse goes through here.
+static func catch_mouse(c: Control, filter: Control.MouseFilter = Control.MOUSE_FILTER_STOP) -> void:
+	c.mouse_filter = filter
+	c.mouse_force_pass_scroll_events = false
 
 
 static func label(text: String, variation: StringName = &"", autowrap := false) -> Label:
@@ -23,7 +32,7 @@ static func button(text: String, variation: StringName = &"", toggle := false) -
 		b.theme_type_variation = variation
 	b.toggle_mode = toggle
 	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_filter = Control.MOUSE_FILTER_STOP
+	catch_mouse(b)
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	return b
 
@@ -72,7 +81,7 @@ static func header(caption: String) -> Array:
 static func panel(variation: StringName = &"HudPanel") -> PanelContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = variation
-	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	catch_mouse(p)
 	return p
 
 

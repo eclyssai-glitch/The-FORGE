@@ -76,9 +76,12 @@ a UI só conversa com o mundo por `Simulation`, `Session` e `Quality`.
   teclas 1/2/3 discretas), SETTINGS (direita). Esquerda: painel do modo. Direita: inspector (quando há
   seleção) e feed de eventos acima do transporte. Base: transporte em faixa única.
 - **Por modo**: FORGE — lista CONSTRUCT (núcleo, camadas I–V, verificação; clique seleciona).
-  UNIVERSE — SITES (câmara + 3 sementes; clique seleciona e enquadra) + dica de navegação.
-  OBSERVATORY — folha à esquerda (38% da largura, sem feed): missão com ✓ e progresso, verificação (checks com
-  tempo), entidades, log completo rolável e rodapé "SIMULATED DATA"; o inspector desce para o canto inferior
+  UNIVERSE — SITES (câmara + 3 sementes; clique seleciona e enquadra) + dica de navegação (tecla `RowText`
+  BONE, ação `Caption` apagada: mesma fonte e corpo, mesma linha de base).
+  OBSERVATORY — folha à esquerda (margem de 24 px como todo painel, borda direita em 38% da largura, sem feed):
+  missão com ✓ e progresso, verificação (checks com tempo; **só o check em curso diz RUNNING**, os seguintes
+  PENDING), entidades, log completo rolável (uma linha por evento; o detalhe em `Body` só no evento mais recente
+  e no mais recente da entidade selecionada) e rodapé "SIMULATED DATA"; o inspector desce para o canto inferior
   direito para não cobrir a estrutura enquadrada à direita.
 - **Hierarquia de texto**: rótulos em Inter maiúsculas espaçadas (`Caption` apagado 11 px, `RowText` 11 px,
   `Title` 13–15 px); dados, tempos e status em IBM Plex Mono (`Data` BONE, `DataDim` apagado). Prosa só no
@@ -91,7 +94,9 @@ a UI só conversa com o mundo por `Simulation`, `Session` e `Quality`.
 - **Movimento**: troca de modo faz cross-fade dos painéis (`T_BASE` entrando, `T_FAST` saindo); H esmaece tudo
   menos o selo. Tempo/fase atualizam a 10 Hz (`T_UI_REFRESH`); listas só em eventos e `world_rebuilt`.
 - **Input**: nós de layout com `MOUSE_FILTER_IGNORE` (órbita e picking livres fora dos painéis); painéis
-  param o mouse só no próprio retângulo. Nenhum botão pega foco de teclado (Espaço/R/1–3 sempre chegam aos
+  param o mouse só no próprio retângulo — **inclusive a roda**: tudo que pega o mouse passa por
+  `UiKit.catch_mouse` (`mouse_force_pass_scroll_events = false`), senão rolar sobre um painel daria zoom na
+  câmera (teste `test_ui_hud`). Nenhum botão pega foco de teclado (Espaço/R/1–3 sempre chegam aos
   atalhos globais).
 - **Nada sugere conexão real**: nenhum vocabulário de rede/conta (connect, sync, cloud, server, login —
   teste `test_ui_hud`); o rodapé do OBSERVATORY diz
@@ -110,9 +115,9 @@ Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.ti
 | `core_heart()` | coração do núcleo | EMBER emissivo sem sombreamento; `energy`, `pulse` |
 | `scan_ring()` | anel da varredura | PALE aditivo com borda suave; `strength` |
 | `halo()` | halos (ativação, forma final, piso) | aditivo sutil; `color` (BONE por padrão, EMBER só com energia), `strength` |
-| `floor()` | piso da câmara | quase preto, rugoso, especular baixo (leve reflexo) |
+| `floor()` | piso da câmara | `chamber_floor.gdshader`: quase preto, rugoso, especular baixo (leve reflexo); `edge_fade` (0.85→1.0 do raio) leva albedo e especular a zero na borda — o disco se dissolve no VOID em vez de terminar numa aresta iluminada. Raio lido do UV da tampa do `CylinderMesh` (centro 0.25/0.75, raio 0.25; guardado por teste) |
 | `architecture()` | pilares, colunas, óculo | GRAPHITE fosco; nunca mais brilhante que a estrutura |
-| `dormant_seed()` | sementes do UNIVERSE | corpo quase preto com fresnel ASH frio; `energy` aquece para EMBER |
+| `dormant_seed()` | sementes do UNIVERSE | corpo quase preto (piso de emissão fria 0.03) com fresnel ASH frio; `energy` aquece para EMBER; **seleção/hover só por `select`** 0..1: aro BONE `select_color · (1−n·v)³ · select · select_energy` (0.35) somado ao repouso — `cold_color`/`cold_energy` nunca mudam com a seleção (o mundo escreve apenas `select`) |
 | `mote(color)` | poeira (quad de `GPUParticles3D`) | `ShaderMaterial` (`particle_mote.gdshader`): unshaded, aditivo, billboard de partículas (mantém escala/giro), disco redondo e suave, alpha pela rampa de cor do sistema; `near_fade` (Vector2, metros de vista) esconde o que passa rente à lente; cache por cor |
 | `spark(color)` | faíscas sólidas (malha `shard`, sem billboard) | `StandardMaterial3D` unshaded, aditivo, dupla face, cor só do material; cache por cor |
 
@@ -142,8 +147,10 @@ Nenhum shader usa `TIME`: pulsos e animações são dirigidos por `Simulation.ti
 - **Varredura**: banda gaussiana em Y que acende hairlines e chanfros em PALE. O flash `g` marca checagens com
   energia própria (`flash_edge_energy` 0.7, abaixo da banda) e só na parede externa (máscara `v_outer`, a mesma
   do `final_lock`), para ler como um lampejo ao longo do anel, não como grade.
-- **Seleção/hover** (`b`): hairline BONE um pouco mais larga que a das arestas (`select_px_scale` 1.5), para não
-  se quebrar em tracejado nas tampas rasantes sem MSAA (LOW), + fresnel leve.
+- **Seleção/hover** (`b`): hairline BONE mais larga que a das arestas (`select_px_scale` 2.0), para não
+  se quebrar em tracejado nas tampas rasantes sem MSAA (LOW), + fresnel leve. Nas tampas o fio cai à metade
+  (`select_cap_share` 0.5): vistas de cima elas somam todos os contornos e liam como grade; a parede externa
+  mantém o fio pleno.
 
 ### Contrato de malha com os consumidores
 

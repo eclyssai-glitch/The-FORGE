@@ -1,7 +1,8 @@
 extends GutTest
 ## Native HUD (Loop 3): built from scenes/hud.tscn in headless and driven only through the
 ## autoloads. DEMO badge policy, transport contract, timeline, feed, inspector, mode panels,
-## settings, mouse filters (the centre belongs to the world) and "nothing suggests a connection".
+## settings, mouse filters (the centre belongs to the world; the wheel over a panel never reaches the
+## camera) and "nothing suggests a connection".
 
 const HudScene := preload("res://scenes/hud.tscn")
 const AutomationScript := preload("res://src/core/automation.gd")
@@ -11,6 +12,7 @@ var hud: Hud
 ## The HUD lives in a SubViewport of a real window size (the headless root viewport is tiny).
 var host: SubViewport
 var _prev_mode: SessionState.Mode
+var _wheel_host: SubViewport
 var _prev_cinematic: bool
 
 
@@ -244,7 +246,7 @@ func test_observatory_sheet_takes_the_left_share() -> void:
 	await wait_seconds(FADE_WAIT)
 	var vp := hud.root.get_viewport_rect().size
 	var r := hud.observatory_panel.get_global_rect()
-	assert_almost_eq(r.position.x, 0.0, 1.0)
+	assert_almost_eq(r.position.x, float(Palette.UI_EDGE), 1.0, "chrome margin on the left")
 	assert_almost_eq(r.end.x, vp.x * Palette.OBSERVATORY_PANEL_SHARE, 2.0)
 	assert_lt(r.end.y, hud.transport.get_global_rect().position.y, "above the transport")
 
@@ -333,3 +335,137 @@ func test_inspector_docks_away_from_the_subject() -> void:
 	Session.set_mode(SessionState.Mode.FORGE)
 	await wait_seconds(FADE_WAIT)
 	assert_almost_eq(hud.inspector.get_global_rect().position.y, top_rect.position.y, 1.0)
+
+
+## Counts the wheel events that reach _unhandled_input (where the camera zooms).
+class WheelProbe:
+	extends Node
+	var wheels := 0
+
+	func _unhandled_input(event: InputEvent) -> void:
+		var mb := event as InputEventMouseButton
+		if mb and mb.pressed and mb.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			wheels += 1
+
+
+func test_every_mouse_catcher_keeps_the_wheel() -> void:
+	var catchers := 0
+	for c in _all_controls(hud.root, []):
+		if c.mouse_filter == Control.MOUSE_FILTER_IGNORE:
+			continue
+		catchers += 1
+		assert_false(c.mouse_force_pass_scroll_events, "%s lets the wheel through" % c.get_path())
+	assert_gt(catchers, 10, "panels, rows, buttons, timeline and the log all catch the mouse")
+	for row in hud.forge_panel.find_children("*", "ListRow", true, false):
+		assert_false((row as Control).mouse_force_pass_scroll_events, "ListRow")
+	assert_false(hud.observatory_panel.log_scroll.mouse_force_pass_scroll_events, "OBSERVATORY log")
+
+
+func _wheel_at(vp: SubViewport, at: Vector2) -> void:
+	for pressed in [true, false]:
+		var mb := InputEventMouseButton.new()
+		mb.button_index = MOUSE_BUTTON_WHEEL_DOWN
+		mb.pressed = pressed
+		mb.position = at
+		mb.global_position = at
+		vp.push_input(mb, true)
+
+
+func test_wheel_over_panels_never_reaches_the_camera() -> void:
+	_wheel_host = SubViewport.new()
+	_wheel_host.size = Vector2i(1600, 900)
+	add_child_autofree(_wheel_host)
+	var probe := WheelProbe.new()
+	_wheel_host.add_child(probe)
+	var h := HudScene.instantiate() as Hud
+	_wheel_host.add_child(h)
+	Simulation.seek(37.0)
+	await wait_process_frames(3)
+	# Sanity: over the empty world the wheel does reach _unhandled_input (the camera zoom).
+	_wheel_at(_wheel_host, Vector2(1000, 450))
+	assert_eq(probe.wheels, 1, "wheel over the world reaches the camera")
+	var targets: Array[Control] = [h.forge_panel, h.transport, h.feed]
+	targets.append_array(h.forge_panel.find_children("*", "ListRow", true, false))
+	for t: Control in targets:
+		var before := probe.wheels
+		_wheel_at(_wheel_host, t.get_global_rect().get_center())
+		assert_eq(probe.wheels, before, "wheel over %s is kept by the HUD" % t.name)
+	Session.set_mode(SessionState.Mode.OBSERVATORY)
+	await wait_seconds(FADE_WAIT)
+	for t: Control in [h.observatory_panel, h.observatory_panel.log_scroll]:
+		var before := probe.wheels
+		_wheel_at(_wheel_host, t.get_global_rect().get_center())
+		assert_eq(probe.wheels, before, "wheel over %s is kept by the HUD" % t.name)
+
+
+func test_only_the_current_check_runs() -> void:
+	var obs: ObservatoryPanel = hud.observatory_panel
+	assert_eq(ObservatoryPanel.current_check(WorldState.new()), &"", "nothing runs before the sweep")
+	for c: StringName in OriginChamberScript.CHECKS:
+		assert_eq(ObservatoryPanel.check_status(WorldState.new(), c), "—")
+	for t: float in [32.5, 34.0, 37.0, 39.5]:
+		Simulation.seek(t)
+		await wait_process_frames(1)
+		var w := Simulation.world
+		var running := 0
+		var seen_pending := false
+		for c: StringName in OriginChamberScript.CHECKS:
+			var st := ObservatoryPanel.check_status(w, c)
+			if st == "RUNNING":
+				running += 1
+				assert_false(seen_pending, "t=%.1f: RUNNING never after a PENDING" % t)
+			elif st == "PENDING":
+				seen_pending = true
+			else:
+				assert_eq(st, "PASSED", "t=%.1f %s" % [t, c])
+		assert_eq(running, 1, "t=%.1f: exactly one check RUNNING" % t)
+		var shown := 0
+		for row: Array in obs._check_rows:
+			if (row[3] as Label).text == "RUNNING":
+				shown += 1
+		assert_eq(shown, 1, "t=%.1f: the panel shows one RUNNING" % t)
+	Simulation.seek(Simulation.duration())
+	await wait_process_frames(1)
+	assert_eq(ObservatoryPanel.current_check(Simulation.world), &"", "all passed: nothing runs")
+
+
+func test_log_detail_only_on_newest_and_selected() -> void:
+	var obs: ObservatoryPanel = hud.observatory_panel
+	Simulation.seek(37.0)
+	await wait_process_frames(2)
+	var emitted := Simulation.emitted_events()
+	var only := obs.detailed_rows()
+	assert_eq(only.size(), 1, "only the newest has its detail")
+	assert_eq(only[0], StringName(emitted[-1].id))
+	var older: SimEvent = null
+	for e in emitted:
+		if e.entity != &"" and e.entity != emitted[-1].entity:
+			older = e
+	assert_not_null(older)
+	Session.select(older.entity)
+	await wait_process_frames(1)
+	var rows := obs.detailed_rows()
+	assert_eq(rows.size(), 2)
+	assert_true(rows.has(StringName(emitted[-1].id)))
+	var newest_of_sel: SimEvent = null
+	for e in emitted:
+		if e.entity == older.entity:
+			newest_of_sel = e
+	assert_true(rows.has(StringName(newest_of_sel.id)), "the newest event of the selection shows its detail")
+	Session.select(&"")
+	await wait_process_frames(1)
+	assert_eq(obs.detailed_rows().size(), 1)
+
+
+func test_log_never_shows_a_row_cut_at_the_top() -> void:
+	var obs: ObservatoryPanel = hud.observatory_panel
+	Session.set_mode(SessionState.Mode.OBSERVATORY)
+	for size: Vector2i in [Vector2i(1280, 720), Vector2i(1600, 900)]:
+		host.size = size
+		for t: float in [23.0, 37.0, Simulation.duration()]:
+			Simulation.seek(t)
+			await wait_process_frames(6)
+			assert_null(obs.clipped_top_row(), "%s t=%.1f: first visible log row is whole" % [size, t])
+			var last := obs.log_box.get_child(obs.log_box.get_child_count() - 1) as Control
+			assert_lt(last.position.y + last.size.y, obs.log_scroll.scroll_vertical + obs.log_scroll.size.y + 1.0,
+				"%s t=%.1f: the newest row is whole" % [size, t])

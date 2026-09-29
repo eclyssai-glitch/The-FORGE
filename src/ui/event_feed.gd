@@ -15,7 +15,7 @@ var idle_label: Label
 func _init() -> void:
 	name = "EventFeed"
 	theme_type_variation = &"HudPanel"
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	var v := UiKit.vbox(6)
 	add_child(v)
 	var head := UiKit.header("EVENTS")

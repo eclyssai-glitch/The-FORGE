@@ -111,7 +111,7 @@ static func build() -> Theme:
 	t.set_type_variation("HudPanel", "PanelContainer")
 	t.set_stylebox("panel", "HudPanel", box(Palette.PANEL, Palette.PANEL_LINE, Vector4i.ONE, 16, 14))
 	t.set_type_variation("Sheet", "PanelContainer")
-	t.set_stylebox("panel", "Sheet", box(Palette.PANEL, Palette.PANEL_LINE, Vector4i(0, 1, 1, 1), 22, 18))
+	t.set_stylebox("panel", "Sheet", box(Palette.PANEL, Palette.PANEL_LINE, Vector4i.ONE, 22, 18))
 	t.set_type_variation("BadgePanel", "PanelContainer")
 	t.set_stylebox("panel", "BadgePanel", box(Palette.PANEL, Palette.PANEL_LINE, Vector4i.ONE, 10, 5))
 	t.set_type_variation("Bare", "PanelContainer")

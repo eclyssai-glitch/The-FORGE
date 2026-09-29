@@ -13,7 +13,7 @@ var list: EntityList
 func _init() -> void:
 	name = "UniversePanel"
 	theme_type_variation = &"HudPanel"
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	var v := UiKit.vbox(8)
 	add_child(v)
 	var head := UiKit.header("SITES")
@@ -27,7 +27,11 @@ func _init() -> void:
 	grid.name = "Hint"
 	grid.columns = 4
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 6)
+	# Key and action share one font and size (spaced caps, SIZE_SMALL): same line height and
+	# baseline on every row; only the colour tells the key (BONE) from the action (TEXT_DIM).
 	for h: Array in HINTS:
-		grid.add_child(UiKit.label(String(h[0]), &"Data"))
+		grid.add_child(UiKit.label(String(h[0]), &"RowText"))
 		grid.add_child(UiKit.label(String(h[1]), &"Caption"))
 	v.add_child(grid)

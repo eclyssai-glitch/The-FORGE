@@ -17,7 +17,7 @@ var _selected := false
 func _init(p_id: StringName = &"", title: String = "") -> void:
 	id = p_id
 	name = "Row_" + String(p_id)
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiKit.catch_mouse(self)
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	focus_mode = Control.FOCUS_NONE
 	var h := UiKit.hbox(10)
