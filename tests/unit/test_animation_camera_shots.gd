@@ -95,6 +95,71 @@ func test_universe_frames_chamber_among_seeds() -> void:
 		assert_true(clear_x or top.y < bottom, "near pillar %d does not cut the structure" % p)
 
 
+## Pixel position (x, y) and view depth (z) of a world point in a W×H frame, with the camera as
+## Camera3D renders it: looking at the target and translated sideways by h_offset.
+func _pixel(s: CameraShots.Shot, p: Vector3, frame: Vector2) -> Vector3:
+	var aspect := frame.x / frame.y
+	var xf := Transform3D(Basis.IDENTITY, s.position()).looking_at(s.target, Vector3.UP)
+	xf.origin += xf.basis.x * s.h_offset(aspect)
+	var local := xf.affine_inverse() * p
+	var depth := -local.z
+	var tan_half := tan(deg_to_rad(s.fov) * 0.5)
+	var ndc := Vector2(local.x / depth / (tan_half * aspect), local.y / depth / tan_half)
+	return Vector3((ndc.x + 1.0) * 0.5 * frame.x, (1.0 - ndc.y) * 0.5 * frame.y, depth)
+
+
+## Screen radius (px) of a world sphere of radius r at view depth `depth`.
+func _pixel_radius(s: CameraShots.Shot, r: float, depth: float, frame: Vector2) -> float:
+	return r / depth / tan(deg_to_rad(s.fov) * 0.5) * frame.y * 0.5
+
+
+func test_universe_seeds_clear_the_hud() -> void:
+	# The HUD has fixed pixel sizes: SITES panel x 24–288 / y 72–286, mode bar on top, inspector
+	# column on the right, transport at the bottom. At 1600×900 and at 1280×720 every seed — body,
+	# halo rings and drift — stays inside the free rect, and so does the chamber.
+	var big := CameraShots.universe_free_rect(Vector2(1600.0, 900.0))
+	assert_true(big.is_equal_approx(Rect2(310.0, 70.0, 960.0, 610.0)), "1600×900: x 310–1270, y 70–680")
+	var s := CameraShots.mode_shot(Mode.UNIVERSE, _shot())
+	for frame: Vector2 in [Vector2(1600.0, 900.0), Vector2(1280.0, 720.0)]:
+		var free := CameraShots.universe_free_rect(frame)
+		assert_true(free.position.x > 288.0 and free.position.y >= 70.0 and free.end.y <= frame.y - 70.0,
+			"%s: free rect clears the SITES panel, the mode bar and the transport" % frame)
+		for seed_def: Dictionary in Universe.SEEDS:
+			var id: StringName = seed_def["id"]
+			var p := _pixel(s, Universe.seed_base_position(seed_def), frame)
+			assert_gt(p.z, 0.0, "%s in front of the camera" % id)
+			# Widest halo ring is 2.15·size; the drift adds DRIFT_AMPLITUDE.
+			var r := _pixel_radius(s, float(seed_def["size"]) * 2.2 + Universe.DRIFT_AMPLITUDE, p.z, frame)
+			var box := Rect2(p.x - r, p.y - r, 2.0 * r, 2.0 * r)
+			assert_true(free.encloses(box), "%s: %s (%s ± %.0f px) inside %s" % [frame, id, Vector2(p.x, p.y), r, free])
+		var chamber := _pixel(s, Vector3.ZERO, frame)
+		assert_true(free.has_point(Vector2(chamber.x, chamber.y)), "%s: chamber inside the free rect" % frame)
+		assert_gt(_pixel_radius(s, 3.2, chamber.z, frame), 24.0 * frame.y / 900.0,
+			"%s: the chamber still reads as a structure" % frame)
+
+
+func test_observatory_subject_in_the_free_area() -> void:
+	var frame := Vector2(1600.0, 900.0)
+	var s := CameraShots.mode_shot(Mode.OBSERVATORY, _shot())
+	var sheet := CameraShots.OBSERVATORY_SHEET * frame.x
+	# Free area: right of the sheet (with a margin), below the mode bar, above the transport.
+	var free := Rect2(sheet + 24.0, 60.0, frame.x - sheet - 48.0, 830.0 - 60.0)
+	# The structure and the verification ring around it: a cylinder of the ring's radius.
+	var r := VerificationArray.RADIUS + 0.1
+	var h := _structure_h
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for k in 72:
+		var a := TAU * float(k) / 72.0
+		for dy: float in [-h * 0.5, h * 0.5]:
+			var p := _pixel(s, s.target + Vector3(sin(a) * r, dy, cos(a) * r), frame)
+			lo = Vector2(minf(lo.x, p.x), minf(lo.y, p.y))
+			hi = Vector2(maxf(hi.x, p.x), maxf(hi.y, p.y))
+	assert_true(free.encloses(Rect2(lo, hi - lo)), "subject %s inside the free area %s" % [Rect2(lo, hi - lo), free])
+	var centre := (lo.x + hi.x) * 0.5
+	assert_almost_eq(centre, (sheet + frame.x) * 0.5, 60.0, "subject centred in the free area")
+
+
 func test_observatory_pushes_subject_right() -> void:
 	var s := CameraShots.mode_shot(Mode.OBSERVATORY, _shot())
 	var f := CameraShots.mode_shot(Mode.FORGE, _shot())
@@ -172,6 +237,30 @@ func test_clamp_never_goes_through_the_floor() -> void:
 		assert_true(s.position().y >= CameraShots.FLOOR_Y + CameraShots.FLOOR_CLEARANCE - 1e-3,
 			"camera above the floor (%s)" % s.position())
 		assert_true(Vector2(s.target.x, s.target.z).length() <= CameraShots.FLY_RADIUS + 1e-3)
+
+
+func test_clamp_rig_keeps_blends_above_the_floor() -> void:
+	# Two clamped shots: close and low, looking up at the chamber / far with the target low.
+	var a := CameraShots.clamp_shot(_shot().setup(Vector3(0.0, 0.0, 0.0), 0.3, -0.32, 8.5, 36.0), Mode.UNIVERSE)
+	var b := CameraShots.clamp_shot(_shot().setup(Vector3(0.0, -2.7, 0.0), 1.2, 0.02, 30.0, 40.0), Mode.UNIVERSE)
+	var min_y := CameraShots.FLOOR_Y + CameraShots.FLOOR_CLEARANCE
+	assert_gte(a.position().y, min_y - 1e-4)
+	assert_gte(b.position().y, min_y - 1e-4)
+	var out := _shot()
+	var lowest := INF
+	var t := 0.0
+	while t <= 1.0 + 1e-6:
+		CameraShots.blend(a, b, t, out)
+		lowest = minf(lowest, out.position().y)
+		var d := out.distance
+		CameraShots.clamp_rig(out)
+		assert_true(out.position().y >= min_y - 1e-4, "t=%.2f above the floor (%.3f)" % [t, out.position().y])
+		assert_almost_eq(out.distance, d, 1e-6, "clamp_rig keeps the distance curve of the transition")
+		t += 0.05
+	assert_lt(lowest, min_y, "the raw blend does dip through the floor (the case being guarded)")
+	# Already clamped shots are left alone (endpoints of every transition).
+	assert_true(CameraShots.clamp_rig(_shot().copy_from(a)).approx_equals(a))
+	assert_true(CameraShots.clamp_rig(_shot().copy_from(b)).approx_equals(b))
 
 
 func test_blend_endpoints_and_shortest_yaw() -> void:
@@ -280,6 +369,7 @@ func test_universe_seed_focus_keeps_the_chamber_in_the_background() -> void:
 		var s := CameraShots.focus_shot(Mode.UNIVERSE, b, current, ASPECT, _shot())
 		var id: StringName = seed_def["id"]
 		assert_true(s.target.is_equal_approx(centre), "%s: target is the seed (not clamped)" % id)
+		assert_almost_eq(s.fov, CameraShots.SEED_FOCUS_FOV, 1e-5, "%s: seed focus lens" % id)
 		var lim: Vector2 = CameraShots.DISTANCE_LIMITS[Mode.UNIVERSE]
 		assert_between(s.distance, lim.x, 40.0, "%s: close to the seed" % id)
 		assert_gt(s.position().y, CameraShots.FLOOR_Y + CameraShots.FLOOR_CLEARANCE)

@@ -10,6 +10,12 @@ extends Node3D
 ## The band rides on top of the physical ring (BAND_LIFT): the band's centre is the scan height
 ## (`scan_y`), the ring hangs just below it. Coplanar, the opaque ring hid the middle of the band
 ## on its near side and left two sub-pixel slivers that read as a dotted thread.
+## The band is a single cylindrical wall of zero radial thickness (BAND_THICKNESS): a ring with
+## thickness has top/bottom caps, and a 0.012 cap is a sub-pixel strip whose own across-falloff
+## peaks mid-cap — rasterized (worst without MSAA, LOW) it drew a dotted thread along the band's
+## edges, separated from the band by its soft falloff. With zero thickness the caps are
+## degenerate (no area, never rasterized); the inner and outer walls coincide and add up exactly
+## as the two walls of the thin ring did (additive, cull disabled), so the band keeps its level.
 ## Focus: the ring node joins SessionState.entity_group(ENTITY_ID) (bounds = ring + band, so
 ## the framing follows the ring's height at the moment of the request).
 
@@ -17,6 +23,8 @@ const ENTITY_ID := &"verification_array"
 ## Radius clears the widest ring (3.05) with room for the band.
 const RADIUS := 3.42
 const BAND_WIDTH := 0.16
+## Radial thickness of the band mesh: zero, a wall without caps (see above).
+const BAND_THICKNESS := 0.0
 ## Physical ring cross-section (radial thickness, height).
 const RING_THICKNESS := 0.06
 const RING_HEIGHT := 0.1
@@ -58,7 +66,7 @@ func _ready() -> void:
 	# Vertical ribbon (width along Y > radial thickness): reads as a band from the side.
 	band = MeshInstance3D.new()
 	band.name = "Band"
-	band.mesh = MeshBuilder.ring(RADIUS, 0.012, BAND_WIDTH, 160)
+	band.mesh = MeshBuilder.ring(RADIUS, BAND_THICKNESS, BAND_WIDTH, 160)
 	band.material_override = _band_mat
 	band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	band.visible = false
