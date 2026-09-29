@@ -8,7 +8,9 @@ extends Node3D
 ## does not exist yet, so the world always runs with whatever is present. Without a
 ## CameraDirector a fixed fallback Camera3D (current) frames each mode.
 ## Quality: EnvironmentProfile.apply_quality on Quality.profile_changed (and at start).
-## Mode: EnvironmentProfile.apply_mode_fog on Session.mode_changed (and at start).
+## Mode: EnvironmentProfile.apply_mode_fog + Universe.apply_mode on Session.mode_changed (and at start).
+## Module check: `missing_modules()` lists every expected module that did not load; the smoke
+## test fails on any (report line `modules=N/N`).
 
 ## [node name, script path] in composition order. Every module has a no-argument constructor.
 const MODULES: Array = [
@@ -27,7 +29,7 @@ const CAMERA_GROUP := &"camera_director"
 
 ## Fallback framing per mode when no CameraDirector exists: [position, look-at target].
 const FALLBACK_SHOTS := {
-	SessionState.Mode.UNIVERSE: [Vector3(-4.0, 11.0, 42.0), Vector3(1.0, 1.0, 0.0)],
+	SessionState.Mode.UNIVERSE: [Vector3(42.7, 29.3, 74.0), Vector3(0.0, 1.0, 0.0)],
 	SessionState.Mode.FORGE: [Vector3(0.0, 1.0, 9.5), Vector3(0.0, 0.3, 0.0)],
 	SessionState.Mode.OBSERVATORY: [Vector3(-3.5, 2.2, 11.0), Vector3(-1.6, 0.2, 0.0)],
 }
@@ -90,6 +92,24 @@ func _ready() -> void:
 	_on_mode_changed(Session.mode)
 
 
+## Node names of every module the world expects (MODULES + the CameraDirector), in order.
+static func expected_module_names() -> Array[String]:
+	var out: Array[String] = []
+	for m in MODULES:
+		out.append(String(m[0]))
+	out.append(String(CAMERA_DIRECTOR[0]))
+	return out
+
+
+## Expected modules that were not composed (missing script, not a Node, not instantiable).
+func missing_modules() -> Array[String]:
+	var out: Array[String] = []
+	for n in expected_module_names():
+		if not modules.has(n):
+			out.append(n)
+	return out
+
+
 ## Instantiates the script at `path` (no-argument constructor), or returns null with a warning
 ## when the file is missing or is not a Node.
 static func load_module(path: String) -> Node:
@@ -117,6 +137,7 @@ func _on_quality_changed(profile: Dictionary) -> void:
 
 func _on_mode_changed(mode: SessionState.Mode) -> void:
 	EnvironmentProfile.apply_mode_fog(environment, mode)
+	universe.apply_mode(mode)
 	if fallback_camera:
 		var shot: Array = FALLBACK_SHOTS.get(mode, FALLBACK_SHOTS[SessionState.Mode.FORGE])
 		fallback_camera.position = shot[0]

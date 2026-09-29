@@ -2,6 +2,8 @@ class_name QualityProfiles
 extends RefCounted
 ## Graphics quality presets. Pure data; applied by the Quality autoload and by the
 ## world components that listen to Quality.profile_changed.
+## "shadow_splits": cascades of the key DirectionalLight3D (1, 2 or 4), read by the LightRig and
+## mapped to DirectionalLight3D.directional_shadow_mode.
 
 enum Level { LOW, MEDIUM, HIGH, ULTRA }
 
@@ -19,7 +21,7 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 0.77, "scaling_mode": Viewport.SCALING_3D_MODE_FSR,
 				"msaa": Viewport.MSAA_DISABLED, "fxaa": true,
 				"ssao": false, "ssil": false, "glow": true, "volumetric_fog": false,
-				"shadow_size": 1024, "shadows": true, "particles": 0.35,
+				"shadow_size": 1024, "shadows": true, "shadow_splits": 2, "particles": 0.35,
 			}
 		Level.MEDIUM:
 			return {
@@ -27,7 +29,7 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
 				"msaa": Viewport.MSAA_2X, "fxaa": false,
 				"ssao": true, "ssil": false, "glow": true, "volumetric_fog": true,
-				"shadow_size": 2048, "shadows": true, "particles": 0.6,
+				"shadow_size": 2048, "shadows": true, "shadow_splits": 4, "particles": 0.6,
 			}
 		Level.HIGH:
 			return {
@@ -35,7 +37,7 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
 				"msaa": Viewport.MSAA_4X, "fxaa": false,
 				"ssao": true, "ssil": false, "glow": true, "volumetric_fog": true,
-				"shadow_size": 4096, "shadows": true, "particles": 1.0,
+				"shadow_size": 4096, "shadows": true, "shadow_splits": 4, "particles": 1.0,
 			}
 		_:
 			return {
@@ -43,7 +45,7 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
 				"msaa": Viewport.MSAA_4X, "fxaa": false,
 				"ssao": true, "ssil": true, "glow": true, "volumetric_fog": true,
-				"shadow_size": 4096, "shadows": true, "particles": 1.0,
+				"shadow_size": 4096, "shadows": true, "shadow_splits": 4, "particles": 1.0,
 			}
 
 

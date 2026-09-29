@@ -8,6 +8,7 @@ Dono: `game-engineer`. Responsabilidade: camadas, fluxo de dados, estrutura de d
 src/events   (RefCounted puro)   SimEvent · OriginChamberScript · EventTimeline · WorldState · Mission · EntityCatalog
      ▲
 src/core     (autoloads)          Simulation (relógio + eventos)   Session (modo, seleção)
+                                  InputTuning (limiar clique × arrasto, compartilhado Picker/câmera)
 src/world    (autoload + mundo)   Quality (perfil gráfico) · composição do mundo 3D
      ▲                    ▲
 3D: src/world, src/entities, src/animation, src/fx, src/procedural, src/style
