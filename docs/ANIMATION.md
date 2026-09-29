@@ -76,7 +76,11 @@ Entre parênteses, as constantes de `Choreography` (segundos de simulação / n�
   varredura calma, sem florescer) e a banda na estrutura (`scan_y`, `scan_strength`); estágio `verify`.
   A fita fica **sobre** a borda superior do anel físico (`BAND_LIFT`; centro da fita = `scan_y`):
   coplanares, o anel opaco escondia o meio da fita no lado próximo e sobravam duas lascas
-  subpixel que liam como fio pontilhado.
+  subpixel que liam como fio pontilhado. A fita é uma parede cilíndrica de espessura radial zero
+  (`BAND_THICKNESS`): com espessura, as tampas (0,012 de largura, com o próprio falloff no meio)
+  rasterizavam como um fio pontilhado subpixel nas bordas da fita, separado dela pelo falloff —
+  pior no LOW, sem MSAA. Sem espessura as tampas não têm área; as paredes interna e externa
+  coincidem e somam como antes (aditivo, sem culling), então o nível da fita não muda.
 - **`verification.check_passed`** — flash PALE (`g`) que parte da altura do anel naquele instante e
   se propaga por camada (`FLASH_*`).
 - **`verification.passed`** — a banda apaga e o anel volta ao estacionamento (`SCAN_EXIT`).
@@ -123,17 +127,29 @@ mudar a perspectiva). Grupo `camera_director`; `camera.current = true`.
   centro óptico, horizonte baixo.
 - **UNIVERSE** (`UNIVERSE_*`) — de fora do anel de pilares, com o yaw exatamente num vão entre dois
   pilares, de frente para as três sementes (`Universe.SEEDS`, além da câmara): a câmara é o ponto
-  quente no meio-baixo do quadro e as sementes se abrem à esquerda, ao alto e à direita. Mais perto
-  e mais fechado que no Loop 2 (a estrutura lia pequena), ainda com as três sementes no quadro. Pitch
+  quente perto do centro do quadro e as sementes se abrem à esquerda, ao alto e à direita. As três
+  sementes (corpo, anéis de halo e deriva) ficam **na parte do quadro que o HUD deixa livre**
+  (`universe_free_rect`: à direita do painel SITES, abaixo da barra de modos, acima do transporte e
+  à esquerda da coluna do inspector/feed) em 1600×900 e em 1280×720 — o HUD tem tamanhos fixos em
+  pixels, então 1280×720 é o quadro mais apertado. As sementes cobrem ~110° do lado de lá da câmara;
+  caber nessa faixa pede lente mais aberta e câmera mais longe (`UNIVERSE_FOV`, `UNIVERSE_DISTANCE`)
+  e um `UNIVERSE_OFFSET` que centra o leque na área livre. Custo: a câmara lê menor que no Loop 3
+  inicial (raio ≈ 30 px em 1600×900), ainda legível como estrutura com o anel de pilares. Pitch
   alto o bastante para que o topo dos pilares da frente fique abaixo da estrutura na tela (nenhum
   pilar corta o quadro nem o sujeito). O óculo, que nesse plano lia como um anel solto sobre a
   câmara, fica oculto no UNIVERSE (malha e forma de seleção; `ChamberArchitecture.apply_mode`).
   Exposição do modo: `exposure_scale` de `EnvironmentProfile.mode_fog`, aplicada pelo `LightRig`.
-- **OBSERVATORY** — alto e oblíquo; sujeito no centro dos 62 % à direita (painel à esquerda).
+- **OBSERVATORY** (`OBSERVATORY_*`) — três-quartos elevado, mais baixo que antes (as paredes
+  externas, o mesmo metal lido no FORGE, pesam mais que as tampas dos anéis); sujeito no centro dos
+  62 % à direita (a folha nativa ocupa `OBSERVATORY_SHEET` = 38 % à esquerda).
+- **Foco numa semente** usa lente própria (`SEED_FOCUS_FOV`): a lente aberta do UNIVERSE poria a
+  câmara atrás da semente; o voo até a semente fecha a lente no caminho.
 
 `test_animation_camera_shots.gd` fixa essas leituras: planos dentro dos limites, yaw do UNIVERSE entre
 pilares, sementes dentro do quadro, acima da câmara e dos dois lados dela, pilares da frente abaixo
-da estrutura.
+da estrutura; sementes e câmara dentro da área livre do HUD em 1600×900 e 1280×720 (projeção com a
+câmera como o `Camera3D` a renderiza, `h_offset` incluído); sujeito do OBSERVATORY inteiro na área
+à direita da folha.
 
 ### Deixas cinematográficas (FORGE com `Session.cinematic`)
 
@@ -148,6 +164,13 @@ um enquadramento do usuário/foco está valendo fora de deixa (UNIVERSE, OBSERVA
 cinematic): aí ele fica (arrastar a linha do tempo não joga fora o foco numa semente).
 
 ### Transições
+
+Todo rig passa por `CameraShots.clamp_rig` **depois** do blend, antes de chegar à câmera
+(`CameraDirector._apply`): pitch no intervalo, alvo dentro de `FLY_RADIUS` e acima do piso, câmera
+a `FLOOR_CLEARANCE` acima do piso. Um blend de dois planos válidos não é válido por construção
+(pitch, distância e alvo interpolam separados: um plano baixo e perto indo para um longe com alvo
+baixo atravessa o piso no meio). `clamp_rig` não mexe na distância (os limites por modo ficam em
+`clamp_shot`), então uma transição entre modos mantém a curva de distância.
 
 O fator de blend segue a curva de um Tween (`Tween.interpolate_value`, `TRANS_SINE`/`EASE_IN_OUT`)
 com o tempo medido no relógio de parede (`Time.get_ticks_msec`), não no delta do quadro: o motor
@@ -218,7 +241,10 @@ idêntico ao de um Tween.
   perto da lente; `amount_ratio` = `Quality.profile.particles` (sem reiniciar).
 - Sombras: a key projeta sombras se `Quality.profile.shadows`, com os splits de
   `Quality.profile.shadow_splits` (`LightRig.shadow_mode_for`) e normal bias/blur de `LightRig`;
-  luz do núcleo sem sombra (fica dentro do casco).
+  com 2 splits (LOW) o alcance é menor e o blur maior (`LightRig.shadow_reach_for`,
+  `KEY_SHADOW_*_2_SPLITS`): em 40 unidades os texels das 2 cascatas desenhavam manchas em degrau
+  no topo dos anéis (OBSERVATORY); a câmara vista do FORGE e do OBSERVATORY fica dentro do alcance
+  curto. Luz do núcleo sem sombra (fica dentro do casco).
 
 ## Luz por estágio
 
@@ -244,12 +270,14 @@ vazia; HIGH ≈ 2,5 fps.
 
 `tools/run_tests.sh`: `test_animation_motion.gd`, `test_animation_choreography.gd`,
 `test_animation_camera_shots.gd` (planos, deixas, limites, UNIVERSE entre pilares com as sementes em
-quadro; foco: `fit_distance` preenche ~`FOCUS_FILL` com perspectiva, `focus_shot` mantém o modo e
+quadro e fora do HUD em 1600×900 e 1280×720, OBSERVATORY na área livre, `clamp_rig` segura o blend
+acima do piso; foco: `fit_distance` preenche ~`FOCUS_FILL` com perspectiva, `focus_shot` mantém o modo e
 centra a entidade, distância limitada à câmara, alcance por modo, semente com a câmara ao fundo no
 terço oposto), `test_animation_entities.gd` (composição headless na ordem do world.gd, corpos de
 seleção e piso não selecionável, câmera e limiar de arrasto compartilhado, seek, `segment_state` antes
 da emissão, luz → ambiente com `exposure_scale` e cache — zerado em `world_rebuilt`, splits por
-qualidade, varredura → material, fita sobre o anel, óculo só fora do UNIVERSE, seleção, input; foco:
+qualidade (alcance/blur da sombra com 2 splits), varredura → material, fita sobre o anel e sem
+tampas, câmera acima do piso no meio de uma transição, óculo só fora do UNIVERSE, seleção, input; foco:
 grupos de todas as entidades e limites, foco na camada suspende a deixa e `camera_reset` volta,
 alvos desconhecidos/fora de alcance ignorados, input durante o foco devolve o controle, foco
 sobrevive a seek fora de deixa). Capturas de todas as fases e modos: `tools/capture_evidence.sh`.

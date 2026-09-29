@@ -199,7 +199,15 @@ func test_light_rig_core_and_shadow_settings() -> void:
 	assert_almost_eq(rig.core.omni_attenuation, LightRig.CORE_ATTENUATION, 1e-5)
 	assert_almost_eq(rig.core.light_specular, LightRig.CORE_SPECULAR, 1e-5)
 	assert_almost_eq(rig.key.shadow_normal_bias, LightRig.KEY_SHADOW_NORMAL_BIAS, 1e-5)
-	assert_almost_eq(rig.key.shadow_blur, LightRig.KEY_SHADOW_BLUR, 1e-5)
+	assert_eq(LightRig.shadow_reach_for(4), Vector2(LightRig.KEY_SHADOW_MAX_DISTANCE, LightRig.KEY_SHADOW_BLUR))
+	assert_eq(LightRig.shadow_reach_for(1), Vector2(LightRig.KEY_SHADOW_MAX_DISTANCE, LightRig.KEY_SHADOW_BLUR))
+	assert_eq(LightRig.shadow_reach_for(2),
+		Vector2(LightRig.KEY_SHADOW_MAX_DISTANCE_2_SPLITS, LightRig.KEY_SHADOW_BLUR_2_SPLITS), "LOW: shorter, softer")
+	assert_lt(LightRig.KEY_SHADOW_MAX_DISTANCE_2_SPLITS, LightRig.KEY_SHADOW_MAX_DISTANCE)
+	assert_gt(LightRig.KEY_SHADOW_BLUR_2_SPLITS, LightRig.KEY_SHADOW_BLUR)
+	# The OBSERVATORY camera (the farthest chamber view) stays inside the short reach.
+	var obs := CameraShots.mode_shot(SessionState.Mode.OBSERVATORY, CameraShots.Shot.new())
+	assert_lt(obs.distance + VerificationArray.RADIUS, LightRig.KEY_SHADOW_MAX_DISTANCE_2_SPLITS)
 	assert_eq(LightRig.shadow_mode_for(2), DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS)
 	assert_eq(LightRig.shadow_mode_for(4), DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS)
 	assert_eq(LightRig.shadow_mode_for(1), DirectionalLight3D.SHADOW_ORTHOGONAL)
@@ -208,6 +216,10 @@ func test_light_rig_core_and_shadow_settings() -> void:
 		rig._on_quality(profile)
 		assert_eq(rig.key.directional_shadow_mode, LightRig.shadow_mode_for(int(profile["shadow_splits"])),
 			"key splits follow %s" % QualityProfiles.LEVEL_NAMES[level])
+		var reach := LightRig.shadow_reach_for(int(profile["shadow_splits"]))
+		assert_almost_eq(rig.key.directional_shadow_max_distance, reach.x, 1e-5)
+		assert_almost_eq(rig.key.shadow_blur, reach.y, 1e-5)
+		assert_almost_eq(rig.key.shadow_normal_bias, LightRig.KEY_SHADOW_NORMAL_BIAS, 1e-5)
 	rig._on_quality(Quality.profile)
 
 
@@ -368,6 +380,41 @@ func test_oculus_hidden_only_in_universe() -> void:
 	assert_false(arch.oculus.visible, "no loose ring above the chamber in UNIVERSE")
 	Session.set_mode(SessionState.Mode.OBSERVATORY)
 	assert_true(arch.oculus.visible)
+
+
+func test_camera_stays_above_the_floor_mid_transition() -> void:
+	# A transition between two clamped shots whose raw blend dips through the floor at t = 0.5
+	# (see test_animation_camera_shots): the director clamps after the blend.
+	var d: CameraDirector = _nodes["camera_director"]
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	d.snap_to_mode_shot()
+	d._from.setup(Vector3.ZERO, 0.3, -0.32, 8.5, 36.0)
+	d._focus_goal.setup(Vector3(0.0, -2.7, 0.0), 1.2, 0.02, 30.0, 40.0)
+	var raw := CameraShots.blend(d._from, d._focus_goal, 0.5, CameraShots.Shot.new())
+	var min_y := CameraShots.FLOOR_Y + CameraShots.FLOOR_CLEARANCE
+	assert_lt(raw.position().y, min_y, "the raw mid-blend pose is below the floor")
+	# Hold the blend factor at 0.5 (no running tween) with the focus framing active.
+	d._user = true
+	d._focusing = true
+	d._user_until = CameraDirector._now() + 100.0
+	d._blend = 0.5
+	d._blend_duration = 0.0
+	d._process(0.0)
+	assert_almost_eq(d.rig().distance, raw.distance, 1e-4, "same point of the transition")
+	assert_true(d.camera.global_position.y >= min_y - 1e-4,
+		"camera above the floor mid-transition (%.3f)" % d.camera.global_position.y)
+
+
+func test_scan_band_is_a_wall_without_caps() -> void:
+	# Zero radial thickness: every vertex on the band radius, so the top/bottom caps have no area
+	# and cannot rasterize into a sub-pixel dotted thread.
+	var va: VerificationArray = _nodes["verification_array"]
+	var verts: PackedVector3Array = va.band.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	assert_gt(verts.size(), 0)
+	for v in verts:
+		assert_almost_eq(Vector2(v.x, v.z).length(), VerificationArray.RADIUS, 1e-4, "vertex on the band wall")
+	var aabb := va.band.mesh.get_aabb()
+	assert_almost_eq(aabb.size.y, VerificationArray.BAND_WIDTH, 1e-4, "band keeps its width")
 
 
 func test_scan_band_rides_on_top_of_the_ring() -> void:

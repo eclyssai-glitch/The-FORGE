@@ -10,7 +10,8 @@ extends Node3D
 ## EnvironmentProfile.mode_fog(mode)["exposure_scale"]. The Environment is only written when a
 ## value changes (a steady stage costs no resource updates); Simulation.world_rebuilt clears that
 ## cache. Every light gets
-## EnvironmentProfile.FOG_LIGHT. Key shadow splits follow Quality.profile["shadow_splits"].
+## EnvironmentProfile.FOG_LIGHT. Key shadow splits follow Quality.profile["shadow_splits"] (and,
+## with 2 splits, a shorter and softer key shadow: shadow_reach_for).
 
 ## Core light: reach and falloff (the core lights the inner faces of the rings and fades before
 ## the outer walls; the key lights the outside), and a low specular so the metal does not show a
@@ -24,6 +25,11 @@ const CORE_SPECULAR := 0.1
 const KEY_SHADOW_NORMAL_BIAS := 2.0
 const KEY_SHADOW_BLUR := 1.8
 const KEY_SHADOW_MAX_DISTANCE := 40.0
+## With 2 cascades (LOW) the texels over 40 units were coarse enough to draw stepped stains on the
+## ring tops (seen in OBSERVATORY): the key covers a shorter reach (the chamber seen from FORGE and
+## OBSERVATORY stays inside it) with a softer blur. 1 or 4 cascades keep the values above.
+const KEY_SHADOW_MAX_DISTANCE_2_SPLITS := 24.0
+const KEY_SHADOW_BLUR_2_SPLITS := 2.5
 
 var environment: Environment
 
@@ -123,13 +129,22 @@ func _directional(n: String, color: Color, dir: Vector3, fog_key: String) -> Dir
 
 func _on_quality(profile: Dictionary) -> void:
 	var shadows := bool(profile.get("shadows", true))
+	var splits := int(profile.get("shadow_splits", 4))
+	var reach := shadow_reach_for(splits)
 	key.shadow_enabled = shadows
-	key.directional_shadow_mode = shadow_mode_for(int(profile.get("shadow_splits", 4)))
-	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DISTANCE
+	key.directional_shadow_mode = shadow_mode_for(splits)
+	key.directional_shadow_max_distance = reach.x
 	key.shadow_normal_bias = KEY_SHADOW_NORMAL_BIAS
-	key.shadow_blur = KEY_SHADOW_BLUR
+	key.shadow_blur = reach.y
 	rim.shadow_enabled = false
 	fill.shadow_enabled = false
+
+
+## Key shadow (max distance, blur) for a number of PSSM splits: shorter and softer with 2.
+static func shadow_reach_for(splits: int) -> Vector2:
+	if splits == 2:
+		return Vector2(KEY_SHADOW_MAX_DISTANCE_2_SPLITS, KEY_SHADOW_BLUR_2_SPLITS)
+	return Vector2(KEY_SHADOW_MAX_DISTANCE, KEY_SHADOW_BLUR)
 
 
 ## DirectionalLight3D shadow mode for a number of PSSM splits (1, 2 or 4; anything else -> 4).

@@ -8,7 +8,8 @@ extends Node3D
 ##
 ## Transitions between shots are real-time tweens (Palette.T_CINEMATIC, sine in-out curve of
 ## Tween.interpolate_value on the wall clock — see _start_blend) of a blend factor from a
-## snapshot to the live goal, so moving goals (orbits) stay smooth. After Simulation.seek/reset
+## snapshot to the live goal, so moving goals (orbits) stay smooth. The blended rig is clamped
+## (CameraShots.clamp_rig) before it reaches the camera: never below the floor, even mid-blend. After Simulation.seek/reset
 ## (`world_rebuilt`) the camera snaps to the goal without a tween (unless a user/focus framing
 ## holds outside a cue, see below).
 ## Input (unhandled, so the UI consumes first): drag with left/right button = orbit, wheel = zoom,
@@ -281,7 +282,10 @@ func _stop_blend() -> void:
 	_blend_duration = 0.0
 
 
+## Writes the rig to the camera. The rig is clamped here, after the blend of the frame
+## (CameraShots.clamp_rig: never below the floor + clearance, also mid-transition).
 func _apply() -> void:
+	CameraShots.clamp_rig(_rig)
 	var pos := _rig.position()
 	camera.transform = Transform3D(Basis.IDENTITY, pos).looking_at(_rig.target, Vector3.UP)
 	camera.fov = _rig.fov

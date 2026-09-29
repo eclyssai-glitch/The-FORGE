@@ -8,15 +8,19 @@ extends RefCounted
 ## (yaw measured around +Y from +Z towards +X, pitch = elevation above the target) and looks at
 ## the target. `fov` is the vertical FOV (degrees). `offset` shifts the subject horizontally on
 ## screen in NDC (-1..1; +0.38 moves it to the centre of the right 62 % of the frame) and is
-## applied through Camera3D.h_offset, so the perspective does not change.
+## applied through Camera3D.h_offset (a sideways shift of the camera: exact at the target depth,
+## smaller for farther points — tests project with that shift).
 ##
 ## Composition (docs/VISUAL_DIRECTION.md, docs/ANIMATION.md):
 ## - FORGE: the structure fills ~55 % of the frame height, the core slightly above the optical
 ##   centre, low horizon.
 ## - UNIVERSE: far out, from outside the pillar ring and between two pillars — the chamber is a
 ##   warm point in the lower middle, the cold dormant seeds (src/world/universe.gd SEEDS, 62–70
-##   units beyond the chamber) spread around it higher in the frame.
-## - OBSERVATORY: high and oblique, subject pushed right (native panel takes ~38 % on the left).
+##   units beyond the chamber) spread around it higher in the frame, all of them in the part of the
+##   frame the HUD leaves free (universe_free_rect: right of the SITES panel, below the mode bar,
+##   above the transport, left of the inspector/feed column).
+## - OBSERVATORY: raised three-quarter view (the outer walls dominate the ring caps), subject
+##   pushed right, into the free area beside the native panel (38 % of the width on the left).
 
 ## Floor of the chamber (world Y) and the minimum camera clearance above it.
 const FLOOR_Y := -3.2
@@ -72,25 +76,57 @@ class Shot extends RefCounted:
 ## Base yaw of the FORGE shot (a slight three-quarter view reads the rings as volumes).
 const FORGE_YAW := 0.42
 ## UNIVERSE shot. Yaw sits exactly between two pillars (pillar p stands at TAU·(p + 0.5)/24, so
-## multiples of TAU/24 fall in the gaps): 2·TAU/24 looks from the gap facing the three seeds.
-## Pitched high enough that the near pillars' tops stay below the structure on screen.
-const UNIVERSE_YAW := TAU * 2.0 / 24.0
-const UNIVERSE_PITCH := 0.42
-const UNIVERSE_DISTANCE := 78.0
-const UNIVERSE_FOV := 38.0
+## multiples of TAU/24 fall in the gaps): TAU/24 looks from the gap facing the three seeds.
+## Pitched high enough that the near pillars' tops stay below the structure on screen. Wide and
+## far enough that the three seeds (spread ~110° around the far side of the chamber) fit in the
+## part of the frame the HUD leaves free at 1600×900 and at 1280×720 (universe_free_rect; the HUD
+## has fixed pixel sizes, so 1280×720 is the tighter frame); UNIVERSE_OFFSET centres their spread
+## there. The chamber sits near the frame centre, the seeds open to its left, above it and to its right.
+const UNIVERSE_YAW := TAU * 1.0 / 24.0
+const UNIVERSE_PITCH := 0.4
+const UNIVERSE_DISTANCE := 108.0
+const UNIVERSE_FOV := 52.0
+const UNIVERSE_OFFSET := 0.08
 const UNIVERSE_TARGET := Vector3(0.0, 3.0, 0.0)
+## HUD around the UNIVERSE frame (px, fixed sizes at any resolution): SITES panel up to x 288
+## (and y 286), mode bar above y 70, transport and feed below `height − 220`, inspector column
+## (top-right when something is selected) right of `width − 330`.
+const UNIVERSE_HUD_LEFT := 310.0
+const UNIVERSE_HUD_TOP := 70.0
+const UNIVERSE_HUD_RIGHT := 330.0
+const UNIVERSE_HUD_BOTTOM := 220.0
+## OBSERVATORY shot: raised three-quarter view — low enough that the outer walls (the finished
+## metal read in FORGE) dominate the ring caps — pushed right by OBSERVATORY_OFFSET NDC to the
+## centre of the free 62 % of the frame (the native sheet takes 38 % on the left).
+const OBSERVATORY_TARGET := Vector3(0.0, -0.3, 0.0)
+const OBSERVATORY_YAW := -0.62
+const OBSERVATORY_PITCH := 0.45
+const OBSERVATORY_DISTANCE := 15.5
+const OBSERVATORY_FOV := 40.0
+const OBSERVATORY_OFFSET := 0.38
+## Fraction of the frame width the OBSERVATORY sheet covers on the left.
+const OBSERVATORY_SHEET := 0.38
 ## Slow orbit while the structure is built (rad/s of sim time), and during the final reveal.
 const BUILD_ORBIT := 0.011
 const FINAL_ORBIT := 0.05
+
+
+## Part of a `frame` (px) the UNIVERSE HUD leaves free: x in [310, w − 330], y in [70, h − 220]
+## (1600×900: x 310–1270, y 70–680; 1280×720: x 310–950, y 70–500).
+static func universe_free_rect(frame: Vector2) -> Rect2:
+	return Rect2(UNIVERSE_HUD_LEFT, UNIVERSE_HUD_TOP, frame.x - UNIVERSE_HUD_LEFT - UNIVERSE_HUD_RIGHT,
+		frame.y - UNIVERSE_HUD_TOP - UNIVERSE_HUD_BOTTOM)
 
 
 ## Writes the base shot of `mode` (SessionState.Mode) into `out`.
 static func mode_shot(mode: int, out: Shot) -> Shot:
 	match mode:
 		SessionState.Mode.UNIVERSE:
-			return out.setup(UNIVERSE_TARGET, UNIVERSE_YAW, UNIVERSE_PITCH, UNIVERSE_DISTANCE, UNIVERSE_FOV)
+			return out.setup(UNIVERSE_TARGET, UNIVERSE_YAW, UNIVERSE_PITCH, UNIVERSE_DISTANCE, UNIVERSE_FOV,
+				UNIVERSE_OFFSET)
 		SessionState.Mode.OBSERVATORY:
-			return out.setup(Vector3(0.0, -0.3, 0.0), -0.62, 0.62, 14.5, 40.0, 0.38)
+			return out.setup(OBSERVATORY_TARGET, OBSERVATORY_YAW, OBSERVATORY_PITCH, OBSERVATORY_DISTANCE,
+				OBSERVATORY_FOV, OBSERVATORY_OFFSET)
 		_:
 			return out.setup(Vector3(0.0, -0.45, 0.0), FORGE_YAW, 0.04, 11.2, 36.0)
 
@@ -187,10 +223,13 @@ const FOCUS_REACH: Array[float] = [FLY_RADIUS, 8.0, 8.0]
 ## turned SEED_FOCUS_YAW off the radial line and shifted SEED_FOCUS_OFFSET (NDC) on screen, so the
 ## seed holds the left third and the lit chamber stays in the background on the right third —
 ## the dormant seed read against the place where constructs are born. SEED_FOCUS_PITCH above.
+## SEED_FOCUS_FOV: a tele lens of its own (the wide UNIVERSE lens would push the chamber behind
+## the seed); the flight to the seed narrows the lens along the way.
 const FOCUS_FAR := 30.0
 const SEED_FOCUS_YAW := 0.42
 const SEED_FOCUS_OFFSET := -0.22
 const SEED_FOCUS_PITCH := 0.16
+const SEED_FOCUS_FOV := 38.0
 
 
 ## True when `mode` may frame a target centred at `centre` (FOCUS_REACH).
@@ -224,7 +263,7 @@ static func fit_distance(bounds: AABB, pitch: float, fov: float, offset: float, 
 ## current yaw, so the camera moves towards the entity instead of swinging around it. FORGE
 ## looks down at least FOCUS_MIN_PITCH; OBSERVATORY keeps its high pitch; UNIVERSE keeps its
 ## pitch near the chamber and, for far targets (seeds), looks from outside with the chamber
-## behind (SEED_FOCUS_*). Callers check focus_reachable() first. Returns `out`.
+## behind (SEED_FOCUS_*, own fov). Callers check focus_reachable() first. Returns `out`.
 static func focus_shot(mode: int, bounds: AABB, current: Shot, aspect: float, out: Shot) -> Shot:
 	var yaw := current.yaw
 	var current_pitch := current.pitch
@@ -239,6 +278,7 @@ static func focus_shot(mode: int, bounds: AABB, current: Shot, aspect: float, ou
 				yaw = atan2(centre.x, centre.z) + SEED_FOCUS_YAW
 				pitch = SEED_FOCUS_PITCH
 				out.offset = SEED_FOCUS_OFFSET
+				out.fov = SEED_FOCUS_FOV
 	out.target = centre
 	out.yaw = yaw
 	out.pitch = pitch
@@ -248,11 +288,20 @@ static func focus_shot(mode: int, bounds: AABB, current: Shot, aspect: float, ou
 
 # --- Limits and blending ----------------------------------------------------------------------
 
-## Keeps a shot inside the limits of `mode`: pitch range, distance range and camera above the
-## floor (never through y = FLOOR_Y). Returns the same shot.
+## Keeps a shot inside the limits of `mode`: distance range of the mode plus clamp_rig (pitch
+## range, target reach, camera above the floor — never through y = FLOOR_Y). Returns the same shot.
 static func clamp_shot(s: Shot, mode: int) -> Shot:
 	var lim: Vector2 = DISTANCE_LIMITS[clampi(mode, 0, DISTANCE_LIMITS.size() - 1)]
 	s.distance = clampf(s.distance, lim.x, lim.y)
+	return clamp_rig(s)
+
+
+## The limits shared by every mode: pitch range, target within FLY_RADIUS and above the floor, and
+## the camera at least FLOOR_CLEARANCE above the floor (pitch raised when needed). Applied to the
+## rig after every blend: a blend of two clamped shots is not clamped (pitch, distance and target
+## interpolate independently, so e.g. a low close shot blending into a far one dips through the
+## floor midway). Mode-independent, so a transition between modes keeps its distance curve.
+static func clamp_rig(s: Shot) -> Shot:
 	s.pitch = clampf(s.pitch, PITCH_MIN, PITCH_MAX)
 	s.target.y = maxf(s.target.y, FLOOR_Y + FLOOR_CLEARANCE)
 	var flat := Vector2(s.target.x, s.target.z)
@@ -266,7 +315,8 @@ static func clamp_shot(s: Shot, mode: int) -> Shot:
 	return s
 
 
-## out = a -> b at t (0..1): shortest-arc yaw, linear everything else.
+## out = a -> b at t (0..1): shortest-arc yaw, linear everything else. Not clamped: the caller
+## applies clamp_rig to the result (CameraDirector does, every frame).
 static func blend(a: Shot, b: Shot, t: float, out: Shot) -> Shot:
 	return out.setup(a.target.lerp(b.target, t), lerp_angle(a.yaw, b.yaw, t),
 		lerpf(a.pitch, b.pitch, t), lerpf(a.distance, b.distance, t), lerpf(a.fov, b.fov, t),
