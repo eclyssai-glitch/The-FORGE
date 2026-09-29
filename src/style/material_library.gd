@@ -156,6 +156,281 @@ static func spark(color: Color) -> StandardMaterial3D:
 	return _cache[key]
 
 
+# --- GENESIS (Loop 4, v2 look). Shaders in shaders/genesis/; rules in docs/VISUAL_DIRECTION.md. ---
+# Uniform conventions shared by the v2 materials:
+#  - `motion_time` (float, seconds): ambient motion clock. The shaders never read TIME; the scene
+#    calls MaterialLibrary.set_motion_time(MotionClock.now()) once per frame (cached instances) and
+#    sets it on its own duplicates.
+#  - `breath` (0..1): sine of Palette.T_BREATH, written by the animator where listed.
+#  - `select` (0..1): hover/selection rim, where listed.
+#  - `formation` (0..1): accretion / draw-in; 1 = complete. Never a flash.
+# Instances are cached and shared; bodies with their own state (each planet, moon, thread, orbit)
+# take `.duplicate()`.
+
+const GENESIS_DIR := "genesis/"
+
+## Octaves of the procedural noise per quality level (QualityProfiles.Level: LOW, MEDIUM, HIGH, ULTRA).
+const SKY_DETAIL: Array[int] = [3, 4, 5, 5]
+const PLANET_DETAIL: Array[int] = [3, 3, 4, 4]
+
+
+## MIKU's body — lunar porcelain (pearl, fake subsurface, iridescent grazing sheen pearl -> rose
+## -> pale gold, inner light). Vertex colour red = baked AO. Uniforms: `awaken` 0..1, `breath`
+## 0..1, `select` 0..1, `inner_glow`, `sheen`, `backlight_amount`, `ao_strength`.
+static func miku_body() -> ShaderMaterial:
+	if not _cache.has(&"miku_body"):
+		var m := _shader_material(GENESIS_DIR + "miku_body")
+		m.set_shader_parameter("pearl_color", Palette.PEARL)
+		m.set_shader_parameter("blush_color", Palette.BLUSH)
+		m.set_shader_parameter("rose_color", Palette.DUSK_ROSE)
+		m.set_shader_parameter("gold_color", Palette.GOLD)
+		m.set_shader_parameter("shadow_color", Palette.INDIGO.lerp(Palette.NEBULA, 0.5))
+		m.set_shader_parameter("awaken", 1.0)
+		m.set_shader_parameter("breath", 0.5)
+		m.set_shader_parameter("select", 0.0)
+		_cache[&"miku_body"] = m
+	return _cache[&"miku_body"]
+
+
+## MIKU's hair — additive ribbons of light, pale gold (root) -> dusk rose -> lilac (tip), soft
+## edges, inner filaments, slow shimmer. Mesh: UV.x root->tip, UV.y across; vertex alpha = strand
+## opacity. Uniforms: `reveal` 0..1, `motion_time`, `intensity`, `seed` (duplicate per ribbon set).
+static func miku_hair() -> ShaderMaterial:
+	if not _cache.has(&"miku_hair"):
+		var m := _shader_material(GENESIS_DIR + "miku_hair")
+		m.set_shader_parameter("root_color", Palette.GOLD.lerp(Palette.PEARL, 0.35))
+		m.set_shader_parameter("mid_color", Palette.DUSK_ROSE)
+		m.set_shader_parameter("tip_color", Palette.LILAC)
+		m.set_shader_parameter("reveal", 1.0)
+		_cache[&"miku_hair"] = m
+	return _cache[&"miku_hair"]
+
+
+## MIKU's gown — additive veil of light dissolving downward into star dust (object-space Y from
+## `fade_top` to `fade_bottom`, in the mesh's local units). Uniforms: `fade_top`, `fade_bottom`,
+## `presence` 0..1, `motion_time`, `intensity`.
+static func miku_gown() -> ShaderMaterial:
+	if not _cache.has(&"miku_gown"):
+		var m := _shader_material(GENESIS_DIR + "miku_gown")
+		m.set_shader_parameter("top_color", Palette.PEARL.lerp(Palette.BLUSH, 0.4))
+		m.set_shader_parameter("bottom_color", Palette.LILAC.lerp(Palette.DUSK_ROSE, 0.35))
+		m.set_shader_parameter("dust_color", Palette.PEARL)
+		m.set_shader_parameter("presence", 1.0)
+		_cache[&"miku_gown"] = m
+	return _cache[&"miku_gown"]
+
+
+## MIKU's halo — incomplete astrolabe arc with fine graduation, drawn on a flat quad (QuadMesh /
+## PlaneMesh). Constant pixel-width lines. Uniforms: `strength` 0..1, `breath` 0..1, `arc_span`.
+static func halo_arc() -> ShaderMaterial:
+	if not _cache.has(&"halo_arc"):
+		var m := _shader_material(GENESIS_DIR + "halo_arc")
+		m.set_shader_parameter("color", Palette.GOLD.lerp(Palette.PEARL, 0.45))
+		m.set_shader_parameter("inner_color", Palette.DUSK_ROSE)
+		m.set_shader_parameter("strength", 1.0)
+		m.set_shader_parameter("breath", 0.5)
+		_cache[&"halo_arc"] = m
+	return _cache[&"halo_arc"]
+
+
+## Auxiliary hands — polished night basalt (clearcoat) with stars inside the stone and gold
+## kintsugi veins. Vertex colour red = baked AO. Uniforms: `veins` 0..1 (lit network + glow),
+## `motion_time`, `select` 0..1, `vein_scale`, `star_scale`.
+static func hand_stone() -> ShaderMaterial:
+	if not _cache.has(&"hand_stone"):
+		var m := _shader_material(GENESIS_DIR + "hand_stone")
+		m.set_shader_parameter("stone_color", Palette.STONE)
+		m.set_shader_parameter("stone_light_color", Palette.INDIGO.lerp(Palette.NEBULA, 0.45))
+		m.set_shader_parameter("star_color", Palette.PEARL.lerp(Palette.ICE, 0.4))
+		m.set_shader_parameter("gold_color", Palette.GOLD)
+		m.set_shader_parameter("gold_deep_color", Palette.GOLD_DEEP)
+		m.set_shader_parameter("veins", 0.0)
+		m.set_shader_parameter("select", 0.0)
+		_cache[&"hand_stone"] = m
+	return _cache[&"hand_stone"]
+
+
+## Forming planet (sub-agent). Uniforms 0..1: `formation` (accretion, gold growing edge), `heat`
+## (flowing golden magma), `crust` (dark cracked plates, glowing cracks), `atmosphere` (ice ->
+## dusk-rose fresnel rim). Also `motion_time`, `seed` (per planet), `detail` (octaves), `select`.
+## Far, already-formed planets use a duplicate with formation 1, heat ~0.1, crust 1, atmosphere 1.
+static func planet_forming() -> ShaderMaterial:
+	if not _cache.has(&"planet_forming"):
+		var m := _shader_material(GENESIS_DIR + "planet_forming")
+		m.set_shader_parameter("magma_hot_color", Palette.GOLD)
+		m.set_shader_parameter("magma_mid_color", Palette.MAGMA)
+		m.set_shader_parameter("magma_deep_color", Palette.GOLD_DEEP)
+		m.set_shader_parameter("crust_color", Palette.STONE)
+		m.set_shader_parameter("crust_light_color", Palette.INDIGO.lerp(Palette.DUSK_ROSE, 0.18))
+		m.set_shader_parameter("atmo_inner_color", Palette.ICE)
+		m.set_shader_parameter("atmo_outer_color", Palette.DUSK_ROSE)
+		m.set_shader_parameter("accretion_color", Palette.GOLD)
+		m.set_shader_parameter("formation", 1.0)
+		m.set_shader_parameter("heat", 1.0)
+		m.set_shader_parameter("crust", 0.0)
+		m.set_shader_parameter("atmosphere", 0.0)
+		m.set_shader_parameter("detail", PLANET_DETAIL[2])
+		_cache[&"planet_forming"] = m
+	return _cache[&"planet_forming"]
+
+
+## Documentation moon — knowledge ice: frosted pale ice with faint strata (pages), cool
+## backlight, thin ice rim. Uniforms: `formation` 0..1 (accretion), `glow` 0..1, `seed`, `select`.
+static func moon_doc() -> ShaderMaterial:
+	if not _cache.has(&"moon_doc"):
+		var m := _shader_material(GENESIS_DIR + "moon_doc")
+		m.set_shader_parameter("ice_color", Palette.ICE)
+		m.set_shader_parameter("deep_color", Palette.INDIGO.lerp(Palette.ICE, 0.25))
+		m.set_shader_parameter("light_color", Palette.PEARL)
+		m.set_shader_parameter("accretion_color", Palette.ICE.lerp(Palette.PEARL, 0.5))
+		m.set_shader_parameter("formation", 1.0)
+		m.set_shader_parameter("glow", 0.5)
+		m.set_shader_parameter("select", 0.0)
+		_cache[&"moon_doc"] = m
+	return _cache[&"moon_doc"]
+
+
+## Skill ring — fine bands of pale gold light on a flat quad (PlaneMesh; radius from UV, between
+## `inner` and `outer` shares of the half-size). Uniforms: `formation` 0..1 (angular sweep with a
+## warm leading edge), `intensity`, `inner`, `outer`, `bands`, `seed`.
+static func ring_skill() -> ShaderMaterial:
+	if not _cache.has(&"ring_skill"):
+		var m := _shader_material(GENESIS_DIR + "ring_skill")
+		m.set_shader_parameter("color", Palette.GOLD.lerp(Palette.PEARL, 0.3))
+		m.set_shader_parameter("accent_color", Palette.GOLD)
+		m.set_shader_parameter("formation", 1.0)
+		_cache[&"ring_skill"] = m
+	return _cache[&"ring_skill"]
+
+
+## Memory belt rocks — rough night stone with a nebula rim; a share of the rocks (by INSTANCE_ID)
+## hold a quiet gold glint. Uniforms: `memory` 0..1 (glints), `glint_share`, `rim_intensity`.
+static func asteroid_memory() -> ShaderMaterial:
+	if not _cache.has(&"asteroid_memory"):
+		var m := _shader_material(GENESIS_DIR + "asteroid_memory")
+		m.set_shader_parameter("rock_color", Palette.STONE)
+		m.set_shader_parameter("rock_light_color", Palette.INDIGO.lerp(Palette.DUSK_ROSE, 0.2))
+		m.set_shader_parameter("rim_color", Palette.DUSK_ROSE.lerp(Palette.LILAC, 0.5))
+		m.set_shader_parameter("glint_color", Palette.GOLD)
+		m.set_shader_parameter("memory", 1.0)
+		_cache[&"asteroid_memory"] = m
+	return _cache[&"asteroid_memory"]
+
+
+## Orbit — thin additive line fading along the arc behind the body. Mesh: closed ribbon, UV.x
+## along the orbit (direction of motion), UV.y across. Uniforms: `head` 0..1 (body position),
+## `trail`, `base`, `formation` 0..1 (draw-in), `intensity`, `color`.
+static func orbit_line() -> ShaderMaterial:
+	if not _cache.has(&"orbit_line"):
+		var m := _shader_material(GENESIS_DIR + "orbit_line")
+		m.set_shader_parameter("color", Palette.PEARL.lerp(Palette.LILAC, 0.6))
+		m.set_shader_parameter("head", 0.0)
+		m.set_shader_parameter("formation", 1.0)
+		_cache[&"orbit_line"] = m
+	return _cache[&"orbit_line"]
+
+
+## Relation thread (link) — fibre of light prolonging the hair: lilac at the source -> `color_to`
+## at the target (default ICE; GOLD for the forming planet). Mesh: UV.x source->target, UV.y
+## across. Uniforms: `pulse` (0..1 position of a travelling gold pulse; outside = none), `woven`
+## 0..1 (spun out from the source), `intensity`, `color_to`.
+static func relation_thread() -> ShaderMaterial:
+	if not _cache.has(&"relation_thread"):
+		var m := _shader_material(GENESIS_DIR + "relation_thread")
+		m.set_shader_parameter("color_from", Palette.LILAC)
+		m.set_shader_parameter("color_to", Palette.ICE)
+		m.set_shader_parameter("pulse_color", Palette.GOLD.lerp(Palette.PEARL, 0.3))
+		m.set_shader_parameter("pulse", -1.0)
+		m.set_shader_parameter("woven", 1.0)
+		_cache[&"relation_thread"] = m
+	return _cache[&"relation_thread"]
+
+
+## GENESIS sky (Sky.sky_material): indigo/violet nebula with a warm dusk-rose core toward
+## `warm_dir` (default: world -Z slightly above the horizon — behind MIKU from the FORGE camera),
+## dark dust lanes, three star layers, dithering. Uniforms: `warm_dir`, `motion_time` (star
+## twinkle; see the shader note about radiance updates), `detail` (octaves), `sky_energy`,
+## `star_intensity`, `nebula_intensity`, `warm_intensity`, `radiance_strength`.
+static func nebula_sky() -> ShaderMaterial:
+	if not _cache.has(&"nebula_sky"):
+		var m := _shader_material(GENESIS_DIR + "nebula_sky")
+		m.set_shader_parameter("deep_color", Palette.SPACE_DEEP)
+		m.set_shader_parameter("indigo_color", Palette.INDIGO)
+		m.set_shader_parameter("nebula_color", Palette.NEBULA)
+		m.set_shader_parameter("lilac_color", Palette.LILAC)
+		m.set_shader_parameter("warm_color", Palette.DUSK_ROSE)
+		m.set_shader_parameter("core_color", Palette.GOLD.lerp(Palette.BLUSH, 0.5))
+		m.set_shader_parameter("star_color", Palette.PEARL)
+		m.set_shader_parameter("star_warm_color", Palette.BLUSH)
+		m.set_shader_parameter("star_cool_color", Palette.ICE)
+		m.set_shader_parameter("warm_dir", Vector3(0.0, 0.22, -1.0))
+		m.set_shader_parameter("detail", SKY_DETAIL[2])
+		_cache[&"nebula_sky"] = m
+	return _cache[&"nebula_sky"]
+
+
+## Names of the GENESIS getters (tests, lookdev, quality/motion broadcasts).
+const GENESIS_MATERIALS: Array[StringName] = [
+	&"miku_body", &"miku_hair", &"miku_gown", &"halo_arc", &"hand_stone", &"planet_forming",
+	&"moon_doc", &"ring_skill", &"asteroid_memory", &"orbit_line", &"relation_thread", &"nebula_sky",
+]
+
+
+## GENESIS material by name (one of GENESIS_MATERIALS); null for an unknown name.
+static func genesis(material_name: StringName) -> ShaderMaterial:
+	match material_name:
+		&"miku_body": return miku_body()
+		&"miku_hair": return miku_hair()
+		&"miku_gown": return miku_gown()
+		&"halo_arc": return halo_arc()
+		&"hand_stone": return hand_stone()
+		&"planet_forming": return planet_forming()
+		&"moon_doc": return moon_doc()
+		&"ring_skill": return ring_skill()
+		&"asteroid_memory": return asteroid_memory()
+		&"orbit_line": return orbit_line()
+		&"relation_thread": return relation_thread()
+		&"nebula_sky": return nebula_sky()
+	return null
+
+
+## Writes `motion_time` on every cached material that has it (call once per frame with
+## MotionClock.now()). Duplicates are owned by their entity, which sets it itself.
+static func set_motion_time(t: float) -> void:
+	_motion_time = t
+	for key: StringName in _cache:
+		var m := _cache[key] as ShaderMaterial
+		if m != null and _has_uniform(m, &"motion_time"):
+			m.set_shader_parameter("motion_time", t)
+
+
+## Noise octaves of the sky and the planets per quality profile (QualityProfiles.get_profile);
+## affects the cached instances — duplicates made afterwards inherit it.
+static func apply_quality(profile: Dictionary) -> void:
+	var level := clampi(int(profile.get("level", 2)), 0, SKY_DETAIL.size() - 1)
+	nebula_sky().set_shader_parameter("detail", SKY_DETAIL[level])
+	planet_forming().set_shader_parameter("detail", PLANET_DETAIL[level])
+
+
+static var _uniform_cache: Dictionary = {}
+## Last value given to set_motion_time (new materials start from it).
+static var _motion_time: float = 0.0
+
+
+static func _has_uniform(m: ShaderMaterial, uniform_name: StringName) -> bool:
+	if m.shader == null:
+		return false
+	var key := "%s|%s" % [m.shader.resource_path, uniform_name]
+	if not _uniform_cache.has(key):
+		var found := false
+		for u: Dictionary in m.shader.get_shader_uniform_list():
+			if StringName(u["name"]) == uniform_name:
+				found = true
+				break
+		_uniform_cache[key] = found
+	return _uniform_cache[key]
+
+
 ## Drops every cached material (tests / hot reload). Existing users keep their instances.
 static func clear_cache() -> void:
 	_cache.clear()
@@ -164,4 +439,7 @@ static func clear_cache() -> void:
 static func _shader_material(shader_name: String) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = load(SHADER_DIR + shader_name + ".gdshader") as Shader
+	# A material created after set_motion_time() starts at the current motion clock.
+	if _has_uniform(m, &"motion_time"):
+		m.set_shader_parameter("motion_time", _motion_time)
 	return m
