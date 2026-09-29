@@ -222,8 +222,17 @@ func test_ribs_link_every_layer() -> void:
 				"rib passes through every ring")
 		var lo := tr.origin.y - float(p["height"]) * 0.5
 		var hi := tr.origin.y + float(p["height"]) * 0.5
-		assert_lte(lo, float(bottom["y"]) - float(bottom["height"]) * 0.5)
-		assert_gte(hi, float(top["y"]) + float(top["height"]) * 0.5)
+		# Tips end inside the ring stack: within [bottom face of lowest ring, top face of
+		# highest ring], and buried in those rings (never in the open air between rings).
+		var stack_lo := float(bottom["y"]) - float(bottom["height"]) * 0.5
+		var stack_hi := float(top["y"]) + float(top["height"]) * 0.5
+		assert_between(lo, stack_lo, float(bottom["y"]) + float(bottom["height"]) * 0.5,
+			"rib bottom tip inside the lowest ring")
+		assert_between(hi, float(top["y"]) - float(top["height"]) * 0.5, stack_hi,
+			"rib top tip inside the highest ring")
+		assert_almost_eq(hi - lo, stack_hi - stack_lo - 2.0 * StructureBlueprint.RIB_INSET, EPS)
+		# Growth scales Y about the origin: the origin must be the stack midpoint.
+		assert_almost_eq(tr.origin.y, (stack_lo + stack_hi) * 0.5, EPS)
 		# Rib back (+Z) faces outwards.
 		assert_gt((tr.basis * Vector3.BACK).dot(Vector3(tr.origin.x, 0.0, tr.origin.z).normalized()),
 			0.999)
