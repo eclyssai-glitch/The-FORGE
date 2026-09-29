@@ -16,7 +16,9 @@ Compilar não prova nada. Esta skill produz evidência do jogo **rodando**.
    (o script falha sozinho se houver).
 2. **Smoke** — `tools/smoke_test.sh`. Esperado: `RESULT=PASS`, `events_received` = `expected`,
    `mission_objectives=7/7`, `pause_holds=true`, `reset_ok=true`. Registre `renderer`, `adapter`, `avg_fps`.
-3. **Capturas** — `tools/capture_evidence.sh docs/evidence/loop-NN`. Gera
+3. **Capturas** — referência: `tools/capture_evidence.sh docs/evidence/loop-NN --quality=high`; perfil baixo:
+   `tools/capture_evidence.sh docs/evidence/loop-NN/low --quality=low` (é o que o AUTO escolhe sem GPU dedicada).
+   **Sempre registre a qualidade** num `README.md` do diretório de evidências e revise os dois conjuntos. Gera
    `01_dormant_core` … `07_final_form`, `08_universe`, `09_observatory` (tempos em
    `src/core/automation.gd`). Em renderização por software, cada captura leva segundos: normal.
 4. **Inspeção** — abra **cada** PNG e descreva o que aparece. Checklist:

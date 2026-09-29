@@ -83,3 +83,12 @@ revisão `art-director` + auditoria `technical-auditor`, correções pelos donos
   0.34→0.42 ou `core.light_specular` 0.35→0.2.
 - [P2] animator: fio da banda de verificação pontilhado (largura mínima em px); motes quase invisíveis (alfa 0.16 ou tom distinto das estrelas).
 - [P2] procedural-modeler: nervuras ultrapassam topo/base da pilha — limitar a altura.
+
+## Pendências herdadas do Loop 2 (reauditoria technical-auditor: APROVADO COM RESSALVAS)
+
+- [IMPORTANTE] game-engineer: sementes invisíveis (além do fim da névoa) continuam selecionáveis no FORGE —
+  habilitar colisão das sementes só no UNIVERSE (ou dentro do alcance visível) e testar com a câmera do plano FORGE.
+- [IMPORTANTE] art-director: revisar o conjunto LOW (`docs/evidence/loop-02/low/`) — sem volumétrica o UNIVERSE
+  mostra piso/colunata bem mais claros que no HIGH; conciliar os perfis em `EnvironmentProfile`.
+- [MENOR] art-director: remover `MaterialLibrary.particle()` (sem chamadores) e a linha em VISUAL_DIRECTION.md.
+- [MENOR] animator: zerar o cache `_env_written` do LightRig em `world_rebuilt`.

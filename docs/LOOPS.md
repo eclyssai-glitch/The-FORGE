@@ -40,30 +40,27 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
 - Retomada: iniciar Loop 2 pela Fase A (procedural-modeler + art-director em paralelo, áreas disjuntas),
   contratos de interface registrados na entrada do Loop 2.
 
-## Loop 2 — Motor visual · em andamento
+## Loop 2 — Motor visual · concluído
 
 - Escopo: ambiente 3D, câmeras cinematográficas, construção procedural, materiais e iluminação,
   efeitos visuais, animação dirigida por eventos, qualidade gráfica aplicada ao mundo.
-- Contratos de interface entre áreas: `docs/contracts/loop-02.md`.
-- Plano de execução (escritor único por área, worktrees isoladas por agente):
-  - Fase A (paralela): `procedural-modeler` → `src/procedural`; `art-director` → `src/style`.
-  - Fase B (paralela, após merge de A): `animator` → `src/entities`, `src/animation`, `src/fx`;
-    `game-engineer` → `src/world` (composição, universo, seleção, qualidade no ambiente).
-  - Fase C: integração, capturas de todas as fases, revisão do `art-director`, auditoria do
-    `technical-auditor`, correções pelos donos, checkpoint.
-- Progresso:
-  - Fase A concluída e integrada: `procedural-modeler` (89281af — blueprint de 5 anéis/96 segmentos,
-    12 nervuras, builders de malha; 34 testes novos) e `art-director` (1453376 — MaterialLibrary, 5 shaders,
-    EnvironmentProfile com luz por estágio; regra do selo e do núcleo dormente). Suíte: 57/57.
-    Provas visuais revisadas pelo coordenador (estrutura "lanterna" arquitetônica; metal escuro com arcos EMBER finos).
-  - Fase B concluída e integrada: `game-engineer` (c4e8eff — world, universo, picker) e `animator`
-    (4772814 — 9 módulos, câmera, coreografia). Suíte 105/105; smoke PASS; capturas em `docs/evidence/loop-02/`.
-  - Fase C: revisão `art-director` REPROVADO (fase lit escura, arcos como wireframe, sementes dentro da câmara);
-    auditoria `technical-auditor` APROVADO COM RESSALVAS (clique×arrasto + 9 menores; robustez de seek/pausa/reset
-    confirmada, sem vazamentos). Rodada de correção especificada em `docs/contracts/loop-02-fixes.md`.
-  - Contêiner reiniciado durante a 1ª tentativa da rodada (sem trabalho perdido: worktrees vazias removidas).
-- Retomada: executar `docs/contracts/loop-02-fixes.md` — etapa 1 (art-director, game-engineer,
-  procedural-modeler) → merge → etapa 2 (animator) → merge → recapturar `docs/evidence/loop-02/` →
-  reauditoria (art-director + technical-auditor) → checkpoint.
+- Execução (escritor único por área, worktrees isoladas): contratos em `docs/contracts/loop-02.md`;
+  Fase A procedural-modeler + art-director; Fase B animator + game-engineer; Fase C revisão/auditoria;
+  rodada de correção `docs/contracts/loop-02-fixes.md` (duas etapas).
+- Entregue: blueprint de 5 anéis/96 segmentos + 12 nervuras e builders de malha; MaterialLibrary + 6 shaders +
+  EnvironmentProfile (luz por estágio, névoa por modo, exposure_scale); 9 módulos (LightRig, câmara, núcleo,
+  estrutura, verificação, pulso, poeira, faíscas, CameraDirector) dirigidos por `Simulation.world`+`time`;
+  universo (céu procedural, 3 sementes a 62–70 u), Picker, qualidade aplicada ao ambiente/sombras;
+  ferramentas com supervisão de processos e checagem de módulos.
+- Verificação: `tools/run_tests.sh` 117/117; smoke PASS `modules=9/9` (fonte e pack do .exe); 9 capturas HIGH
+  + 9 LOW em `docs/evidence/loop-02/` (README descreve qualidade); probe de robustez de 600 passos sem erros
+  nem vazamentos.
+- Auditoria: art-director — 1ª revisão REPROVADO → após correção APROVADO COM RESSALVAS (3 P0 resolvidos);
+  technical-auditor — APROVADO COM RESSALVAS (9/9 achados anteriores tratados; 2 importantes novos levados ao Loop 3).
+- Decisões: ADR-008 (supervisão de processos), ADR-009 (InputTuning), ADR-010 (movimento ambiente).
+- Pendências → Loop 3 (`docs/contracts/loop-03.md`): sementes selecionáveis invisíveis no FORGE; UNIVERSE
+  subexposto no HIGH e divergência LOW×HIGH; flash/verificação com leitura de grade; reflexo do núcleo; fio da
+  banda pontilhado; motes; nervuras longas; `particle()` morto; invalidar cache do LightRig em `world_rebuilt`.
+- Retomada: Loop 3, etapa 1 (game-engineer) conforme `docs/contracts/loop-03.md`.
 
 ## Loop 3 — Experiência interativa + build Windows · pendente

@@ -37,6 +37,25 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
   `claude/funny-hawking-air6xk`, sem nenhum conteúdo da KORIUM. O histórico é transferível
   integralmente para um repositório novo quando ele existir.
 
+## ADR-008 — Supervisão de processos nas ferramentas de verificação
+- Contexto: sob Xvfb + lavapipe o Godot pode não encerrar após concluir capturas/smoke, pendurando scripts.
+- Decisão: `tools/_proc.sh` executa o jogo numa sessão própria (`setsid`), com timeout total e período de
+  graça após o trabalho concluído; ao final sempre encerra a sessão inteira (godot, xvfb-run, Xvfb). No jogo,
+  `automation.gd` agenda `OS.kill` do próprio processo 3 s após `quit()` (só nos modos de automação).
+- Consequência: capturas/smoke nunca deixam órfãos; o veredito vem do log (`RESULT=`, PNGs gravados nesta execução).
+
+## ADR-009 — Limiar único de clique × arrasto (`InputTuning`)
+- Contexto: Picker (6 px em linha reta) e câmera (3 px acumulados) divergiam; arrastos orbitavam **e** selecionavam.
+- Decisão: `src/core/input_tuning.gd` é a fonte única (`DRAG_THRESHOLD_PX`), medida por percurso acumulado,
+  usada pelo Picker e pelo CameraDirector.
+
+## ADR-010 — Movimento ambiente em tempo real
+- Contexto: pausa/seek precisam ser exatos (ADR-004), mas um mundo totalmente congelado parece travado.
+- Decisão: tudo que depende da simulação é função de `Simulation.world` + `Simulation.time`; apenas movimento
+  ambiente sem significado narrativo (flutuação do núcleo, deriva de fragmentos soltos, deriva das sementes,
+  poeira) usa tempo real e continua durante a pausa. Documentado em `docs/ANIMATION.md`.
+- Consequência: capturas iguais em estado narrativo, com pequenas variações de pixel do movimento ambiente.
+
 ## ADR-007 — Validação do executável Windows
 - Contexto: no contêiner Linux, o Wine disponível (9.0) aborta em qualquer binário Godot 4.7.2 antes
   do `main`: o runtime MinGW chama `VirtualProtect(..., lpflOldProtect=NULL)`, que o Windows
