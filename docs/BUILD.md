@@ -25,6 +25,20 @@ No Windows com o editor instalado: *Project → Export → Windows Desktop*, ou
 O smoke reprova se: `RESULT=FAIL`, falta a linha `RESULT`, há `SCRIPT ERROR`/`Parse Error` no log,
 a linha `modules=N/M` tem N ≠ M (script de entidade, fx ou câmera ausente/quebrado) ou o tempo esgota.
 
+Encerramento robusto (Xvfb + lavapipe às vezes não encerra o Godot após o último quadro):
+
+- Os dois scripts rodam o jogo numa sessão própria (`setsid`, `tools/_proc.sh`) e, ao final — normal,
+  por tempo, por Ctrl-C/TERM —, matam a sessão inteira (godot, xvfb-run, Xvfb): nenhum processo órfão.
+- Smoke: `TIMEOUT` (padrão 240 s) total; após a linha `RESULT=` o motor tem `SMOKE_GRACE` s
+  (padrão 15) para sair, senão é encerrado ("forced exit after result") e o veredito vem do log.
+- Capturas: `--timeout=<s>` ou `CAPTURE_TIMEOUT` (padrão 900 s). A lista de PNG esperados vem de
+  `CAPTURES` em `src/core/automation.gd` (filtrada por `--capture-only`); só contam PNG gravados
+  nesta execução. Todos presentes → saída 0, mesmo se foi preciso encerrar o motor
+  ("forced exit after captures", `CAPTURE_GRACE` s após o último, padrão 15); falta algum → saída 1.
+- No jogo (`automation.gd`, só em `--capture`/`--smoke-test`): o fade de entrada é concluído antes da
+  1ª captura (brilho determinístico) e, se `quit()` não encerrar o laço principal em 3 s, o processo
+  se mata (`OS.kill`).
+
 Limitação registrada (ADR-007): o `.exe` não executa sob o Wine 9.0 disponível neste ambiente
 (falha do Wine anterior ao código do jogo). O conteúdo do jogo dentro do `.exe` é validado
 executando-o com o runtime oficial Godot 4.7.2. O código específico do Windows (template,

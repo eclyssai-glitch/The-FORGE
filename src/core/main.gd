@@ -10,6 +10,8 @@ extends Node
 @onready var hud: CanvasLayer = $HUD
 @onready var fade: ColorRect = $FadeLayer/Fade
 
+var _fade_tween: Tween
+
 
 func _ready() -> void:
 	var args := _parse_args(OS.get_cmdline_user_args())
@@ -22,9 +24,18 @@ func _ready() -> void:
 		automation.name = "Automation"
 		automation.options = args
 		add_child(automation)
-	var tw := create_tween()
-	tw.tween_property(fade, "color:a", 0.0, 1.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tw.tween_callback(fade.hide)
+	_fade_tween = create_tween()
+	_fade_tween.tween_property(fade, "color:a", 0.0, 1.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_fade_tween.tween_callback(fade.hide)
+
+
+## Ends the entry fade at once (fully transparent and hidden). Used by capture automation
+## so the first screenshot never catches the fade half-way (deterministic brightness).
+func finish_fade() -> void:
+	if _fade_tween and _fade_tween.is_valid():
+		_fade_tween.kill()
+	fade.color.a = 0.0
+	fade.hide()
 
 
 func _unhandled_input(event: InputEvent) -> void:
