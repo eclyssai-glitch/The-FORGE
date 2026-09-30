@@ -88,6 +88,6 @@ void fragment() {
 	vec3 e = star_color * stars * star_intensity * (1.0 - gold_mask) * mix(0.4, 1.0, ao);
 	// Lit gold stays saturated: the glow ramps deep gold -> gold instead of pushing to white.
 	e += mix(gold_deep_color, gold_color, lit * 0.8) * gold_mask * (0.04 + lit * vein_glow * flow);
-	e += stone_light_color * pow(1.0 - nv, 3.0) * select * 0.8;
+	e += stone_light_color * pow(max(1.0 - nv, 0.0), 3.0) * select * 0.8;
 	EMISSION = e;
 }

@@ -36,18 +36,22 @@ void vertex() {
 
 void fragment() {
 	float h = clamp((fade_top - v_obj.y) / max(fade_top - fade_bottom, 1e-3), 0.0, 1.0);
-	float nv = abs(dot(NORMAL, VIEW));
-	float veil = mix(face_opacity, 1.0, pow(1.0 - nv, 1.6));
+	// Clamped: |n.v| can exceed 1 by a rounding step, and pow() of a negative base is NaN.
+	float nv = clamp(abs(dot(NORMAL, VIEW)), 0.0, 1.0);
+	float veil = mix(face_opacity, 1.0, pow(max(1.0 - nv, 0.0), 1.6));
 
 	vec3 q = vec3(v_obj.x, v_obj.y + motion_time * flow_speed, v_obj.z) * noise_scale;
 	float n = k_fbm(q, 3);
 	// Dissolve: the threshold rises with depth; a soft band keeps the edge luminous, not cut.
 	float thr = h * 1.05 - 0.05;
 	float body = smoothstep(thr - 0.02, thr + 0.22, n);
-	float lip = exp(-pow((n - thr) / 0.05, 2.0)) * smoothstep(0.05, 0.3, h) * 0.8;
+	// Gaussian lip: d*d, never pow(d, 2.0) (d is signed; pow of a negative base is NaN).
+	float lip_d = (n - thr) / 0.05;
+	float lip = exp(-lip_d * lip_d) * smoothstep(0.05, 0.3, h) * 0.8;
 
 	// Long vertical folds (light caught in the fabric of light).
-	vec2 around = normalize(v_obj.xz + vec2(1e-4));
+	vec2 around_xz = v_obj.xz + vec2(1e-4);
+	vec2 around = around_xz / max(length(around_xz), 1e-6);
 	float folds = 0.7 + 0.3 * k_vnoise(vec3(around * 3.0, v_obj.y * 0.35 + 1.7));
 
 	vec3 col = mix(top_color, bottom_color, smoothstep(0.0, 0.85, h));

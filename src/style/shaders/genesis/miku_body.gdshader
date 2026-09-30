@@ -64,10 +64,10 @@ void fragment() {
 	vec3 irid = mix(pearl_color, rose_color, smoothstep(0.2, 0.6, f));
 	irid = mix(irid, gold_color, smoothstep(0.6, 0.95, f));
 	float wake = mix(0.25, 1.0, awaken);
-	vec3 sheen_e = irid * pow(f, 2.2) * sheen * wake;
+	vec3 sheen_e = irid * pow(max(f, 0.0), 2.2) * sheen * wake;
 	vec3 inner_e = mix(pearl_color, blush_color, 0.4) * inner_glow * awaken
-			* (0.8 + 0.4 * breath) * mix(0.3, 1.0, pow(f, 1.5)) * ao;
+			* (0.8 + 0.4 * breath) * mix(0.3, 1.0, pow(max(f, 0.0), 1.5)) * ao;
 	vec3 trans_e = mix(blush_color, rose_color, 0.35) * smoothstep(0.35, 0.95, f) * backlight_amount * wake * ao;
-	vec3 select_e = pearl_color * pow(f, 3.0) * select * 0.6;
+	vec3 select_e = pearl_color * pow(max(f, 0.0), 3.0) * select * 0.6;
 	EMISSION = sheen_e + inner_e + trans_e + select_e;
 }

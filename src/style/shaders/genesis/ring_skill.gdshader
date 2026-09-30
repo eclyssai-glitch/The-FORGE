@@ -34,9 +34,11 @@ void fragment() {
 	// Soft falloff at both edges; the outer third slightly dimmer (ring thins outward).
 	float edge = smoothstep(0.0, 0.12, t) * (1.0 - smoothstep(0.8, 1.0, t)) * mix(1.0, 0.7, t);
 
-	float a = fract(atan(p.y, p.x) / 6.2831853);
+	float a = k_angle01(p);
 	float swept = 1.0 - smoothstep(formation - 0.04, formation, a);
-	float front = (formation < 0.999) ? exp(-pow((a - formation) / 0.015, 2.0)) : 0.0;
+	// Gaussian front: d*d, never pow(d, 2.0) (d is signed; pow of a negative base is NaN).
+	float front_d = (a - formation) / 0.015;
+	float front = (formation < 0.999) ? exp(-front_d * front_d) : 0.0;
 
 	vec3 col = mix(color, accent_color, 0.35 + 0.35 * n2);
 	float lum = density * edge * inside;

@@ -24,7 +24,7 @@ uniform float select : hint_range(0.0, 1.0) = 0.0;
 varying vec3 v_dir;
 
 void vertex() {
-	v_dir = normalize(VERTEX);
+	v_dir = k_safe_normalize(VERTEX, vec3(0.0, 1.0, 0.0));
 }
 
 void fragment() {
@@ -52,8 +52,8 @@ void fragment() {
 	BACKLIGHT = ice_color * 0.35;
 
 	vec3 e = light_color * glow * (0.05 + line * strata_strength * 0.18) * mix(0.5, 1.0, nv);
-	e += ice_color * pow(f, 4.0) * rim_intensity;
+	e += ice_color * pow(max(f, 0.0), 4.0) * rim_intensity;
 	e += accretion_color * lip * 2.0;
-	e += light_color * pow(f, 3.0) * select * 0.6;
+	e += light_color * pow(max(f, 0.0), 3.0) * select * 0.6;
 	EMISSION = e;
 }

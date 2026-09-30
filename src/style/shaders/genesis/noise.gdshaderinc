@@ -1,6 +1,23 @@
 // KORIUM UNIVERSE — shared cheap noise for the GENESIS shaders. Owner: art-director.
 // Hash-based value noise only (no textures, no gradient tables); every loop has a small constant
 // bound so the LOW profile stays cheap. Nothing here reads TIME.
+//
+// NaN safety (tests/unit/test_style_shader_safety.gd): pow() bases are clamped, sqrt() arguments
+// are max()'d, directions go through k_safe_normalize() and angles through k_angle01(). A single
+// NaN pixel turns into a white blotch / black hole once glow spreads it (seen on llvmpipe; D3D12
+// and Vulkan drivers are free to do worse).
+
+// normalize() that never divides by zero: a null vector returns `fallback`.
+vec3 k_safe_normalize(vec3 v, vec3 fallback) {
+	float l = length(v);
+	return (l > 1e-6) ? v / l : fallback;
+}
+
+// Angle of `p` around the origin as a 0..1 turn (atan(0, 0) is undefined: the centre maps to 0).
+float k_angle01(vec2 p) {
+	vec2 q = (dot(p, p) > 1e-12) ? p : vec2(1.0, 0.0);
+	return fract(atan(q.y, q.x) / 6.2831853);
+}
 
 float k_hash13(vec3 p) {
 	p = fract(p * 0.1031);
@@ -56,7 +73,8 @@ float k_fbm(vec3 p, int octaves) {
 
 // Ridge of value noise: 1 on the noise's mid iso-surface, falling off to 0 — thin crack/vein lines.
 float k_ridge(vec3 p) {
-	return 1.0 - abs(k_vnoise(p) * 2.0 - 1.0);
+	// Clamped: rounding can push the noise a hair past 1, and callers raise the ridge to a power.
+	return clamp(1.0 - abs(k_vnoise(p) * 2.0 - 1.0), 0.0, 1.0);
 }
 
 // Anti-aliased thin line from a ridge value (width in ridge units, widened by the pixel footprint).
@@ -90,7 +108,7 @@ vec3 k_voronoi(vec3 p, float jitter) {
 			}
 		}
 	}
-	return vec3(sqrt(f1), sqrt(f2), id);
+	return vec3(sqrt(max(f1, 0.0)), sqrt(max(f2, 0.0)), id);
 }
 
 // Like k_voronoi, but also returns the hash of the SECOND nearest cell: (F1, F2, id1, id2). The pair
@@ -122,7 +140,7 @@ vec4 k_voronoi2(vec3 p, float jitter) {
 			}
 		}
 	}
-	return vec4(sqrt(f1), sqrt(f2), id1, id2);
+	return vec4(sqrt(max(f1, 0.0)), sqrt(max(f2, 0.0)), id1, id2);
 }
 
 // Stable 0..1 value of the border between two cells (symmetric in the pair).
@@ -141,8 +159,9 @@ float k_stars(vec3 p, float density, float radius, float px) {
 	}
 	vec3 centre = cell + 0.5 + (h - 0.5) * 0.5;
 	float d = length(p - centre);
-	float r = max(radius, px * 0.8);
-	float energy = (radius * radius) / (r * r);
+	// Never zero: radius 0 with a zero pixel footprint would give 0/0 and equal smoothstep edges.
+	float r = max(max(radius, px * 0.8), 1e-6);
+	float energy = (radius * radius) / max(r * r, 1e-12);
 	return (1.0 - smoothstep(r * 0.35, r, d)) * energy * (0.35 + 0.65 * fract(h.y * 7.31));
 }
 

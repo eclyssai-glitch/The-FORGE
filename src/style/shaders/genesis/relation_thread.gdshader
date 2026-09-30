@@ -23,8 +23,11 @@ void fragment() {
 	// Thin at both ends (a fibre, not a pipe), fullest a little after the source.
 	float taper = smoothstep(0.0, 0.08, u) * (1.0 - smoothstep(0.9, 1.0, u)) * (0.75 + 0.25 * sin(u * 3.14159));
 	float spun = 1.0 - smoothstep(woven - 0.03, woven, u);
-	float front = (woven < 0.999) ? exp(-pow((u - woven) / 0.02, 2.0)) * 1.8 : 0.0;
-	float p = exp(-pow((u - pulse) / max(pulse_width, 1e-3), 2.0));
+	// Gaussians as d*d, never pow(d, 2.0): d is signed and pow of a negative base is NaN.
+	float front_d = (u - woven) / 0.02;
+	float front = (woven < 0.999) ? exp(-front_d * front_d) * 1.8 : 0.0;
+	float pulse_d = (u - pulse) / max(pulse_width, 1e-3);
+	float p = exp(-pulse_d * pulse_d);
 
 	vec3 col = mix(color_from, color_to, smoothstep(0.1, 0.9, u));
 	vec3 e = col * intensity * taper * spun + pulse_color * (p * pulse_intensity * spun + front);

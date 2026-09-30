@@ -30,7 +30,8 @@ void vertex() {
 }
 
 void fragment() {
-	float disc = smoothstep(0.5, 0.15, length(UV - 0.5));
+	// 1 - smoothstep(lo, hi) instead of smoothstep(hi, lo): reversed edges are undefined in GLSL.
+	float disc = 1.0 - smoothstep(0.15, 0.5, length(UV - 0.5));
 	float near = smoothstep(near_fade.x, max(near_fade.y, near_fade.x + 1e-3), -VERTEX.z);
 	ALBEDO = color * COLOR.rgb;
 	ALPHA = COLOR.a * disc * near;

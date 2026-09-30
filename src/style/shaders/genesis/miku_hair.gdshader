@@ -33,12 +33,12 @@ void fragment() {
 	float u = UV.x;
 	float v = UV.y;
 	float across = abs(v - 0.5) * 2.0;
-	float edge = 1.0 - smoothstep(1.0 - edge_softness, 1.0, across);
+	float edge = 1.0 - smoothstep(1.0 - max(edge_softness, 1e-3), 1.0, across);
 
 	// Filaments: stripes across the width whose phase wanders slowly along the ribbon.
 	float wander = k_vnoise(vec3(u * 4.0, v * 1.5, seed * 7.1)) * 2.2;
 	float stripe = 0.5 + 0.5 * cos((v * filaments + wander) * 6.2831853);
-	float strands = mix(1.0, pow(stripe, 2.0) * 1.35, filament_depth);
+	float strands = mix(1.0, stripe * stripe * 1.35, filament_depth);
 
 	// Slow shimmer travelling rootwards -> tipwards.
 	float s = k_vnoise(vec3(u * 5.0 - motion_time * shimmer_speed * 5.0, v * 2.0, seed * 3.3));
@@ -51,7 +51,9 @@ void fragment() {
 	float tip_fade = 1.0 - smoothstep(0.7, 1.0, u);
 	float grown = 1.0 - smoothstep(reveal - 0.06, reveal, u);
 	// Luminous leading edge while growing (reads as the strand being spun).
-	float front = (reveal < 0.999) ? exp(-pow((u - reveal) / 0.03, 2.0)) * 1.5 : 0.0;
+	// Gaussian front: d*d, never pow(d, 2.0) (d is signed; pow of a negative base is NaN).
+	float front_d = (u - reveal) / 0.03;
+	float front = (reveal < 0.999) ? exp(-front_d * front_d) * 1.5 : 0.0;
 
 	float a = edge * strands * root_fade * tip_fade * (grown + front) * glint * COLOR.a;
 	ALBEDO = col * intensity;

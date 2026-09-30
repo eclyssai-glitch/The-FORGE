@@ -37,7 +37,7 @@ void fragment() {
 	AO = ao;
 
 	float f = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	vec3 e = rim_color * pow(f, 3.0) * rim_intensity;
+	vec3 e = rim_color * pow(max(f, 0.0), 3.0) * rim_intensity;
 	float holds = step(1.0 - glint_share, v_seed);
 	float spot = smoothstep(0.55, 0.8, k_vnoise(v_obj * 5.0 + v_seed * 31.0));
 	e += glint_color * holds * memory * glint_intensity * (0.08 + spot);

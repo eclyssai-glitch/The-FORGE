@@ -19,13 +19,13 @@ uniform float select_energy = 0.35;
 
 void fragment() {
 	float nv = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	float fres = pow(1.0 - nv, 2.0);
+	float fres = pow(max(1.0 - nv, 0.0), 2.0);
 	float e = clamp(energy, 0.0, 1.0);
 	ALBEDO = body_color;
 	METALLIC = 0.5;
 	ROUGHNESS = 0.5;
 	vec3 cold = cold_color * (0.03 + fres * cold_energy);
 	vec3 warm = ember_color * (0.08 + fres) * ember_energy;
-	vec3 sel = select_color * pow(1.0 - nv, 3.0) * clamp(select, 0.0, 1.0) * select_energy;
+	vec3 sel = select_color * pow(max(1.0 - nv, 0.0), 3.0) * clamp(select, 0.0, 1.0) * select_energy;
 	EMISSION = mix(cold, warm, e) + sel;
 }

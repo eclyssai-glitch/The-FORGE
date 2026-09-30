@@ -49,7 +49,7 @@ uniform float select : hint_range(0.0, 1.0) = 0.0;
 varying vec3 v_dir;
 
 void vertex() {
-	v_dir = normalize(VERTEX);
+	v_dir = k_safe_normalize(VERTEX, vec3(0.0, 1.0, 0.0));
 }
 
 void fragment() {
@@ -70,8 +70,8 @@ void fragment() {
 	vec3 w = vec3(k_vnoise(d * 1.4 + t), k_vnoise(d * 1.4 + 9.2 - t), k_vnoise(d * 1.4 + 4.4 + t * 0.7));
 	vec3 mq = d * magma_scale + (w - 0.5) * 1.8;
 	float body = k_fbm(mq, detail);
-	float rivers = pow(k_ridge(mq * 1.7 + 2.0), 9.0);
-	float veins_fine = pow(k_ridge(mq * 4.3 + 7.0), 12.0) * smoothstep(0.35, 0.6, body);
+	float rivers = pow(max(k_ridge(mq * 1.7 + 2.0), 0.0), 9.0);
+	float veins_fine = pow(max(k_ridge(mq * 4.3 + 7.0), 0.0), 12.0) * smoothstep(0.35, 0.6, body);
 	float upwell = smoothstep(0.66, 0.86, body);
 	float hot = clamp(rivers + veins_fine * 0.7 + upwell * 0.45, 0.0, 1.0);
 	vec3 magma = mix(magma_deep_color, magma_mid_color, smoothstep(0.0, 0.45, hot));
@@ -117,10 +117,10 @@ void fragment() {
 
 	// Atmosphere: haze over the limb + a bright thin rim (ice at the edge, rose deeper in).
 	vec3 atmo = mix(atmo_outer_color, atmo_inner_color, smoothstep(0.55, 0.95, f));
-	ALBEDO = mix(ALBEDO, atmo_inner_color * 0.3, atmosphere * pow(f, 2.2) * 0.7);
-	e += atmo * (pow(f, 3.5) * 0.7 + pow(f, 9.0) * 1.3) * atmosphere * atmo_intensity;
+	ALBEDO = mix(ALBEDO, atmo_inner_color * 0.3, atmosphere * pow(max(f, 0.0), 2.2) * 0.7);
+	e += atmo * (pow(max(f, 0.0), 3.5) * 0.7 + pow(max(f, 0.0), 9.0) * 1.3) * atmosphere * atmo_intensity;
 
 	e += accretion_color * lip * 2.0;
-	e += atmo_inner_color * pow(f, 3.0) * select * 0.6;
+	e += atmo_inner_color * pow(max(f, 0.0), 3.0) * select * 0.6;
 	EMISSION = e;
 }

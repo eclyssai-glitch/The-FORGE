@@ -17,7 +17,7 @@ uniform float formation : hint_range(0.0, 1.0) = 1.0;
 
 void fragment() {
 	float behind = fract(head - UV.x);
-	float k = 1.0 - clamp(behind / trail, 0.0, 1.0);
+	float k = 1.0 - clamp(behind / max(trail, 1e-3), 0.0, 1.0);
 	float lum = base + (1.0 - base) * k * k;
 	// Draw-in: only the part of the loop behind the head that has been traced.
 	float traced = 1.0 - smoothstep(formation - 0.02, formation, behind);
