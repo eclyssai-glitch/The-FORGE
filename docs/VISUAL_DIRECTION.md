@@ -4,7 +4,8 @@ Dono: `art-director`. Responsabilidade: identidade, composição, luz, materiais
 linguagem sonora. Valores concretos vivem no código e não se repetem aqui: cores e tempos em
 `src/style/palette.gd`; materiais em `src/style/material_library.gd` + `src/style/shaders/genesis/`; atmosfera em
 `src/style/environment_profile.gd`. Diagnóstico da versão anterior: `docs/art/v0.1-postmortem.md`. Registros de
-lookdev (primitivas substitutas, não usados no jogo): `docs/art/lookdev/`.
+lookdev (primitivas substitutas, não usados no jogo): `docs/art/lookdev/` (`06–12`: refinos da Fase B,
+`_v1` antes / `_v2` depois).
 
 ## 1. Conceito: MIKU, a tecelã celeste
 
@@ -69,14 +70,14 @@ progresso narrativo (`formation`, `heat`, `veins`…) vem de `Simulation.genesis
 | `miku_hair()` | fitas aditivas; ouro pálido (raiz) → rosa → lilás (ponta), filamentos internos, borda suave, cintilação lenta rumo às pontas. Malha: UV.x raiz→ponta, UV.y através; alpha do vértice = opacidade do fio | `reveal`, `motion_time`, `intensity`, `seed` |
 | `miku_gown()` | véu de luz aditivo, mais claro em ângulo rasante, comido por ruído de cima para baixo (Y do objeto), deixando grãos de estrela | `fade_top`, `fade_bottom`, `presence`, `motion_time` |
 | `halo_arc()` | arco de astrolábio incompleto + arco interno oposto + graduação fina; linhas de largura constante em pixels (quad) | `strength`, `breath`, `arc_span` |
-| `hand_stone()` | basalto azul-noite polido (clearcoat) com estrelas dentro da pedra (espaço do objeto) e **kintsugi**: bordas de Voronoi deformadas, largura variável, ouro metálico sempre presente e apagado; `veins` espalha e acende a rede | `veins`, `motion_time`, `select`, `vein_scale`, `star_scale` |
-| `planet_forming()` | `formation` acreção por manchas com borda GOLD → `heat` magma escuro com rios de ouro fluindo → `crust` placas de pedra (Voronoi) assentando uma a uma, fendas acesas que esfriam com `heat` → `atmosphere` névoa de limbo + aro fino ICE→DUSK_ROSE | `formation`, `heat`, `crust`, `atmosphere`, `motion_time`, `seed`, `detail`, `select` |
+| `hand_stone()` | basalto azul-noite polido (clearcoat) com estrelas dentro da pedra (espaço do objeto) e **kintsugi seletivo**: só algumas bordas de Voronoi são fraturas remendadas — as que seguem 1–2 caminhos longos (crista de ruído de baixa frequência) mais uma pequena fração de ramos escolhidos pelo hash da própria borda (`k_voronoi2`/`k_edge_hash`); o resto da rede não existe (nada de grade). Ouro sempre presente e apagado; `veins` espalha e acende | `veins`, `motion_time`, `select`, `vein_scale`, `star_scale`, `vein_share`, `vein_path_scale` |
+| `planet_forming()` | `formation` acreção por muitos grãos que se juntam (nunca um borrão solitário) com borda GOLD → `heat` **lago de lava**: pele escura resfriada cortada por rios incandescentes finos em duas escalas e poucas ressurgências (meios-tons raros: nada de "mancha") → `crust` placas (Voronoi com deformação forte) assentando uma a uma; só parte das bordas fica aberta e acesa (`open_share`), as outras são costuras seladas; tom por placa e por "continente"; a rede de fendas some quando as células ficam pequenas na tela (planeta distante mostra continentes, não colmeia) → `atmosphere` névoa de limbo + aro fino ICE→DUSK_ROSE | `formation`, `heat`, `crust`, `atmosphere`, `motion_time`, `seed`, `detail`, `select`, `open_share` |
 | `moon_doc()` | gelo fosco com estratos finos (páginas), rim ICE fino, acreção igual ao planeta | `formation`, `glow`, `seed`, `select` |
 | `ring_skill()` | bandas finas douradas com vãos escuros sobre quad (raio do UV); formação varre o círculo com borda quente | `formation`, `inner`, `outer`, `bands`, `intensity` |
 | `asteroid_memory()` | pedra rugosa, rim rosa-lilás; ~5 % das rochas (por `INSTANCE_ID`) guardam um brilho GOLD discreto | `memory`, `glint_share` |
 | `orbit_line()` | linha fina aditiva, mais clara logo atrás do corpo, desvanecendo ao longo do arco | `head`, `trail`, `base`, `formation` |
 | `relation_thread()` | fibra de luz LILAC (sai do cabelo) → cor do alvo (ICE luas, GOLD planeta), afinando nas pontas; pulso GOLD viajante = backlink | `pulse`, `woven`, `color_to`, `intensity` |
-| `nebula_sky()` | céu: nebulosa índigo/violeta por fbm deformado, faixa larga e **núcleo quente DUSK_ROSE atrás de MIKU** (`warm_dir`, padrão −Z levemente acima do horizonte), lanes de poeira escura, 3 camadas de estrelas de tamanho em pixel (quentes/frias), cintilação sutil, **dithering** contra banding; passe de radiância sem estrelas | `warm_dir`, `motion_time`, `detail`, `sky_energy`, `star_intensity`, `warm_intensity` |
+| `nebula_sky()` | céu: nebulosa índigo/violeta por fbm deformado, faixa larga e **núcleo quente atrás de MIKU** (`warm_dir`, padrão −Z levemente acima do horizonte) que é **luz, não tinta**: coração perolado-dourado, corpo GOLD, bordas DUSK_ROSE → LILAC, carregado por **filamentos de gás** iluminados por dentro (cristas do campo deformado + leve fluxo radial, sem raios) e cortado pelas lanes de poeira — um halo liso vira "lama" bege sob AgX; 3 camadas de estrelas de tamanho em pixel, cintilação sutil, **dithering**; passe de radiância sem estrelas | `warm_dir`, `motion_time`, `detail`, `sky_energy`, `star_intensity`, `warm_intensity`, `core_intensity`, `filament_strength` |
 
 Contratos de malha: linhas (órbitas, fios) funcionam melhor como **fitas cruzadas** (duas larguras ortogonais)
 ou tubo fino, porque uma fita plana some de lado. Planetas/luas: qualquer esfera (padrões no espaço da direção).
@@ -120,14 +121,45 @@ formação são **sinos/harpa em escala pentatônica** (acreção = arpejo ascen
 pad que abre, lua = sino alto, anel = glissando de harpa, link = nota curta ao chegar o pulso). Nunca bleeps, UI
 sonora de sistema, whooshes de trailer ou impactos. O som também respira.
 
-## 8. UI diegética (princípios; implementação na Fase B, `src/ui/`)
+## 8. UI diegética (`src/ui/genesis/`, Fase B)
 
-- **A cena é o herói.** Nada de painel acima da cena. Selo DEMO MODE pequeno e permanente (canto superior esquerdo).
-- Modos = três rótulos mínimos; transporte = arco fino recolhido que aparece ao passar o mouse.
-- Rótulos de entidades no mundo (Label3D com fio-guia fino), junto do corpo que nomeiam, na tipografia existente
-  (Inter/Plex Mono), PEARL apagado; nunca GOLD.
-- OBSERVATORY mostra o grafo por fios e rótulos no espaço, não por listas. H esconde tudo exceto o selo.
-- Nenhum vocabulário de rede/conta; contratos do smoke (`ui_transport`, `demo_badge`) mantidos.
+A cena é o herói; a UI é tinta perolada nas bordas e nomes escritos no espaço. Nada de caixas acima da
+cena. Tinta em poucos níveis (`UI_INK` → `UI_INK_SOFT` → `UI_INK_FAINT` → `UI_THREAD` → `UI_THREAD_FAINT`,
+todos PEARL com alfa) sobre véu noturno (`UI_VEIL`, `UI_SHADE`, SPACE_DEEP); **nunca GOLD** (a UI não
+cria nada). Maiúsculas finas com espaçamento largo para palavras/sussurros; minúsculas **nunca** espaçadas
+(`Note`); Plex Mono só para tempo. Movimento: fades senoidais (`T_WHISPER_*`, `T_REVEAL`, `T_CONCEAL`,
+`T_LABEL`), nada surge de repente. Dois dialetos no `Hud` por cenário (`scenario_changed`): ORIGIN mantém os
+painéis v1 até a virada; GENESIS usa `GenesisHud`.
+
+- **Selo** DEMO MODE: anel pequeno + "DEMO MODE" em mono espaçado + "all events simulated" apagado; sem
+  caixa, sem cara de alerta; sempre visível (também com H). Grupo `demo_badge`.
+- **Modos**: UNIVERSE · FORGE · OBSERVATORY, a palavra ativa em tinta plena, um fio curto desliza sob ela.
+- **Transporte**: arco fino (órbita rasa) no centro inferior com um ponto por evento e o playhead; revela
+  controles (reiniciar/tocar/pausar em glifos; fase, relógio e velocidades em palavras) quando o ponteiro
+  chega à borda inferior (`UI_REVEAL_ZONE`), quando a demo não está tocando ou ao arrastar; recolhe após
+  `T_REVEAL_LINGER`. Hover no arco nomeia o evento. Grupo `ui_transport` com `Start`/`Pause`/`Reset`.
+- **Sussurros**: o rótulo do evento sobe, repousa e se dissolve acima do arco; uma linha por vez; seek/reset
+  dissolve (o passado não é relido como texto).
+- **Rótulos no espaço**: nome projetado da posição 3D do corpo com fio-guia (diagonal + corrida
+  horizontal), no lado de fora da tela, evitando outros rótulos e outros corpos. FORGE/UNIVERSE: só o corpo
+  em hover/seleção. OBSERVATORY: todos, com o signo (planeta ● subagente, lua ◗ documentação, anel skills,
+  cinturão memória, fio link) e o tipo simbólico, mais uma legenda mínima — o vault lido como astronomia.
+  Corpo ainda não formado (status UNFORMED) não é nomeado.
+- **Cartão** do corpo selecionado: pequeno, ao lado do corpo (fio-guia até ele), signo + tipo, nome,
+  status, uma frase, FOCUS e fechar; sem corpo na tela, repousa à direita. Rótulos sob o cartão recuam.
+- **Missão** (OBSERVATORY): nome poético + uma linha por objetivo (em curso em tinta plena com anel,
+  cumpridos suaves, por vir apagados); sem contagens nem porcentagens.
+- **Configurações**: signo de afinação → cartão com qualidade, câmera cinematográfica, volumes
+  Master/Ambience/SFX (`AudioDirector.set_bus_volume_db`) e as poucas teclas. Sons de UI (`ui_tick`,
+  `ui_select`) só em interação do usuário, via grupo `audio_director`.
+- **H** esconde tudo exceto o selo. Nenhum controle toma o foco do teclado; o centro da tela é do mundo.
+
+Contrato com o mundo 3D (rótulos e cartão): a raiz visual de cada entidade entra no grupo
+`Session.entity_group(id)` e fica invisível enquanto o corpo não existe. Metadados opcionais na raiz:
+`label_anchor` (Vector3 local ou Node3D: o ponto nomeado; **obrigatório** para `belt_memory` e
+`relations`, cujas raízes ficam no centro de outro corpo) e `label_radius` (float, unidades de mundo; sem
+ele usa-se o AABB da primeira malha). Registros: `docs/art/ui-genesis/` (capturas do jogo real; `11–14`
+com corpos substitutos de lookdev).
 
 ## 9. Proibições
 
@@ -150,3 +182,6 @@ Shaders v2 usam só ruído de valor por hash e um Voronoi 3×3×3 (planeta, mão
 `detail` por perfil (céu 3/4/5/5, planeta 3/3/4/4 para LOW/MEDIUM/HIGH/ULTRA). Aditivos sem escrita de profundidade.
 Céu: com `Sky.PROCESS_MODE_AUTOMATIC` a radiância é refeita quando um uniform muda. Atualizar `motion_time` do céu
 a ≤ 5 Hz (ou manter estático no LOW); o passe de radiância não tem estrelas e usa ≤ 2 oitavas.
+Fase B: mãos e planeta usam `k_voronoi2` (mesmo laço 3×3×3, guarda também o id da 2ª célula); o planeta
+ganhou 3 amostras de ruído de deformação; o céu, 3 cristas (filamentos) — custo fixo, sem novos laços.
+A UI GENESIS desenha só enquanto há algo visível (rótulos: ≤ 11 projeções por quadro, sem nós extras).

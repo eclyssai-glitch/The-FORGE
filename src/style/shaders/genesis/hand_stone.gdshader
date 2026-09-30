@@ -1,7 +1,7 @@
 // KORIUM UNIVERSE — the auxiliary hands: night stone with kintsugi. Owner: art-director.
 // Polished deep-blue basalt (clearcoat) carved out of the night sky: pin-point stars inside the
 // stone (object space, so they stay put when the hand moves) and gold kintsugi veins from ridged
-// value noise. The gold is always there as a dull metal inlay; `veins` 0..1 spreads the lit part of
+// Voronoi borders (only a few of them). The gold is always there as a dull metal inlay; `veins` 0..1 spreads the lit part of
 // the network and makes it glow (the hands light up while they work). Vertex colour red = baked AO
 // (white when the mesh has none). No UVs needed. `motion_time` (MotionClock) lets light flow
 // along lit veins — never TIME.
@@ -22,6 +22,10 @@ uniform float veins : hint_range(0.0, 1.0) = 0.0;
 uniform float vein_scale = 1.0;
 uniform float vein_width : hint_range(0.0, 0.3) = 0.022;
 uniform float vein_glow = 1.1;
+// Share of single cell borders that are mended branches (the rest of the network is absent), and
+// the scale (per object unit) of the long fracture paths the main cracks follow.
+uniform float vein_share : hint_range(0.0, 1.0) = 0.16;
+uniform float vein_path_scale = 0.26;
 // Stars in the stone.
 uniform float star_scale = 9.0;
 uniform float star_density : hint_range(0.0, 1.0) = 0.18;
@@ -46,18 +50,22 @@ void fragment() {
 	float strata = k_fbm(v_obj * vec3(0.35, 0.9, 0.35), 3);
 	vec3 stone = mix(stone_color, stone_light_color, smoothstep(0.35, 0.8, strata) * 0.55);
 
-	// Kintsugi: borders of warped Voronoi cells (a mended ceramic crack pattern). Only part of
-	// the borders are cracks (gated by low-frequency noise), so the gold reads as a few long
-	// mended fractures, not as a grid.
+	// Kintsugi: borders of warped Voronoi cells (a mended ceramic crack pattern). Only a few
+	// borders are mended cracks: those along a couple of long fracture paths (a low-frequency
+	// ridge through the whole hand) plus a small share of single borders chosen by their own
+	// hash (short branches). The rest of the network does not exist: plain stone, no grid.
 	vec3 q = v_obj * vein_scale;
 	q += (vec3(k_vnoise(q * 1.3), k_vnoise(q * 1.3 + 11.3), k_vnoise(q * 1.3 + 23.9)) - 0.5) * 0.7;
-	vec3 vo = k_voronoi(q, 1.0);
+	vec4 vo = k_voronoi2(q, 0.9);
 	float edge = vo.y - vo.x;
 	float aa = max(fwidth(edge), 1e-4);
 	// Width varies along the crack (hand-applied lacquer).
 	float wv = vein_width * (0.55 + 0.9 * k_vnoise(q * 3.0 + 5.0));
 	float crack = 1.0 - smoothstep(wv - aa, wv + aa, edge);
-	float gate = smoothstep(0.48, 0.6, k_vnoise(q * 0.6 + 13.0));
+	float path = k_ridge(v_obj * vein_path_scale + vec3(3.1, 7.7, 1.9));
+	float on_path = smoothstep(0.74, 0.86, path);
+	float branch = step(k_edge_hash(vo.z, vo.w), vein_share);
+	float gate = max(on_path, branch);
 	float gold_mask = crack * gate;
 
 	// Which part of the network is lit: grows from low-frequency islands as `veins` rises.
