@@ -185,3 +185,10 @@ narrativo = f(`Simulation.genesis`, `Simulation.time`); ambiente via `MotionCloc
   Style frames: método opcional `CameraDirector.style_frame_poses() -> Array[{name, time, mode, position, target,
   fov}]` (≥ 6 substituem `StyleFrames.DEFAULT_POSES`); `tools/style_frames.sh <dir>`; capturas GENESIS
   `tools/capture_evidence.sh <dir> --scenario=genesis` (g01–g18). Saídas roteirizadas via `Main.quit_game(code)`.
+- Fase A · procedural-modeler integrado: `assets/meshes/{miku_body,hand_left,hand_right}.obj` (+ `.json` de âncoras;
+  sem UV; cor do vértice = AO, `COLOR.r`), `load("res://assets/meshes/<nome>.obj")`; MIKU origem na cintura, +Y cima,
+  frente +Z, altura 6,14; mãos com origem no centro da palma (eixos no `docs/PROCEDURAL.md`). **Leia sempre as âncoras
+  do JSON** (a escultura será refinada em paralelo; as âncoras podem mudar um pouco). Geradores: `HairRibbons`,
+  `OrbitLine`, `PlanetSphere`, `AsteroidField`, `RelationThread`. Revisão do coordenador: silhueta de MIKU elegante
+  (estátua alongada com vestido em sino) e mão esquerda (concha) boa; rosto de perto lê como manequim/alienígena
+  (faixa na testa, vincos duros), braços finos demais, mão direita pouco expressiva → rodada de refinamento.
