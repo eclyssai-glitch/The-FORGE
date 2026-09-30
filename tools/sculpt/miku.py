@@ -249,19 +249,19 @@ ARMS = {
 }
 HAND_SCALE = 0.56 / 7.0
 POSE_MIKU = {
-    "arch": 0.22,
-    "fingers": {
-        "index": (-0.035, 0.04, (0.10, 0.16, 0.10)),
-        "middle": (0.0, 0.0, (0.13, 0.19, 0.12)),
-        "ring": (0.025, -0.03, (0.17, 0.22, 0.13)),
-        "little": (0.06, -0.07, (0.22, 0.26, 0.15)),
+    "arch": 0.24,
+    "fingers": {  # a soft open hand: small fan, flexion growing towards the little finger
+        "index": (0.09, 0.05, (0.08, 0.14, 0.09)),
+        "middle": (0.0, 0.0, (0.13, 0.2, 0.12)),
+        "ring": (-0.09, -0.04, (0.19, 0.26, 0.15)),
+        "little": (-0.19, -0.09, (0.26, 0.32, 0.18)),
     },
-    "thumb": {"cmc": (0.80, 0.95, -0.28), "dir": (0.42, 0.85, -0.30), "dorsal": (0.5, -0.1, 0.9),
-              "flex": (0.12, 0.16)},
-    "finger_k": 0.22,
-    "thumb_k": 0.35,
-    "fuse_k": 0.28,
-    "mcp_squeeze": 0.9,
+    "thumb": {"cmc": (0.80, 0.95, -0.28), "dir": (0.46, 0.83, -0.32), "dorsal": (0.5, -0.1, 0.9),
+              "flex": (0.14, 0.2)},
+    "finger_k": 0.2,
+    "thumb_k": 0.32,
+    "fuse_k": 0.05,     # fingers only touch at the base: each one reads at a distance
+    "mcp_squeeze": 0.97,
     "nails": False,
 }
 
