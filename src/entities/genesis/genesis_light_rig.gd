@@ -62,6 +62,9 @@ func _ready() -> void:
 	# stone and porcelain. Keep it low; the rim and sheen of the materials do the edge work.
 	back.light_specular = 0.25
 	fill.light_specular = 0.0
+	# The key is the only shadow caster: in the haze its shadows draw dark shafts across the sky
+	# (the hands and MIKU cut long black bands). It lights surfaces only; the haze gets the others.
+	key.light_volumetric_fog_energy = 0.0
 	planet_glow = OmniLight3D.new()
 	planet_glow.name = "PlanetGlow"
 	planet_glow.position = GenesisLayout.PLANET_CENTER

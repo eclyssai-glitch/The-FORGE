@@ -30,14 +30,14 @@ const BREATH_PERIOD := Palette.T_BREATH
 ## Hair layers: [name, strands, seed, length, spread, wave amplitude, waves, rise, root radius,
 ## width, intensity share, sway (rad), sway period (s)].
 const HAIR_LAYERS: Array = [
-	["HairCore", 54, 7101, 8.0, 0.3, 0.5, 1.1, 0.6, 0.2, 0.07, 0.62, 0.018, 9.0],
-	["HairVeil", 42, 7202, 10.5, 0.55, 0.9, 1.35, 0.8, 0.24, 0.05, 0.5, 0.028, 12.5],
-	["HairFilaments", 30, 7303, 13.0, 0.85, 1.3, 1.7, 1.0, 0.26, 0.028, 0.45, 0.036, 15.0],
+	["HairCore", 40, 7101, 8.0, 0.24, 0.35, 0.8, 0.3, 0.28, 0.12, 0.42, 0.018, 9.0],
+	["HairVeil", 34, 7202, 10.5, 0.4, 0.6, 0.95, 0.42, 0.3, 0.09, 0.38, 0.028, 12.5],
+	["HairFilaments", 26, 7303, 13.0, 0.6, 0.8, 1.2, 0.55, 0.3, 0.035, 0.4, 0.036, 15.0],
 ]
 ## Direction the hair leaves the crown (object space; blended with the sculpt's hair_root_tangent):
 ## back more than up (it rises as it goes: HairRibbons `rise`), drifting a little to her right
 ## (screen left), away from the right hand.
-const HAIR_DIRECTION := Vector3(-0.2, 0.42, -0.88)
+const HAIR_DIRECTION := Vector3(-0.25, 0.22, -0.94)
 ## Strands that frame the face: from each temple, back and up.
 const TEMPLE_STRANDS := 7
 const TEMPLE_LENGTH := 6.0
@@ -51,6 +51,11 @@ const TEMPLE_OFFSET := Vector3(0.16, -0.12, -0.02)
 ## below the mesh (no dissolve, h = 0: pure fresnel veil), the shell is not stretched below the
 ## hem, and the dissolution into dust is carried by the Stardust river alone. Restore GOWN_FADE,
 ## GOWN_STRETCH and GOWN_FLARE (-0.35/-5.4, 0.75, 0.3) once the shader is fixed.
+## The veil itself is off for now (GOWN_VEIL): the material's fresnel term `pow(1.0 - nv, 1.6)` gets
+## nv = abs(dot(NORMAL, VIEW)) slightly above 1 on faces turned to the camera -> NaN pixels that the
+## glow spreads into white blotches with black specks (verified on llvmpipe: clamping nv removes
+## them). Set GOWN_VEIL = true once miku_gown clamps nv and squares without pow.
+const GOWN_VEIL := false
 const GOWN_TOP := -0.2
 const GOWN_OFFSET := 0.03
 ## Skirt envelope of the sculpture (object units): radius at the hips, flare below.
@@ -73,7 +78,7 @@ const SEED_CORE_SIZE := 0.05
 const SEED_GLOW_SIZE := 0.17
 const SEED_CORE_HDR := 1.5
 const SEED_LIGHT_RANGE := 0.9
-const SEED_LIGHT_ENERGY := 0.12
+const SEED_LIGHT_ENERGY := 0.04
 ## Selection smoothing (1/s) and levels.
 const SELECT_RATE := 6.0
 
@@ -128,6 +133,7 @@ func _ready() -> void:
 	_gown_mat.set_shader_parameter("fade_bottom", GOWN_FADE.y)
 	gown.material_override = _gown_mat
 	gown.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	gown.visible = GOWN_VEIL
 	figure.add_child(gown)
 
 	_build_hair()
@@ -173,8 +179,12 @@ func _update_narrative() -> void:
 	if not is_equal_approx(reveal, _written[1]) or not is_equal_approx(hi, _written[2]):
 		_written[1] = reveal
 		_written[2] = hi
+		# The hair unfurls from the crown: the plume grows (scale) while the shader's own `reveal`
+		# front stays off (reveal = 1): that front raises a negative base to a power (NaN on
+		# llvmpipe and several drivers) — reported to the art-director.
+		hair_pivot.scale = Vector3.ONE * reveal
 		for i in _hair_mats.size():
-			_hair_mats[i].set_shader_parameter("reveal", reveal)
+			_hair_mats[i].set_shader_parameter("reveal", 1.0)
 			_hair_mats[i].set_shader_parameter("intensity", hi * float(HAIR_LAYERS[i][10]) if i < HAIR_LAYERS.size() else hi * 0.7)
 	if not is_equal_approx(gp, _written[3]):
 		_written[3] = gp

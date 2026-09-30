@@ -20,8 +20,8 @@ const PITCH_MIN := -0.55
 const PITCH_MAX := 1.35
 ## Distance limits per mode (index = SessionState.Mode: UNIVERSE, FORGE, OBSERVATORY).
 const DISTANCE_LIMITS: Array[Vector2] = [Vector2(12.0, 150.0), Vector2(4.0, 48.0), Vector2(6.0, 90.0)]
-## The rig target stays within this radius of MIKU's axis (the far world orbits at 24).
-const FLY_RADIUS := 42.0
+## The rig target stays within this radius of MIKU's axis (the outer world orbits at 42).
+const FLY_RADIUS := 50.0
 ## The camera never sinks below the mist (world Y).
 const MIN_CAMERA_Y := -9.0
 ## Transition time of cue changes (crane), and of user-driven changes (mode, focus, reset).
@@ -29,20 +29,20 @@ const T_CUE := Palette.T_CRANE
 const T_USER := Palette.T_CINEMATIC * 1.35
 
 # --- Mode shots ---------------------------------------------------------------------------------
-const FORGE_TARGET := Vector3(0.0, 4.0, 1.0)
+const FORGE_TARGET := Vector3(0.0, 3.85, 1.0)
 const FORGE_YAW := 0.06
 const FORGE_PITCH := -0.06
 const FORGE_DISTANCE := 23.0
-const FORGE_FOV := 40.0
+const FORGE_FOV := 36.5
 const UNIVERSE_TARGET := Vector3(0.0, 3.5, -0.5)
 const UNIVERSE_YAW := 0.52
 const UNIVERSE_PITCH := 0.42
-const UNIVERSE_DISTANCE := 92.0
+const UNIVERSE_DISTANCE := 68.0
 const UNIVERSE_FOV := 44.0
 const OBSERVATORY_TARGET := Vector3(0.0, 4.2, 1.2)
 const OBSERVATORY_YAW := -0.78
-const OBSERVATORY_PITCH := 0.36
-const OBSERVATORY_DISTANCE := 30.0
+const OBSERVATORY_PITCH := 0.55
+const OBSERVATORY_DISTANCE := 32.0
 const OBSERVATORY_FOV := 40.0
 
 # --- Cinematic cues (FORGE) ---------------------------------------------------------------------
@@ -105,20 +105,19 @@ static func cue(g: GenesisState, t: float, m: float, out: CameraShots.Shot) -> S
 		CUE_HERO:
 			# The hero composition, with a slow dolly to the side while the world forms.
 			var s := maxf(t - g.hands_at, 0.0)
-			out.setup(FORGE_TARGET + Vector3(0.0, 0.0, 0.2), FORGE_YAW - 0.1 + HERO_DOLLY * s, FORGE_PITCH,
-				FORGE_DISTANCE - 1.5, FORGE_FOV)
+			out.setup(FORGE_TARGET, FORGE_YAW - 0.1 + HERO_DOLLY * s, FORGE_PITCH, FORGE_DISTANCE + 0.5, FORGE_FOV)
 		CUE_ORBITS:
 			# Higher and wider: the moons and the ring around the new world.
 			var s := maxf(t - g.moon_at(0), 0.0)
-			out.setup(Vector3(0.0, 2.8, 3.0), 0.3 + HERO_DOLLY * s, 0.1, 20.0, 38.0)
+			out.setup(Vector3(0.0, 3.0, 1.6), 0.32 + HERO_DOLLY * s, 0.14, 24.0, 38.0)
 		CUE_BELT:
-			# Crane up and back: the memory belt closes around MIKU.
+			# Out beside the belt: its rocks drift through the foreground, MIKU beyond them.
 			var s := maxf(t - g.belt_at, 0.0)
-			out.setup(Vector3(0.0, 4.2, -0.4), 0.42 + 0.004 * s, 0.3, 40.0, 42.0)
+			out.setup(Vector3(0.0, 5.0, -0.4), 0.75 + 0.006 * s, 0.16, 27.0, 40.0)
 		CUE_THREADS:
 			# Three-quarter, raised: the threads leave the hair for every body.
 			var s := maxf(t - g.links_at, 0.0)
-			out.setup(Vector3(0.0, 4.4, 1.0), -0.62 + 0.004 * s, 0.24, 27.0, 40.0)
+			out.setup(Vector3(0.0, 3.6, 0.5), -0.62 + 0.004 * s, 0.28, 30.0, 40.0)
 		_:
 			# The world holds: back to the hero composition, a slow push-in.
 			var s := maxf(t - g.stable_at, 0.0)
@@ -206,7 +205,7 @@ static func style_frame_poses() -> Array[Dictionary]:
 	out.append(_pose("sf_01_hero", 55.0, SessionState.Mode.FORGE,
 		rig_position(FORGE_TARGET, FORGE_YAW + 0.02, FORGE_PITCH, FORGE_DISTANCE - 1.0), FORGE_TARGET, FORGE_FOV))
 	out.append(_pose("sf_02_portrait", 9.0, SessionState.Mode.FORGE,
-		brow + Vector3(1.1, -0.9, 4.6), brow + Vector3(0.1, -0.35, 0.0), 32.0))
+		brow + Vector3(2.6, -1.7, 4.4), brow + Vector3(-0.3, 0.1, -0.6), 34.0))
 	out.append(_pose("sf_03_cradle", 25.0, SessionState.Mode.FORGE,
 		planet + Vector3(-4.6, -0.9, 8.8), planet + Vector3(0.4, 0.9, 0.0), 40.0))
 	out.append(_pose("sf_04_world_detail", 47.5, SessionState.Mode.FORGE,
@@ -219,7 +218,7 @@ static func style_frame_poses() -> Array[Dictionary]:
 	out.append(_pose("sf_07_silhouette", 55.0, SessionState.Mode.FORGE,
 		heart + Vector3(-9.5, -2.2, -5.5), heart + Vector3(0.0, 0.6, 0.0), 38.0))
 	out.append(_pose("sf_08_open", 55.0, SessionState.Mode.FORGE,
-		rig_position(Vector3(0.0, 5.0, 0.5), -0.34, -0.2, 34.0), Vector3(0.0, 5.0, 0.5), 44.0))
+		rig_position(Vector3(0.0, 4.2, 0.5), -0.42, 0.04, 46.0), Vector3(0.0, 4.2, 0.5), 40.0))
 	return out
 
 

@@ -79,9 +79,11 @@ const LINK_STAGGER := 0.32
 ## Light levels asleep (before miku.awaken) and awake. Keys: back (warm contraluz), rim (ICE),
 ## key (PEARL ¾ side), fill (NEBULA), ambient (environment ambient energy).
 const LIGHT_ASLEEP := {"back": 1.1, "rim": 0.25, "key": 0.12, "fill": 0.04, "ambient": 0.16}
-const LIGHT_AWAKE := {"back": 2.3, "rim": 0.8, "key": 0.95, "fill": 0.1, "ambient": 0.26}
-## Planet glow (omni at the planet): energy at full heat and formation.
+const LIGHT_AWAKE := {"back": 2.3, "rim": 1.25, "key": 1.05, "fill": 0.12, "ambient": 0.26}
+## Planet glow (omni at the planet): energy at full heat and formation; a formed world keeps
+## PLANET_LIGHT_REST of it (its sky and the last embers still light the palms).
 const PLANET_LIGHT := 2.6
+const PLANET_LIGHT_REST := 0.3
 
 
 # --- MIKU ------------------------------------------------------------------------------------------
@@ -289,7 +291,7 @@ static func light_levels(g: GenesisState, t: float, out: Dictionary) -> Dictiona
 	var a := awaken(g, t)
 	for k: String in LIGHT_AWAKE:
 		out[k] = lerpf(float(LIGHT_ASLEEP[k]), float(LIGHT_AWAKE[k]), a)
-	out["planet"] = PLANET_LIGHT * planet_heat(g, t) * planet_formation(g, t)
+	out["planet"] = PLANET_LIGHT * maxf(planet_heat(g, t), PLANET_LIGHT_REST * planet_crust(g, t)) * planet_formation(g, t)
 	return out
 
 

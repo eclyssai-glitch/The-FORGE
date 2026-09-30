@@ -39,8 +39,8 @@ const PLANET_TILT := Vector3(0.32, 0.0, -0.22)
 ## down, fingers hovering over the planet, index slightly extended).
 const HAND_LEFT_POS := Vector3(-1.55, -2.8, 2.9)
 const HAND_LEFT_EULER := Vector3(0.3, 0.35, 0.22)
-const HAND_RIGHT_POS := Vector3(2.3, 3.65, 2.9)
-const HAND_RIGHT_EULER := Vector3(-0.12, -0.3, 0.26)
+const HAND_RIGHT_POS := Vector3(2.5, 3.25, 2.8)
+const HAND_RIGHT_EULER := Vector3(-0.18, -0.25, 0.08)
 ## Scale of both sculptures: wrist to middle fingertip ≈ 4.7 u, a hand ≈ 1.5× the final planet's
 ## diameter — monumental next to the world they hold, and still below MIKU in the hierarchy.
 const HAND_SCALE := 0.72
@@ -68,7 +68,7 @@ const BELT_INNER := 16.0
 const BELT_OUTER := 19.0
 const BELT_THICKNESS := 0.9
 const BELT_TILT := Vector3(-0.42, 0.0, 0.1)
-const BELT_ROCKS := 900
+const BELT_ROCKS := 760
 const BELT_PERIOD := 900.0
 ## Distant worlds (older subagents, already formed): orbit radius around MIKU, planet radius,
 ## orbit tilt, period (s), start phase, their own small moon (orbit radius, moon radius, period).

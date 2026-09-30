@@ -15,22 +15,24 @@ extends Node3D
 
 const RING_SEED := 2.3
 const RING_TURN := 260.0
+## The ring swells from this share of its size as it forms.
+const RING_SWELL_FROM := 0.72
 const MOON_SEEDS: Array[float] = [0.61, 0.83]
 const FAR_SEEDS: Array[float] = [0.21, 0.47]
 const FAR_MOON_SEEDS: Array[float] = [0.12, 0.93]
 ## Orbit line tube radii (moons, distant worlds) and brightness.
 const MOON_ORBIT_TUBE := 0.016
-const FAR_ORBIT_TUBE := 0.035
+const FAR_ORBIT_TUBE := 0.03
 const FAR_MOON_ORBIT_TUBE := 0.014
 const ORBIT_INTENSITY := 0.42
-const FAR_ORBIT_INTENSITY := 0.3
+const FAR_ORBIT_INTENSITY := 0.16
 ## Distant worlds: at rest, a little heat left in the cracks.
 const FAR_HEAT := 0.08
 ## Moon glow before / after the threads reach them.
 const MOON_GLOW := Vector2(0.35, 0.7)
 ## Belt rock sizes (min, max, bias) and seed.
 const BELT_SEED := 9107
-const ROCK_SCALE := Vector3(0.05, 0.5, 3.0)
+const ROCK_SCALE := Vector3(0.04, 0.24, 3.2)
 ## Share of the belt rocks drawn per quality (floor), rocks are geometry, not particles.
 const BELT_MIN_SHARE := 0.45
 const SELECT_RATE := 6.0
@@ -136,7 +138,7 @@ func _build_ring() -> void:
 	_ring_mat.set_shader_parameter("inner", GenesisLayout.RING_INNER / GenesisLayout.RING_OUTER)
 	_ring_mat.set_shader_parameter("outer", 1.0)
 	_ring_mat.set_shader_parameter("seed", RING_SEED)
-	_ring_mat.set_shader_parameter("formation", 0.0)
+	_ring_mat.set_shader_parameter("formation", 1.0)
 	ring.material_override = _ring_mat
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	ring.add_to_group(SessionState.entity_group(&"ring_skill"))
@@ -320,8 +322,13 @@ func _update(delta: float) -> void:
 	# Ring.
 	var rf := GenesisChoreography.ring(g, t)
 	if _changed("ring", rf):
+		# The ring condenses outward from the world (swell + fade). The shader's angular sweep
+		# (`formation` < 1) is not used yet: its leading edge raises a negative base to a power
+		# (NaN on llvmpipe and several drivers) — reported to the art-director.
 		ring.visible = rf > 0.001
-		_ring_mat.set_shader_parameter("formation", rf)
+		ring.scale = Vector3.ONE * lerpf(RING_SWELL_FROM, 1.0, rf)
+		ring.transparency = 1.0 - rf if rf < 0.999 else 0.0
+		_ring_mat.set_shader_parameter("formation", 1.0)
 		_ring_body.collision_layer = 2 if rf > 0.5 else 0
 	ring.rotation.y = TAU * fposmod(m / RING_TURN, 1.0)
 	# Belt.
