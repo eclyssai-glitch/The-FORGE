@@ -176,7 +176,8 @@ versionadas em `assets/meshes/`.
 
 Determinismo: BLAS fixado em 1 thread, ordem de iteração fixa, números com casas fixas (`-0.0`
 normalizado), JSON com chaves ordenadas. Verificado: duas execuções completas independentes
-produziram os mesmos SHA-256 nos 6 arquivos.
+produziram os mesmos SHA-256 nos 6 arquivos (reverificado após o refino do Loop 4, com warp e
+importância: `miku_body.obj` ce357962…, `hand_left.obj` 4adf4e9e…, `hand_right.obj` 4f05fb89…).
 
 Algoritmos:
 - **QEM em lote**: a cada passada calcula custo/posição ótima de todas as arestas (quádricas
