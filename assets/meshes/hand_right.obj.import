@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://c8a7on83isr1s"
+path="res://.godot/imported/hand_right.obj-2ca49fdecdde7ddf4a49744a907e32cf.mesh"
+
+[deps]
+
+files=["res://.godot/imported/hand_right.obj-2ca49fdecdde7ddf4a49744a907e32cf.mesh"]
+
+source_file="res://assets/meshes/hand_right.obj"
+dest_files=["res://.godot/imported/hand_right.obj-2ca49fdecdde7ddf4a49744a907e32cf.mesh", "res://.godot/imported/hand_right.obj-2ca49fdecdde7ddf4a49744a907e32cf.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

@@ -7,7 +7,11 @@ extends RefCounted
 ## - `build` turns curves into one ArrayMesh of ribbons: UV.x runs along each strand 0 -> 1
 ##   (root -> tip, by arc length), UV.y across the ribbon 0 -> 1; width tapers to the tip.
 ##   UV2 = (strand index / (n - 1), per-strand hash in [0, 1]) for shader variation.
+##   COLOR = white with alpha = strand opacity (per-strand 0.55..1, fading to 0 at the tip), as
+##   MaterialLibrary.miku_hair() expects.
 ##   TANGENT follows the strand (for anisotropic highlights), NORMAL is the ribbon face normal.
+##   `crossed = true` adds a second ribbon rotated 90 degrees around each strand (reads from
+##   every angle; a flat ribbon vanishes edge-on). Both ribbons share UVs/colour.
 ## Curves are Catmull-Rom splines through their points (end points duplicated). Build once.
 
 ## Catmull-Rom point on the spline through `points` at t in [0, 1].
@@ -88,12 +92,13 @@ static func generate_curves(root: Vector3, direction: Vector3, count: int, seed:
 ## tip; `samples` points per strand; `facing` is the direction the ribbons face at the root
 ## (default: +Z, towards the default camera) and is then parallel-transported along each strand.
 static func build(curves: Array[PackedVector3Array], width := 0.06, tip_ratio := 0.15,
-		samples := 48, facing := Vector3.BACK) -> ArrayMesh:
+		samples := 48, facing := Vector3.BACK, crossed := false) -> ArrayMesh:
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var tangents := PackedFloat32Array()
 	var uvs := PackedVector2Array()
 	var uv2s := PackedVector2Array()
+	var colors := PackedColorArray()
 	var indices := PackedInt32Array()
 	var n_curves := curves.size()
 	for c in n_curves:
@@ -112,7 +117,11 @@ static func build(curves: Array[PackedVector3Array], width := 0.06, tip_ratio :=
 		if w_dir.length() < 1e-4:
 			w_dir = t_prev.cross(Vector3.UP)
 		w_dir = w_dir.normalized()
-		var base := verts.size()
+		var opacity := lerpf(0.55, 1.0, fposmod(strand_h * 7.31, 1.0))
+		var frames_p := PackedVector3Array()
+		var frames_t := PackedVector3Array()
+		var frames_w := PackedVector3Array()
+		var frames_n := PackedVector3Array()
 		for k in count:
 			var t: Vector3
 			if k == 0:
@@ -127,20 +136,31 @@ static func build(curves: Array[PackedVector3Array], width := 0.06, tip_ratio :=
 				w_dir = w_dir.rotated(axis.normalized(), t_prev.signed_angle_to(t, axis.normalized()))
 			w_dir = (w_dir - t * w_dir.dot(t)).normalized()
 			t_prev = t
-			var s := cum[k] / total
-			var w := width * lerpf(1.0, tip_ratio, pow(s, 1.3))
-			var nrm := t.cross(w_dir).normalized()
-			for side in 2:
-				var off := (float(side) - 0.5) * w
-				verts.append(pts[k] + w_dir * off)
-				normals.append(nrm)
-				tangents.append_array(PackedFloat32Array([t.x, t.y, t.z, 1.0]))
-				uvs.append(Vector2(s, float(side)))
-				uv2s.append(Vector2(strand_u, strand_h))
-		for k in count - 1:
-			var a := base + 2 * k
-			_quad(verts, normals, indices, a, a + 1, a + 3, a + 2)
-	return _commit(verts, normals, tangents, uvs, uv2s, indices)
+			frames_p.append(pts[k])
+			frames_t.append(t)
+			frames_w.append(w_dir)
+			frames_n.append(t.cross(w_dir).normalized())
+		for layer in (2 if crossed else 1):
+			var base := verts.size()
+			for k in count:
+				var t := frames_t[k]
+				var wd := frames_w[k] if layer == 0 else frames_n[k]
+				var nrm := t.cross(wd).normalized()
+				var s := cum[k] / total
+				var w := width * lerpf(1.0, tip_ratio, pow(s, 1.3))
+				var alpha := opacity * pow(1.0 - s, 0.6)
+				for side in 2:
+					var off := (float(side) - 0.5) * w
+					verts.append(frames_p[k] + wd * off)
+					normals.append(nrm)
+					tangents.append_array(PackedFloat32Array([t.x, t.y, t.z, 1.0]))
+					uvs.append(Vector2(s, float(side)))
+					uv2s.append(Vector2(strand_u, strand_h))
+					colors.append(Color(1.0, 1.0, 1.0, alpha))
+			for k in count - 1:
+				var a := base + 2 * k
+				_quad(verts, normals, indices, a, a + 1, a + 3, a + 2)
+	return _commit(verts, normals, tangents, uvs, uv2s, colors, indices)
 
 
 static func _quad(verts: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array,
@@ -159,7 +179,7 @@ static func _quad(verts: PackedVector3Array, normals: PackedVector3Array, indice
 
 static func _commit(verts: PackedVector3Array, normals: PackedVector3Array,
 		tangents: PackedFloat32Array, uvs: PackedVector2Array, uv2s: PackedVector2Array,
-		indices: PackedInt32Array) -> ArrayMesh:
+		colors: PackedColorArray, indices: PackedInt32Array) -> ArrayMesh:
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -167,6 +187,7 @@ static func _commit(verts: PackedVector3Array, normals: PackedVector3Array,
 	arrays[Mesh.ARRAY_TANGENT] = tangents
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_TEX_UV2] = uv2s
+	arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
 	if verts.size() > 0:

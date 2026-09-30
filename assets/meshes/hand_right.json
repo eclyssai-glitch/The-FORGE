@@ -1,0 +1,86 @@
+{
+  "anchors": {
+    "forearm_dir": [
+      0.9535,
+      0.286,
+      -0.0953
+    ],
+    "forearm_end": [
+      5.3232,
+      1.5137,
+      -0.3623
+    ],
+    "palm_center": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "palm_normal": [
+      -0.0166,
+      -0.9999,
+      0.0042
+    ],
+    "tip_index": [
+      -4.3559,
+      -0.3464,
+      1.4578
+    ],
+    "tip_little": [
+      -2.7567,
+      -1.3246,
+      -1.1566
+    ],
+    "tip_middle": [
+      -4.2017,
+      -1.3988,
+      0.3862
+    ],
+    "tip_ring": [
+      -3.7272,
+      -1.523,
+      -0.4879
+    ],
+    "tip_thumb": [
+      -1.2517,
+      -2.3477,
+      1.6303
+    ],
+    "wrist_center": [
+      2.05,
+      0.4267,
+      0.0
+    ]
+  },
+  "bounds": {
+    "max": [
+      5.3334,
+      1.7489,
+      2.11
+    ],
+    "min": [
+      -4.3781,
+      -2.4043,
+      -1.4991
+    ],
+    "size": [
+      9.7115,
+      4.1532,
+      3.6092
+    ]
+  },
+  "format_version": 1,
+  "frame": "fingers -> -X, palm faces -Y, forearm towards +X",
+  "generator": {
+    "grid_spacing": 0.022,
+    "quick": false,
+    "script": "tools/sculpt/bake_all.py"
+  },
+  "name": "hand_right",
+  "origin": "palm_center (on the palm surface)",
+  "triangles": 57998,
+  "units": "Godot units",
+  "up": "+Y",
+  "vertex_color": "RGB = ambient occlusion baked from the SDF (linear, 1 = fully open)",
+  "vertices": 29001,
+  "wrist_to_middle_tip": 6.524
+}

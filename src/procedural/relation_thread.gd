@@ -6,6 +6,8 @@ extends RefCounted
 ## to `b` (for the travelling pulse), UV.y 0 -> 1 across the ribbon.
 ## - `build`      : flat ribbon; `facing` = direction the ribbon faces (default: the normal of
 ##                  the arc plane, i.e. the ribbon lies in the arc plane).
+## - `build_crossed`: two ribbons at 90 degrees (in the arc plane + across it); cheap and never
+##                  vanishes edge-on (art-director recommendation), UV as `build`.
 ## - `build_tube` : thin tube with `radial` sides (reads from every angle), UV.y around.
 
 static func bulge_dir(a: Vector3, b: Vector3, up := Vector3.UP) -> Vector3:
@@ -40,31 +42,54 @@ static func arc_points(a: Vector3, b: Vector3, height: float, segments := 48, up
 
 static func build(a: Vector3, b: Vector3, height: float, width: float, segments := 48,
 		up := Vector3.UP, facing := Vector3.ZERO) -> ArrayMesh:
-	var n := maxi(segments, 1)
-	var plane_n := (b - a).cross(bulge_dir(a, b, up)).normalized()
-	var face := plane_n if facing.length() < 1e-6 else facing.normalized()
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
+	var plane_n := (b - a).cross(bulge_dir(a, b, up)).normalized()
+	var face := plane_n if facing.length() < 1e-6 else facing.normalized()
+	_ribbon(verts, normals, uvs, indices, a, b, height, width, segments, up, face)
+	return _commit(verts, normals, uvs, indices)
+
+
+static func build_crossed(a: Vector3, b: Vector3, height: float, width: float, segments := 48,
+		up := Vector3.UP) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	var bulge := bulge_dir(a, b, up)
+	var plane_n := (b - a).cross(bulge).normalized()
+	_ribbon(verts, normals, uvs, indices, a, b, height, width, segments, up, plane_n)
+	_ribbon(verts, normals, uvs, indices, a, b, height, width, segments, up, bulge)
+	return _commit(verts, normals, uvs, indices)
+
+
+## Appends one ribbon whose faces look along `face` (the width runs along tangent x face).
+static func _ribbon(verts: PackedVector3Array, normals: PackedVector3Array, uvs: PackedVector2Array,
+		indices: PackedInt32Array, a: Vector3, b: Vector3, height: float, width: float,
+		segments: int, up: Vector3, face: Vector3) -> void:
+	var n := maxi(segments, 1)
+	var base := verts.size()
+	var prev_w := Vector3.ZERO
 	for k in n + 1:
 		var t := float(k) / float(n)
 		var p := arc_point(a, b, height, t, up)
 		var tan := arc_tangent(a, b, height, t, up)
 		var w := tan.cross(face)
 		if w.length() < 1e-5:
-			w = tan.cross(Vector3.UP if absf(tan.y) < 0.9 else Vector3.RIGHT)
+			w = prev_w if prev_w != Vector3.ZERO else tan.cross(Vector3.UP if absf(tan.y) < 0.9 else Vector3.RIGHT)
 		w = w.normalized()
+		prev_w = w
 		var nrm := w.cross(tan).normalized()
 		for side in 2:
 			verts.append(p + w * ((float(side) - 0.5) * width))
 			normals.append(nrm)
 			uvs.append(Vector2(t, float(side)))
 	for k in n:
-		var i := 2 * k
+		var i := base + 2 * k
 		_tri(verts, normals, indices, i, i + 1, i + 3)
 		_tri(verts, normals, indices, i, i + 3, i + 2)
-	return _commit(verts, normals, uvs, indices)
 
 
 static func build_tube(a: Vector3, b: Vector3, height: float, radius: float, segments := 48,

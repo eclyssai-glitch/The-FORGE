@@ -49,21 +49,21 @@ def _head():
     base = _head_mass
     feats = []
     for s in (-1.0, 1.0):
-        feats.append(("sub", S.ellipsoid((s * 0.072, 0.012, 0.224), (0.060, 0.034, 0.046)), 0.06))
-        feats.append(("add", S.ellipsoid((s * 0.072, 0.006, 0.188), (0.051, 0.029, 0.031),
-                                         S.rot_z(-s * 0.14)), 0.016))
+        # shallow socket, then a large almond lid (closed) that nearly fills it
+        feats.append(("sub", S.ellipsoid((s * 0.072, 0.010, 0.232), (0.064, 0.036, 0.046)), 0.06))
+        feats.append(("add", S.ellipsoid((s * 0.071, 0.004, 0.192), (0.060, 0.030, 0.034),
+                                         S.rot_z(-s * 0.12)), 0.022))
         # closed-lid line: a faint arc along the lower edge of the lid
-        arc = S.tube([(s * 0.030, -0.004, 0.206), (s * 0.072, -0.016, 0.214),
-                      (s * 0.113, -0.002, 0.194)], [0.0055, 0.0065, 0.005])
-        feats.append(("sub", arc, 0.008))
-        feats.append(("add", S.ellipsoid((s * 0.078, 0.066, 0.192), (0.072, 0.024, 0.03),
-                                         S.rot_z(s * 0.12)), 0.04))
-        feats.append(("add", S.ellipsoid((s * 0.106, -0.04, 0.128), (0.066, 0.05, 0.07)), 0.08))
-        feats.append(("add", S.sphere((s * 0.022, -0.086, 0.252), 0.017), 0.02))
-    feats.append(("add", S.round_cone((0, 0.062, 0.222), (0, -0.068, 0.284), 0.017, 0.023), 0.03))
-    feats.append(("add", S.sphere((0, -0.074, 0.272), 0.027), 0.02))
-    feats.append(("add", S.ellipsoid((0, -0.152, 0.204), (0.04, 0.026, 0.03)), 0.03))
-    feats.append(("sub", S.ellipsoid((0, -0.153, 0.234), (0.028, 0.0035, 0.012)), 0.006))
+        arc = S.tube([(s * 0.026, -0.006, 0.212), (s * 0.070, -0.018, 0.221),
+                      (s * 0.116, -0.004, 0.197)], [0.0045, 0.0055, 0.0045])
+        feats.append(("sub", arc, 0.012))
+        feats.append(("add", S.ellipsoid((s * 0.078, 0.064, 0.192), (0.074, 0.02, 0.026),
+                                         S.rot_z(s * 0.12)), 0.06))
+        feats.append(("add", S.ellipsoid((s * 0.1, -0.045, 0.118), (0.07, 0.05, 0.06)), 0.12))
+        feats.append(("add", S.sphere((s * 0.019, -0.08, 0.244), 0.014), 0.018))
+    feats.append(("add", S.round_cone((0, 0.06, 0.222), (0, -0.062, 0.272), 0.016, 0.02), 0.03))
+    feats.append(("add", S.sphere((0, -0.068, 0.263), 0.022), 0.02))
+    feats.append(("add", S.ellipsoid((0, -0.152, 0.2), (0.042, 0.028, 0.03)), 0.04))
 
     return S.sculpt(base, feats)
 
@@ -85,16 +85,21 @@ def _knot_points():
 def _hair():
     """Smooth hair gathered close to the skull: a soft hairline (no ledge) and a broad volume
     swept back where the runtime ribbons start."""
-    n = normalize((0.0, 0.5, -0.866))
-    c0 = float(np.dot(v3(0, 0.152, 0.2), n))
+    n_top = normalize((0.0, 0.8, -0.6))
+    c_top = float(np.dot(v3(0, 0.155, 0.2), n_top))
     bun = S.ellipsoid(BUN_C, BUN_R, S.rot_x(-0.35))
     flow = S.round_cone(BUN_C - ROOT_DIR * 0.02, BUN_C + ROOT_DIR * 0.075, 0.085, 0.06)
     knot = S.union(bun, flow, k=0.03)
 
     def cap(p):
-        s = (p @ n) - c0 - 1.6 * p[:, 0] ** 2
-        s = np.minimum(s, (p[:, 1] + 0.2) * 0.8)
-        thick = 0.021 * smoothstep(-0.012, 0.06, s)
+        # hair region = above the forehead/temple line  OR  behind the ear and above the nape;
+        # the union draws the natural hairline curve around the (unmodelled) ear
+        top = (p @ n_top) - c_top - 0.5 * p[:, 0] ** 2
+        # behind the ear: an arc that comes forward above and below the ear, closed at the nape
+        back = -p[:, 2] - 0.035 + 1.1 * (p[:, 1] + 0.02) ** 2
+        back = S.smin(back, (p[:, 1] + 0.2) * 0.8, 0.04)
+        s = S.smax(top, back, 0.07)
+        thick = 0.017 * smoothstep(-0.008, 0.045, s)
         d = _head_mass(p) - thick
         return S.smin(d, knot(p), 0.05)
     return S.with_bound(cap, (0, 0.05, -0.15), 0.72)
@@ -124,13 +129,11 @@ def _torso(skip=()):
             ("scapula", S.ellipsoid((s * 0.16, 0.66, -0.15), (0.12, 0.14, 0.05)), 0.10),
             ("breast", S.ellipsoid((s * 0.125, 0.50, 0.11), (0.095, 0.086, 0.074)), 0.13),
             ("clavicle", S.capsule((s * 0.04, 0.915, 0.10), (s * 0.37, 0.905, -0.005), 0.018), 0.05),
-            ("scm", S.capsule((s * 0.09, 1.33, -0.03), (s * 0.036, 0.96, 0.098), 0.026), 0.065),
+            ("scm", S.capsule((s * 0.09, 1.33, -0.03), (s * 0.042, 0.97, 0.09), 0.024), 0.07),
         ]
     named.append(("neck", S.round_cone((0, 0.86, -0.05), ATLAS, 0.12, 0.102), 0.10))
     parts = [(g, k) for n, g, k in named if n not in skip]
     torso = S.blend(base, parts)
-    if "notch" not in skip:
-        torso = S.subtract(torso, S.sphere((0, 0.955, 0.138), 0.026), 0.05)
     if "spine" not in skip:
         torso = S.subtract(torso, S.capsule((0, 0.08, -0.188), (0, 0.80, -0.212), 0.02), 0.07)
     return torso

@@ -250,8 +250,16 @@ func test_hair_ribbons_uv_and_taper() -> void:
 	var w1 := verts[2 * 31].distance_to(verts[2 * 31 + 1])
 	assert_almost_eq(w0, 0.08, 1e-4, "root width")
 	assert_almost_eq(w1, 0.008, 1e-4, "tip width")
+	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	assert_eq(colors.size(), verts.size(), "vertex colour per vertex (alpha = opacity)")
+	assert_gt(colors[0].a, 0.5, "opaque at the root")
+	assert_almost_eq(colors[2 * 31].a, 0.0, 1e-4, "transparent at the tip")
 	var again := HairRibbons.build(curves, 0.08, 0.1, 32)
 	assert_eq(again.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], verts, "deterministic mesh")
+	var crossed := HairRibbons.build(curves, 0.08, 0.1, 32, Vector3.BACK, true)
+	var carr := crossed.surface_get_arrays(0)
+	assert_eq((carr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), 2 * verts.size(), "crossed doubles the ribbons")
+	_assert_winding(carr, "crossed hair")
 
 
 func test_orbit_line_phase_uv() -> void:
@@ -268,6 +276,10 @@ func test_orbit_line_phase_uv() -> void:
 		assert_almost_eq(uvs[2 * k].x, float(k) / 128.0, 1e-5, "UV.x = phase")
 		var mid := (verts[2 * k] + verts[2 * k + 1]) * 0.5
 		assert_almost_eq(mid, OrbitLine.point(4.0, 3.0, float(k) / 128.0), Vector3.ONE * 1e-4)
+	var tube := OrbitLine.build_tube(4.0, 3.0, 0.02, 128, 4)
+	var tarr := _surface(tube)
+	_assert_uv_range(tarr[Mesh.ARRAY_TEX_UV], "orbit tube")
+	_assert_winding(tarr, "orbit tube")
 	var line := OrbitLine.build_line(2.0, 2.0, 64)
 	assert_eq(line.surface_get_primitive_type(0), Mesh.PRIMITIVE_LINE_STRIP)
 	var lv: PackedVector3Array = line.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
@@ -367,6 +379,11 @@ func test_relation_thread_arc() -> void:
 	_assert_winding(arrays, "thread")
 	assert_almost_eq(uvs[0].x, 0.0, 1e-6)
 	assert_almost_eq(uvs[uvs.size() - 1].x, 1.0, 1e-6)
+	var cross := RelationThread.build_crossed(a, b, 1.5, 0.04, 40)
+	var carr := _surface(cross)
+	assert_eq((carr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), 4 * 41, "two ribbons")
+	_assert_uv_range(carr[Mesh.ARRAY_TEX_UV], "thread crossed")
+	_assert_winding(carr, "thread crossed")
 	var tube := RelationThread.build_tube(a, b, 1.5, 0.02, 40, 5)
 	var tarr := _surface(tube)
 	_assert_uv_range(tarr[Mesh.ARRAY_TEX_UV], "thread tube")

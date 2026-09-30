@@ -77,7 +77,7 @@ def _finger_cuts(pts, frames, lengths, radii, detail, nails=True):
         fr = frames[i - 1]
         X, Z = fr[:, 0], fr[:, 2]
         c = pts[i] - Z * radii[i] * 1.02
-        cuts.append((S.capsule(c - X * radii[i] * 0.55, c + X * radii[i] * 0.55, 0.05), 0.09))
+        cuts.append((S.capsule(c - X * radii[i] * 0.5, c + X * radii[i] * 0.5, 0.055), 0.13))
     if nails:
         fr = frames[2]
         r3 = radii[3]
@@ -86,7 +86,7 @@ def _finger_cuts(pts, frames, lengths, radii, detail, nails=True):
 
         def nail(p, P=pts[2], R=R, r3=r3, L=L):
             q = (p - P) @ R
-            z0 = r3 * 0.84
+            z0 = r3 * 0.88
             y0 = L * 0.30
             # bounded slab: above the nail plane, from the cuticle to past the tip, one finger wide
             d = np.maximum(z0 - q[:, 2], y0 - q[:, 1])
@@ -143,7 +143,7 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
         palm.append(S.round_cone((CARPAL_X[name], 0.85, 0.02), (mx * 0.98, my - 0.12, mz - 0.02),
                                  0.34, r0 + 0.02))
     body = S.union(*palm, k=0.55)
-    core = S.ellipsoid((0.0, 1.9, -0.06), (1.14, 1.6, 0.40))
+    core = S.ellipsoid((0.0, 1.95, -0.03), (1.16, 1.62, 0.45))
     carpus = S.ellipsoid((0.0, 0.5, -0.04), (0.98, 0.7, 0.5))
     thenar = S.ellipsoid(th.get("thenar_c", (0.72, 1.30, -0.36)), (0.62, 0.98, 0.46),
                          S.rot_z(-0.42) @ S.rot_y(0.25))
@@ -170,20 +170,20 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
             x0, x1 = CARPAL_X[name] * 0.55 + mx * 0.45, mx * 0.9
             top0 = _surface_z(palm_sdf, x0, y0)
             top1 = _surface_z(palm_sdf, x1, y1)
-            a = v3(x0, y0, top0 - 0.12)
-            b = v3(x1, y1, top1 - 0.09)
-            parts.append((S.round_cone(a, b, 0.05, 0.075), 0.30))
+            a = v3(x0, y0, top0 - 0.16)
+            b = v3(x1, y1, top1 - 0.14)
+            parts.append((S.round_cone(a, b, 0.04, 0.065), 0.4))
     # ---------------------------------------------------------------- forearm (stump)
     fa_dir = normalize(pose.get("forearm_dir", (0.0, -1.0, 0.0)))
     if forearm:
         # spindle-shaped forearm fragment: narrow wrist, muscle belly, long soft taper
-        L = pose.get("forearm_len", 3.3)
-        spindle = S.tube([(0, 0.0, 0), (0, L * 0.45, 0.05), (0, L * 0.85, 0.02), (0, L, 0.0)],
-                         [0.56, 0.66, 0.54, 0.34])
+        L = pose.get("forearm_len", 3.6)
+        spindle = S.tube([(0, 0.0, 0), (0, L * 0.4, 0.05), (0, L * 0.78, 0.02), (0, L, 0.0)],
+                         [0.56, 0.66, 0.5, 0.2])
         flat = S.scale(spindle, (1.5, 1.0, 1.0))
         stump = S.place(flat, (0, 0.35, 0), S.frame_from(fa_dir, (0, 0, 1)))
         parts.append((stump, 0.55))
-        anchors["forearm_end"] = v3(0, 0.35, 0) + fa_dir * (L + 0.34)
+        anchors["forearm_end"] = v3(0, 0.35, 0) + fa_dir * (L + 0.2)
     else:
         parts.append((S.ellipsoid((0, 0.05, 0.0), (0.92, 0.55, 0.52)), 0.4))
     # ---------------------------------------------------------------- assemble
