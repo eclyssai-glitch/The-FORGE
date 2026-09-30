@@ -2,8 +2,9 @@ extends GutTest
 ## World composition per scenario (Loop 4, phase B): modules of the active scenario, recomposition
 ## on Simulation.scenario_changed, GENESIS environment (nebula sky, AgX, glow, fog, quality/mode,
 ## sky motion throttle), AudioDirector in both scenarios and audio anchors by meta, picking of
-## GENESIS entities, style frame poses and the GENESIS capture list. Works whether or not the
-## animator's GENESIS modules exist yet.
+## GENESIS entities, style frame poses and the GENESIS capture list. Composition checks work
+## whether or not a module script exists; the smoke audio report expects the animator's real
+## GENESIS modules (integrated in Loop 4) to register the anchors.
 
 const WorldScene := preload("res://scenes/world.tscn")
 const WorldScript := preload("res://src/world/world.gd")
@@ -254,17 +255,36 @@ func test_smoke_audio_report() -> void:
 	var lines: PackedStringArray = []
 	assert_true(AutomationScript._smoke_audio(world, lines), "ORIGIN needs no anchors")
 	assert_eq(lines[0], "audio=present anchors=")
+	# (a) GENESIS with the real animator modules: they register the three anchors themselves.
 	Simulation.set_scenario(Scenario.GENESIS)
-	lines = []
-	assert_false(AutomationScript._smoke_audio(world, lines), "GENESIS without anchors fails")
-	assert_true(lines[-1].begins_with("FAIL audio anchors missing"))
-	for kind: StringName in WorldScript.GENESIS_AUDIO_ANCHORS:
-		var n := Node3D.new()
-		n.set_meta(WorldScript.AUDIO_ANCHOR_META, kind)
-		world.add_child(n)
 	await wait_process_frames(1)
+	assert_eq(world.missing_modules(), [] as Array[String], "GENESIS modules integrated")
 	lines = []
 	assert_true(AutomationScript._smoke_audio(world, lines), "\n".join(lines))
+	assert_eq(lines[0], "audio=present anchors=hands,miku,planet")
+	var modules := world.scenario_nodes()
+	for kind: StringName in WorldScript.GENESIS_AUDIO_ANCHORS:
+		var anchor := world.audio_director.get_anchor(kind) as Node
+		assert_true(modules.any(func(m: Node) -> bool: return m.is_ancestor_of(anchor)),
+			"anchor %s comes from a scenario module" % kind)
+	# (b) GENESIS without the modules: detach them from the world (kept alive and restored
+	# below, so the recomposition in after_each frees them normally) — no anchors, smoke fails.
+	var slots: Array[int] = []
+	for m in modules:
+		slots.append(m.get_index())
+	for m in modules:
+		world.remove_child(m)
+	assert_eq(world.audio_anchor_kinds(), [] as Array[StringName])
+	lines = []
+	assert_false(AutomationScript._smoke_audio(world, lines), "GENESIS without anchors fails")
+	assert_eq(lines[0], "audio=present anchors=")
+	assert_eq(lines[-1], "FAIL audio anchors missing: planet, miku, hands")
+	for i in modules.size():
+		world.add_child(modules[i])
+		world.move_child(modules[i], slots[i])
+	await wait_process_frames(1)
+	lines = []
+	assert_true(AutomationScript._smoke_audio(world, lines), "anchors back with the modules")
 	assert_eq(lines[0], "audio=present anchors=hands,miku,planet")
 
 
