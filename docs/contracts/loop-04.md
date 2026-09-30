@@ -176,3 +176,12 @@ narrativo = f(`Simulation.genesis`, `Simulation.time`); ambiente via `MotionCloc
   `get_tree().call_group(&"audio_director", &"play_ui", &"ui_tick"|&"ui_select")`; volumes por bus via funções
   estáticas de `AudioDirector`. Contratos do smoke (`ui_transport` com Start/Pause/Reset, `demo_badge`) mantidos.
 - **sound-designer**: remix contra o timing real quando a cena existir.
+- Fase B · game-engineer integrado (`9842659`): módulos GENESIS com nome de nó fixo — `GenesisLightRig`, `Miku`,
+  `AuxiliaryHands`, `FormingPlanet`, `OrbitalSystem`, `RelationThreads`, `Stardust`, `FormationGlow` (caminhos acima).
+  Módulo com `var environment: Environment` recebe o do mundo antes do `add_child`; exposição/névoa/céu por modo são
+  do `GenesisEnvironment` — o rig só mexe em `ambient_light_energy`, e direcionais com
+  `light_volumetric_fog_energy` ≤ `GenesisEnvironment.DIRECTIONAL_FOG_ENERGY` (0,05). Âncoras: meta
+  `audio_anchor` até o `_ready` (depois, `world.register_audio_anchor(node)`); o smoke GENESIS exige planet/miku/hands.
+  Style frames: método opcional `CameraDirector.style_frame_poses() -> Array[{name, time, mode, position, target,
+  fov}]` (≥ 6 substituem `StyleFrames.DEFAULT_POSES`); `tools/style_frames.sh <dir>`; capturas GENESIS
+  `tools/capture_evidence.sh <dir> --scenario=genesis` (g01–g18). Saídas roteirizadas via `Main.quit_game(code)`.
