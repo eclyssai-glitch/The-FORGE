@@ -115,8 +115,12 @@ static func halo(g: GenesisState, t: float) -> float:
 ## creates (seeded, each layer, each moon, ring, belt, links).
 static func seed_light(g: GenesisState, t: float) -> float:
 	var s := Motion.smooth(g.awaken_at, t, SEED_DUR)
-	var surge := 0.0
-	for at in creation_times(g):
+	# No allocation per frame: every creation time is visited in place.
+	var surge := maxf(maxf(_bump(g.seeded_at, t, 0.8, SEED_SURGE_DUR), _bump(g.ring_at, t, 0.8, SEED_SURGE_DUR)),
+		maxf(_bump(g.belt_at, t, 0.8, SEED_SURGE_DUR), _bump(g.links_at, t, 0.8, SEED_SURGE_DUR)))
+	for at in g.planet_layer_times:
+		surge = maxf(surge, _bump(at, t, 0.8, SEED_SURGE_DUR))
+	for at in g.moon_times:
 		surge = maxf(surge, _bump(at, t, 0.8, SEED_SURGE_DUR))
 	return s * (1.0 + SEED_SURGE * surge)
 

@@ -36,6 +36,8 @@ const ROCK_SCALE := Vector3(0.04, 0.24, 3.2)
 ## Share of the belt rocks drawn per quality (floor), rocks are geometry, not particles.
 const BELT_MIN_SHARE := 0.45
 const SELECT_RATE := 6.0
+const MOON_KEYS: Array[String] = ["moon0", "moon1"]
+const GLOW_KEYS: Array[String] = ["moon0glow", "moon1glow"]
 
 var moons: Array[MeshInstance3D] = []
 var moon_pivots: Array[Node3D] = []
@@ -305,7 +307,7 @@ func _update(delta: float) -> void:
 		var ph := GenesisLayout.orbit_phase(GenesisLayout.MOON_PHASES[i], GenesisLayout.MOON_PERIODS[i], m)
 		moon_pivots[i].rotation.y = TAU * ph
 		moons[i].rotation.y = TAU * fposmod(m / 50.0, 1.0)
-		var key := "moon%d" % i
+		var key: String = MOON_KEYS[i]
 		if _changed(key, f):
 			var exists := f > 0.001
 			moons[i].visible = exists
@@ -315,7 +317,7 @@ func _update(delta: float) -> void:
 			moon_orbits[i].visible = exists
 			_moon_orbit_mats[i].set_shader_parameter("formation", f)
 		var glow := lerpf(MOON_GLOW.x, MOON_GLOW.y, GenesisChoreography.link(g, t, 1 + i))
-		if _changed(key + "glow", glow):
+		if _changed(GLOW_KEYS[i], glow):
 			_moon_mats[i].set_shader_parameter("glow", glow)
 		_moon_orbit_mats[i].set_shader_parameter("head", ph)
 		_highlight(GenesisScript.moon_entity(i), _moon_mats[i], delta)

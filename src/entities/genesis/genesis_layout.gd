@@ -39,8 +39,8 @@ const PLANET_TILT := Vector3(0.32, 0.0, -0.22)
 ## down, fingers hovering over the planet, index slightly extended).
 const HAND_LEFT_POS := Vector3(-1.55, -2.8, 2.9)
 const HAND_LEFT_EULER := Vector3(0.3, 0.35, 0.22)
-const HAND_RIGHT_POS := Vector3(2.5, 3.25, 2.8)
-const HAND_RIGHT_EULER := Vector3(-0.18, -0.25, 0.08)
+const HAND_RIGHT_POS := Vector3(3.1, 3.25, 3.0)
+const HAND_RIGHT_EULER := Vector3(-0.18, -0.25, 0.14)
 ## Scale of both sculptures: wrist to middle fingertip ≈ 4.7 u, a hand ≈ 1.5× the final planet's
 ## diameter — monumental next to the world they hold, and still below MIKU in the hierarchy.
 const HAND_SCALE := 0.72

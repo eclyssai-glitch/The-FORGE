@@ -20,6 +20,7 @@ extends Node3D
 
 const LEFT := &"hand_left"
 const RIGHT := &"hand_right"
+const HANDS: Array[StringName] = [&"hand_left", &"hand_right"]
 const MESH_PATHS := {&"hand_left": "res://assets/meshes/hand_left.obj", &"hand_right": "res://assets/meshes/hand_right.obj"}
 
 ## Ambient drift (units / rad) and periods (s) — slow and heavy.
@@ -54,7 +55,7 @@ var _present := -1.0
 
 
 func _ready() -> void:
-	for id: StringName in [LEFT, RIGHT]:
+	for id: StringName in HANDS:
 		_build_hand(id)
 	anchor_node = Node3D.new()
 	anchor_node.name = "HandsAnchor"
@@ -139,7 +140,7 @@ func _update(delta: float) -> void:
 	var work := GenesisChoreography.hands_work(g, t)
 	var press := GenesisChoreography.sculpt_press(g, t)
 	var present := vis
-	for id: StringName in [LEFT, RIGHT]:
+	for id: StringName in HANDS:
 		var left := id == LEFT
 		var pivot: Node3D = pivots[id]
 		var rest := GenesisLayout.hand_rest(left)
@@ -172,7 +173,7 @@ func _update(delta: float) -> void:
 	if not is_equal_approx(present, _present):
 		_present = present
 		var shown := present > 0.001
-		for id: StringName in [LEFT, RIGHT]:
+		for id: StringName in HANDS:
 			var mi: MeshInstance3D = hands[id]
 			(pivots[id] as Node3D).visible = shown
 			# Fade out of the mist: transparency only while fading (opaque pipeline otherwise).

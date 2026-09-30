@@ -213,10 +213,13 @@ static func style_frame_poses() -> Array[Dictionary]:
 	out.append(_pose("sf_05_threads", 53.0, SessionState.Mode.OBSERVATORY,
 		rig_position(OBSERVATORY_TARGET, OBSERVATORY_YAW, OBSERVATORY_PITCH, OBSERVATORY_DISTANCE - 4.0),
 		OBSERVATORY_TARGET, OBSERVATORY_FOV))
+	# The system, closer than the UNIVERSE mode shot: the belt, both older worlds and their threads.
 	out.append(_pose("sf_06_system", 55.0, SessionState.Mode.UNIVERSE,
-		rig_position(UNIVERSE_TARGET, UNIVERSE_YAW, UNIVERSE_PITCH, UNIVERSE_DISTANCE), UNIVERSE_TARGET, UNIVERSE_FOV))
-	out.append(_pose("sf_07_silhouette", 55.0, SessionState.Mode.FORGE,
-		heart + Vector3(-9.5, -2.2, -5.5), heart + Vector3(0.0, 0.6, 0.0), 38.0))
+		rig_position(Vector3(0.0, 3.0, 2.0), UNIVERSE_YAW - 0.2, 0.34, 50.0), Vector3(0.0, 3.0, 2.0), 42.0))
+	# Close and slightly low, looking along the sky's warm direction: MIKU cut out against the warm
+	# core (the contraluz), her hair opening into it.
+	out.append(_pose("sf_07_contraluz", 55.0, SessionState.Mode.FORGE,
+		heart + Vector3(-1.2, -1.6, 9.0), heart + Vector3(0.0, 0.9, -0.5), 36.0))
 	out.append(_pose("sf_08_open", 55.0, SessionState.Mode.FORGE,
 		rig_position(Vector3(0.0, 4.2, 0.5), -0.42, 0.04, 46.0), Vector3(0.0, 4.2, 0.5), 40.0))
 	return out

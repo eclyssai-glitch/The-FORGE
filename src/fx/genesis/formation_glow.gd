@@ -75,33 +75,27 @@ func _on_rebuilt() -> void:
 	_update()
 
 
-## Latest formation burst active at `t`: {"at", "centre", "radius"} (empty when none).
-## Planet events burst from the planet surface, moons from their body, the ring from its circle.
-static func active_burst(g: GenesisState, t: float, m: float) -> Dictionary:
-	var best := {}
-	var best_at := -1.0
-	var cand: Array = []
-	cand.append([g.seeded_at, 0])
+## Kind of burst: planet event (seeded / layer), moon `i` (MOON_KIND + i), ring.
+const MOON_KIND := 10
+const RING_KIND := 20
+
+
+## Latest formation burst active at `t`: [at, kind] (kind -1 when none). Planet events burst from
+## the planet surface, moons from their body, the ring from its circle. No allocation.
+static func active_burst_kind(g: GenesisState, t: float) -> Vector2:
+	var best := Vector2(-1.0, -1.0)
+	best = _later(best, g.seeded_at, 0, t)
 	for i in g.planet_layer_times.size():
-		cand.append([g.planet_layer_times[i], 1 + i])
+		best = _later(best, g.planet_layer_times[i], 1 + i, t)
 	for i in g.moon_times.size():
-		cand.append([g.moon_times[i], 10 + i])
-	cand.append([g.ring_at, 20])
-	for c in cand:
-		var at: float = c[0]
-		if at < 0.0 or t < at or t > at + BURST or at < best_at:
-			continue
-		best_at = at
-		var kind: int = c[1]
-		var centre := GenesisLayout.PLANET_CENTER
-		var radius := GenesisChoreography.planet_radius(g, at + 0.8)
-		if kind >= 10 and kind < 20:
-			centre = GenesisLayout.moon_position(kind - 10, m)
-			radius = GenesisLayout.MOON_RADII[kind - 10]
-		elif kind == 20:
-			radius = (GenesisLayout.RING_INNER + GenesisLayout.RING_OUTER) * 0.5
-		best = {"at": at, "centre": centre, "radius": radius, "ring": kind == 20}
-	return best
+		best = _later(best, g.moon_times[i], MOON_KIND + i, t)
+	return _later(best, g.ring_at, RING_KIND, t)
+
+
+static func _later(best: Vector2, at: float, kind: int, t: float) -> Vector2:
+	if at < 0.0 or t < at or t > at + BURST or at < best.x:
+		return best
+	return Vector2(at, kind)
 
 
 func _update() -> void:
@@ -114,14 +108,20 @@ func _update() -> void:
 
 
 func _update_sparks(g: GenesisState, t: float, m: float) -> void:
-	var b := active_burst(g, t, m)
-	sparks.visible = not b.is_empty()
-	if b.is_empty():
+	var b := active_burst_kind(g, t)
+	var kind := int(b.y)
+	sparks.visible = kind >= 0
+	if kind < 0:
 		return
-	var p := clampf((t - float(b["at"])) / BURST, 0.0, 1.0)
-	var centre: Vector3 = b["centre"]
-	var radius: float = b["radius"]
-	var ring := bool(b["ring"])
+	var p := clampf((t - b.x) / BURST, 0.0, 1.0)
+	var centre := GenesisLayout.PLANET_CENTER
+	var radius := GenesisChoreography.planet_radius(g, b.x + 0.8)
+	var ring := kind == RING_KIND
+	if kind >= MOON_KIND and kind < RING_KIND:
+		centre = GenesisLayout.moon_position(kind - MOON_KIND, m)
+		radius = GenesisLayout.MOON_RADII[kind - MOON_KIND]
+	elif ring:
+		radius = (GenesisLayout.RING_INNER + GenesisLayout.RING_OUTER) * 0.5
 	var ring_basis := Basis.from_euler(GenesisLayout.PLANET_TILT)
 	var travel := Motion.eased(p, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	var col := Color(SPARK_HDR, SPARK_HDR, SPARK_HDR, 0.0)
