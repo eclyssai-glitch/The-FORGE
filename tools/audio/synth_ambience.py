@@ -8,6 +8,11 @@ the end; the reverb is a circular convolution over T. The last sample flows into
 Layers: drone (A1 + E2 with slow beating partners), formant pad ("ah" <-> "oh", Aadd9 <-> Amaj7#11),
 cosmic wind (three moving noise bands), sparse crystalline sparkle (pentatonic bell grains),
 long diffuse reverb (synthetic IR, RT60 ~7 s).
+
+The loop is written as two complementary stems split by a linear-phase circular crossover
+(FLOOR below ~230 Hz, AIR above; floor + air == the full loop, both still exactly periodic).
+The game plays them locked together (AudioStreamSynchronized) and recesses only the floor under
+the big low-register moments (docs/AUDIO.md, "recuo do grave").
 """
 from __future__ import annotations
 
@@ -43,7 +48,8 @@ def drone(rng: np.random.Generator) -> np.ndarray:
         f = q(f)
         for fb, pp in [(f, p), (f + beat_k / T, -p)]:
             y = np.zeros(N)
-            for k, ak in [(1, 1.0), (2, 0.35), (3, 0.12), (4, 0.05)]:
+            # harmonic weight in 110-220 Hz (A2 E3 A3): the floor still reads on small speakers
+            for k, ak in [(1, 0.8), (2, 0.62), (3, 0.36), (4, 0.2)]:
                 y += ak * np.sin(2 * np.pi * k * fb * t + rng.uniform(0, 2 * np.pi))
             out += dsp.pan(a * y, pp)
     breath = 0.72 + 0.28 * lfo(3, 1.3)   # 24 s breathing
@@ -133,14 +139,35 @@ def build() -> np.ndarray:
     return dsp.normalize_integrated(mix, -24.0, -1.5)
 
 
-def main(out_path: str) -> None:
+# Crossover between the floor and air stems: raised cosine on a log-frequency axis, flat floor
+# below XO_LO, flat air above XO_HI (the recess covers the drone, 80-200 Hz and the wind's foot).
+XO_LO = 180.0
+XO_HI = 300.0
+
+
+def split_floor_air(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Linear-phase complementary split over the whole (periodic) loop: floor + air == x."""
+    n = x.shape[0]
+    spec = np.fft.rfft(x, axis=0)
+    f = np.fft.rfftfreq(n, 1 / SR)
+    u = np.clip(np.log2(np.maximum(f, 1e-3) / XO_LO) / np.log2(XO_HI / XO_LO), 0.0, 1.0)
+    h = 0.5 + 0.5 * np.cos(np.pi * u)          # 1 below XO_LO -> 0 above XO_HI
+    floor = np.fft.irfft(spec * h[:, None], n, axis=0)
+    return floor, x - floor
+
+
+def main(floor_path: str, air_path: str) -> None:
     x = build()
-    dsp.write_wav(out_path, x)
-    seam = float(np.max(np.abs(x[0] - x[-1])))
-    step = float(np.percentile(np.max(np.abs(np.diff(x, axis=0)), axis=1), 99.9))
-    print(f"amb_cosmos_loop: {x.shape[0] / SR:.1f}s  I={dsp.integrated_lufs(x):.1f} LUFS  "
-          f"TP={dsp.true_peak_db(x):.1f} dBTP  seam_jump={seam:.5f} (p99.9 step {step:.5f})")
+    floor, air = split_floor_air(x)
+    dsp.write_wav(floor_path, floor)
+    dsp.write_wav(air_path, air)
+    for name, y in [("amb_cosmos_loop (floor+air)", x), ("amb_cosmos_floor", floor),
+                    ("amb_cosmos_air", air)]:
+        seam = float(np.max(np.abs(y[0] - y[-1])))
+        step = float(np.percentile(np.max(np.abs(np.diff(y, axis=0)), axis=1), 99.9))
+        print(f"{name}: {y.shape[0] / SR:.1f}s  I={dsp.integrated_lufs(y):.1f} LUFS  "
+              f"TP={dsp.true_peak_db(y):.1f} dBTP  seam_jump={seam:.5f} (p99.9 step {step:.5f})")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2])

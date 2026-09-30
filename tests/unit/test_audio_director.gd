@@ -54,11 +54,15 @@ func test_every_sound_exists_and_loads_as_ogg_vorbis() -> void:
 		assert_gt((stream as AudioStream).get_length(), 0.2, "%s is empty" % path)
 
 
-func test_ambience_loops_and_one_shots_do_not() -> void:
-	var amb := ResourceLoader.load(AudioDirector.sound_path(AudioDirector.AMBIENCE), "",
-		ResourceLoader.CACHE_MODE_IGNORE) as AudioStreamOggVorbis
-	assert_true(amb.loop, "ambience must loop")
-	assert_between(amb.get_length(), 60.0, 90.0)
+func test_ambience_stems_loop_together_and_one_shots_do_not() -> void:
+	var lengths: Array[float] = []
+	for s in AudioDirector.AMBIENCE_STEMS:
+		var amb := ResourceLoader.load(AudioDirector.sound_path(s), "",
+			ResourceLoader.CACHE_MODE_IGNORE) as AudioStreamOggVorbis
+		assert_true(amb.loop, "ambience stem %s must loop" % s)
+		assert_between(amb.get_length(), 60.0, 90.0)
+		lengths.append(amb.get_length())
+	assert_almost_eq(lengths[0], lengths[1], 0.001, "stems must have the same length (sync)")
 	for s in AudioDirector.EVENT_SOUNDS.values() + AudioDirector.LAYER_SOUNDS:
 		var one := ResourceLoader.load(AudioDirector.sound_path(s), "",
 			ResourceLoader.CACHE_MODE_IGNORE) as AudioStreamOggVorbis
@@ -66,12 +70,25 @@ func test_ambience_loops_and_one_shots_do_not() -> void:
 		assert_between(one.get_length(), 2.0, 8.05, "%s duration" % s)
 
 
+func test_ambience_plays_the_two_stems_sample_locked() -> void:
+	var d := _director()
+	var sync := d.ambience_player.stream as AudioStreamSynchronized
+	assert_not_null(sync, "ambience must be an AudioStreamSynchronized")
+	assert_eq(sync.stream_count, AudioDirector.AMBIENCE_STEMS.size())
+	assert_eq(sync.get_sync_stream(AudioDirector.AMB_FLOOR).resource_path,
+		AudioDirector.sound_path(AudioDirector.AMBIENCE_FLOOR))
+	assert_eq(sync.get_sync_stream(1).resource_path,
+		AudioDirector.sound_path(AudioDirector.AMBIENCE_AIR))
+	assert_true(d.ambience_player.playing)
+
+
 func test_mix_tables_cover_every_sound() -> void:
 	for s in AudioDirector.all_sounds():
-		if s == AudioDirector.AMBIENCE:
+		if AudioDirector.AMBIENCE_STEMS.has(s):
 			continue
 		assert_true(AudioDirector.SOUND_GAIN_DB.has(s), "no gain for %s" % s)
-	for s in AudioDirector.SOUND_ANCHORS.keys() + AudioDirector.DUCKING_SOUNDS:
+	for s in AudioDirector.SOUND_ANCHORS.keys() + AudioDirector.DUCKING_SOUNDS \
+			+ AudioDirector.LOW_RECESS.keys():
 		assert_has(AudioDirector.all_sounds(), s)
 
 
@@ -161,3 +178,39 @@ func test_pause_lowers_ambience_and_resume_restores_it() -> void:
 	d.set_paused(false)
 	await wait_seconds(1.0)
 	assert_almost_eq(d._amb_pause_db, 0.0, 0.01)
+
+
+func test_big_low_moments_recess_the_ambience_floor() -> void:
+	# the four moments the loop-4 critique heard as a sub-bass carpet
+	for e in [_event(&"hands.summoned", 8.0), _event(&"planet.seeded", 18.0),
+			_event(&"planet.layer", 22.0, {"layer": 0}), _event(&"planet.stable", 53.0)]:
+		assert_true(AudioDirector.LOW_RECESS.has(AudioDirector.sound_for(e)),
+			"%s must recess the floor" % e.type)
+	for e in [_event(&"miku.awaken", 3.0), _event(&"moon.formed", 37.0, {"index": 0}),
+			_event(&"links.woven", 50.0)]:
+		assert_false(AudioDirector.LOW_RECESS.has(AudioDirector.sound_for(e)),
+			"%s has no low register to make room for" % e.type)
+
+
+func test_recess_lowers_only_the_floor_and_releases() -> void:
+	var d := _director()
+	var sync := d.ambience_player.stream as AudioStreamSynchronized
+	d.handle_event(_event(&"planet.layer", 22.0, {"layer": 0}), 22.0)
+	await wait_seconds(AudioDirector.RECESS_ATTACK + 0.3)
+	assert_almost_eq(d.ambience_floor_db(), AudioDirector.RECESS_DB, 0.01)
+	assert_almost_eq(sync.get_sync_stream_volume(AudioDirector.AMB_FLOOR), AudioDirector.RECESS_DB, 0.01)
+	assert_almost_eq(sync.get_sync_stream_volume(1), 0.0, 0.001, "air stem untouched")
+	assert_almost_eq(d._amb_duck_db, 0.0, 0.001, "magma does not duck the whole ambience")
+	Simulation.world_rebuilt.emit()
+	await wait_process_frames(2)
+	assert_almost_eq(d.ambience_floor_db(), 0.0, 0.001, "rebuild resets the recess")
+
+
+func test_climax_keeps_the_ambience_but_recesses_its_floor() -> void:
+	var d := _director()
+	assert_false(AudioDirector.DUCKING_SOUNDS.has(&"sfx_planet_stable"),
+		"the climax is the fullest moment: no broadband duck")
+	assert_eq(d.handle_event(_event(&"planet.stable", 53.0), 53.0), &"sfx_planet_stable")
+	await wait_seconds(AudioDirector.RECESS_ATTACK + 0.3)
+	assert_almost_eq(d._amb_duck_db, 0.0, 0.001)
+	assert_almost_eq(d.ambience_floor_db(), AudioDirector.RECESS_DB, 0.01)
