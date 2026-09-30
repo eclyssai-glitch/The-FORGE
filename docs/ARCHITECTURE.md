@@ -62,19 +62,40 @@ Leitores independentes de cenário (fase, fim de sessão, status de entidade) us
 (`ScenarioState`: `apply`, `phase_index`, `phase_name`, `is_complete`, `session_at`, `completed_at`,
 estáticos `since`/`progress`). Na Fase C, quando o visual do ORIGIN sair, `world` pode ser retipado.
 
-Linha de comando: `--scenario=<origin_chamber|genesis>` (`main.gd`). O smoke é agnóstico de cenário
+Linha de comando: `--scenario=<origin_chamber|genesis>`, lido pelo próprio autoload `Simulation` no
+`_ready` (`Simulation.scenario_from_args`; autoloads ficam prontos antes da cena principal, então o mundo
+já compõe o cenário pedido, sem montar e desmontar o ORIGIN). O smoke é agnóstico de cenário
 (`tools/smoke_test.sh --scenario=genesis`): conta eventos do roteiro ativo, `Simulation.state.is_complete()`,
-missão do cenário, reset para `phase_index() == 0`. As capturas (`automation.gd CAPTURES`) ainda são do
-ORIGIN CHAMBER.
+missão do cenário, reset para `phase_index() == 0`, módulos do cenário composto. Capturas por cenário:
+`automation.gd CAPTURES` (ORIGIN) e `CAPTURES_GENESIS`; style frames GENESIS em `StyleFrames`
+(`src/core/style_frames.gd`).
+
+### Mundo por cenário (Fase B)
+
+O mundo 3D segue o cenário ativo: `world.gd` compõe os módulos de `MODULES_BY_SCENARIO[Simulation.scenario]`
+e **recompõe** em `Simulation.scenario_changed` (módulos antigos saem da árvore na hora — grupos
+`entity_<id>` e corpos de seleção vão junto — e são liberados no fim do quadro; o `Environment` é refeito
+para o cenário; seleção e hover do cenário anterior são limpos). Persistem entre cenários: `AudioDirector`,
+`CameraDirector` e `Picker`. Módulos GENESIS leem `Simulation.genesis` + `Simulation.time` e o relógio de
+movimento `MotionClock`; o mundo alimenta `MaterialLibrary.set_motion_time(MotionClock.now())` uma vez por
+quadro no GENESIS. Detalhes (ordem, ambiente, âncoras de áudio) em `docs/ENGINE.md`.
+
+Áudio: o `AudioDirector` (sound-designer) é um módulo do mundo como os outros (por caminho, grupo
+`audio_director`); reage só a sinais do `Simulation`. A UI toca sons por
+`get_tree().call_group(&"audio_director", &"play_ui", ...)`, sem referenciar o nó. O mundo registra como
+âncora de som todo `Node3D` com meta `audio_anchor`.
 
 ## Cenas
 
 `scenes/main.tscn` (raiz: `main.gd`) → `World` (`scenes/world.tscn`) + `HUD` (`scenes/hud.tscn`)
 + camada de fade + `Shortcuts` (criado em `main.gd`). `main.gd` também ativa automação por argumentos
-(`--smoke-test`, `--allow-missing-ui`, `--capture=`, `--capture-only=`, `--quality=`, `--scenario=`).
+(`--smoke-test`, `--allow-missing-ui`, `--capture=`, `--capture-only=`, `--style-frames=`, `--quality=`;
+`--scenario=` é do `Simulation`) e oferece `quit_game(code)` (silencia o áudio do mundo, espera 0,25 s,
+sai) para saídas roteirizadas.
 
-`World` (`src/world/world.gd`) compõe, nesta ordem: `WorldEnvironment` → entidades
-(`src/entities`) → efeitos (`src/fx`) → `Universe` → `CameraDirector` (`src/animation`) → `Picker`.
+`World` (`src/world/world.gd`) compõe, nesta ordem: `WorldEnvironment` → módulos do cenário ativo
+(ORIGIN: entidades `src/entities` + efeitos `src/fx`; GENESIS: `src/entities/genesis` + `src/fx/genesis`)
+→ `Universe` (só ORIGIN) → `AudioDirector` (`src/audio`) → `CameraDirector` (`src/animation`) → `Picker`.
 Módulos de outras áreas entram por caminho e são pulados se ausentes (detalhes em `docs/ENGINE.md`).
 Seleção 3D: `Picker` faz raycast na camada de colisão 2 e escreve em `Session`; a UI lê `Session`.
 
@@ -83,11 +104,12 @@ Seleção 3D: `Picker` faz raycast na camada de colisão 2 e escreve em `Session
 | Diretório | Conteúdo | Escritor |
 |---|---|---|
 | `src/events` | Lógica pura de eventos, mundo, missão, entidades | game-engineer |
-| `src/core` | Autoloads Simulation/Session, main, atalhos, automação | game-engineer |
-| `src/world` | Quality, composição do mundo, universo (céu + sementes), seleção (Picker) | game-engineer |
+| `src/core` | Autoloads Simulation/Session, main, atalhos, automação, style frames | game-engineer |
+| `src/world` | Quality, composição do mundo por cenário, ambiente GENESIS, universo ORIGIN (céu + sementes), seleção (Picker) | game-engineer |
 | `src/procedural` | Blueprints e builders de malha | procedural-modeler |
 | `src/entities`, `src/animation`, `src/fx` | Entidades, câmeras, efeitos | animator |
 | `src/style`, `src/ui` | Paleta, materiais, ambiente, tema, HUD | art-director |
+| `src/audio` | AudioDirector (som por eventos, âncoras, buses) | sound-designer |
 | `tests/unit`, `tests/integration` | GUT | dono de cada área |
 | `tools` | Scripts de teste, captura, export, setup | game-engineer |
 | `addons/gut` | GUT 9.7.0 vendorizado (MIT) — não editar | — |

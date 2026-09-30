@@ -40,15 +40,24 @@ ou outros templates mudam o binário.
 | Export reproduzível (mesmo `.exe` e mesmo zip para o mesmo commit) | `tools/export_windows.sh` em dois checkouts limpos e comparar SHA-256 |
 | Pacote exato do `.exe` executado no renderizador real | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` |
 | Jogo a partir do código | `tools/smoke_test.sh` e `tools/capture_evidence.sh` |
+| Cenário GENESIS | `tools/smoke_test.sh --scenario=genesis`, `tools/capture_evidence.sh <dir> --scenario=genesis` |
+| Style frames GENESIS (≥ 6, HUD oculto, 1920×1080) | `tools/style_frames.sh <dir> [--quality=high]` |
 
 O smoke reprova se: `RESULT=FAIL`, falta a linha `RESULT`, há `SCRIPT ERROR`/`Parse Error` no log,
-a linha `modules=N/M` tem N ≠ M (script de entidade, fx ou câmera ausente/quebrado), falta a linha
+a linha `modules=N/M` tem N ≠ M (script de entidade, fx, áudio ou câmera do cenário ativo ausente/quebrado;
+ORIGIN e GENESIS esperam 10 cada, `AudioDirector` incluso), o mundo não está composto para o cenário
+ativo, faltam no GENESIS as âncoras de áudio `planet`/`miku`/`hands` (linha `audio=present anchors=`), falta a linha
 `ui=` ou ela é `ui=absent` (HUD sem os grupos `ui_transport`/`demo_badge`), ou o tempo esgota.
 Com UI presente, o jogo aciona `Start`/`Pause`/`Reset` do transporte e exige o selo DEMO visível nos três
 modos. `SMOKE_ALLOW_MISSING_UI=1 tools/smoke_test.sh` passa `--allow-missing-ui` ao jogo e tolera
 apenas `ui=absent` (branches em que a UI ainda não existe); nunca usar para validar uma entrega.
 Argumentos extras chegam ao jogo: `tools/smoke_test.sh --scenario=genesis` joga o cenário GENESIS
 (relatório com `scenario=genesis`, `phase=COMPLETE layers=3/3 moons=2/2`, `mission_objectives=10/10`).
+Até o animator entregar os módulos GENESIS esse smoke reprova com `modules=2/10` e
+`FAIL audio anchors missing` — esperado na Fase B; o ORIGIN (padrão) segue PASS com `modules=10/10`.
+Sem placa de som (Linux sem `/dev/snd`, contêiner/CI), smoke, capturas e style frames passam
+`--audio-driver Dummy` ao jogo (`GODOT_AUDIO_FLAGS`, `tools/_proc.sh`; `AUDIO_DRIVER=<nome>` força outro):
+o `AudioDirector` roda igual, nada é ouvido, e o log não traz mais as falhas do ALSA.
 
 Encerramento robusto (Xvfb + lavapipe às vezes não encerra o Godot após o último quadro):
 
@@ -57,13 +66,20 @@ Encerramento robusto (Xvfb + lavapipe às vezes não encerra o Godot após o úl
 - Smoke: `TIMEOUT` (padrão 240 s) total; após a linha `RESULT=` o motor tem `SMOKE_GRACE` s
   (padrão 15) para sair, senão é encerrado ("forced exit after result") e o veredito vem do log.
 - Capturas: `--timeout=<s>` ou `CAPTURE_TIMEOUT` (padrão 900 s). A lista de PNG esperados vem de
-  `CAPTURES` em `src/core/automation.gd` (filtrada por `--capture-only`); só contam PNG gravados
+  `CAPTURES` em `src/core/automation.gd` (ou `CAPTURES_GENESIS` com `--scenario=genesis`, que também é
+  repassado ao jogo; filtrada por `--capture-only`); só contam PNG gravados
   nesta execução. Todos presentes → saída 0, mesmo se foi preciso encerrar o motor
   ("forced exit after captures", `CAPTURE_GRACE` s após o último, padrão 15); falta algum → saída 1.
   `--resolution=WxH` (padrão 1600x900) define a janela do jogo e a tela do Xvfb (ex.: conjunto
   1280×720 com `--resolution=1280x720`); formato inválido → saída 2.
-- No jogo (`automation.gd`, só em `--capture`/`--smoke-test`): o fade de entrada é concluído antes da
-  1ª captura (brilho determinístico) e, se `quit()` não encerrar o laço principal em 3 s, o processo
+- Style frames: `tools/style_frames.sh <dir>` roda `--scenario=genesis --style-frames=<dir>` em janela e
+  Xvfb 1920×1080; `--timeout=<s>` ou `STYLE_TIMEOUT` (padrão 600 s), `STYLE_GRACE` (15 s). Saída 0 só se o
+  manifesto `style_frames.txt` e cada PNG listado foram gravados nesta execução, são ≥ 6 e cada um mede
+  1920×1080 (lido do cabeçalho IHDR do PNG).
+- No jogo (`automation.gd`, só em `--capture`/`--smoke-test`/`--style-frames`): o fade de entrada é
+  concluído antes da 1ª captura (brilho determinístico); a saída passa por `Main.quit_game` (para todos
+  os players de áudio e espera 0,25 s, para o `AudioServer` liberar as playbacks — sem isso o motor relata
+  "resources still in use at exit" da ambiência) e, se o laço principal não terminar em 3 s, o processo
   se mata (`OS.kill`).
 
 Limitação registrada (ADR-007): o `.exe` não executa sob o Wine 9.0 disponível neste ambiente
@@ -87,7 +103,7 @@ drivers gráficos do Windows, janela) só é validado pelo checklist abaixo, num
    numa lista) abre o inspetor à direita; **FOCUS** enquadra a entidade, `×` ou `Esc` limpa a seleção.
 6. Assista à demo completa (~50 s): 7 fases visíveis; OBSERVATORY mostra 7/7 objetivos.
 7. Opcional, teste automatizado: `KoriumUniverse.exe -- --smoke-test` e leia
-   `%APPDATA%\Godot\app_userdata\KORIUM UNIVERSE\smoke_report.txt` (esperado `modules=9/9`,
+   `%APPDATA%\Godot\app_userdata\KORIUM UNIVERSE\smoke_report.txt` (esperado `modules=10/10`, `audio=present`,
    `ui=present` e `RESULT=PASS`; um módulo do mundo que não carregou ou a UI ausente reprova o smoke).
 
 ## Builds registradas
