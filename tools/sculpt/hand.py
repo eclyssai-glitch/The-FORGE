@@ -86,7 +86,7 @@ def _finger_cuts(pts, frames, lengths, radii, detail, nails=True):
 
         def nail(p, P=pts[2], R=R, r3=r3, L=L):
             q = (p - P) @ R
-            z0 = r3 * 0.88
+            z0 = r3 * 0.93
             y0 = L * 0.30
             # bounded slab: above the nail plane, from the cuticle to past the tip, one finger wide
             d = np.maximum(z0 - q[:, 2], y0 - q[:, 1])
@@ -94,7 +94,7 @@ def _finger_cuts(pts, frames, lengths, radii, detail, nails=True):
             d = np.maximum(d, q[:, 1] - (L + r3 * 2.0))
             return np.maximum(d, q[:, 2] - r3 * 2.5)
         S.with_bound(nail, pts[2] + fr[:, 1] * L * 0.6 + fr[:, 2] * r3, L + 3.0 * r3)
-        cuts.append((nail, 0.06))
+        cuts.append((nail, 0.1))
     return cuts
 
 
@@ -161,7 +161,7 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
         # metacarpal heads (knuckles) and dorsal extensor tendons
         for name in FINGERS:
             pts, frames = finger_frames[name]
-            parts.append((S.sphere(pts[0] + frames[0][:, 2] * 0.06, RADII[name][0] + 0.02), 0.18))
+            parts.append((S.sphere(pts[0] + frames[0][:, 2] * 0.1, RADII[name][0] + 0.02), 0.15))
         for name in FINGERS:
             # extensor tendons: only a soft relief over the middle of the dorsum
             mx, my = MCP[name]
@@ -170,9 +170,9 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
             x0, x1 = CARPAL_X[name] * 0.55 + mx * 0.45, mx * 0.9
             top0 = _surface_z(palm_sdf, x0, y0)
             top1 = _surface_z(palm_sdf, x1, y1)
-            a = v3(x0, y0, top0 - 0.16)
-            b = v3(x1, y1, top1 - 0.14)
-            parts.append((S.round_cone(a, b, 0.04, 0.065), 0.4))
+            a = v3(x0, y0, top0 - 0.2)
+            b = v3(x1, y1, top1 - 0.19)
+            parts.append((S.round_cone(a, b, 0.035, 0.05), 0.5))
     # ---------------------------------------------------------------- forearm (stump)
     fa_dir = normalize(pose.get("forearm_dir", (0.0, -1.0, 0.0)))
     if forearm:
