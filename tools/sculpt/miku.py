@@ -29,87 +29,180 @@ GOWN_TOP = 0.03
 
 
 # ------------------------------------------------------------------ head
-def _head_mass(p):
-    cran = S.ellipsoid((0, 0.07, -0.035), (0.205, 0.245, 0.25))(p)
-    face = S.ellipsoid((0, -0.045, 0.04), (0.163, 0.235, 0.195))(p)
-    d = S.smin(cran, face, 0.12)
-    d = S.smin(d, S.ellipsoid((0, -0.19, 0.075), (0.118, 0.10, 0.118))(p), 0.10)
-    d = S.smin(d, S.sphere((0, -0.235, 0.145), 0.05)(p), 0.07)
-    # jawline: gonion -> chin, so the profile has a jaw and the neck sits behind the face
-    for s in (-1.0, 1.0):
-        d = S.smin(d, S.capsule((s * 0.118, -0.145, -0.055), (s * 0.04, -0.258, 0.135), 0.036)(p), 0.05)
-    return d
+# Head frame: origin = head centre, +Y = crown, +Z = face. Chin -> crown ~0.53 u (1 cm ~ 0.023 u),
+# eyes on the mid line (y ~ 0). The face is a smooth relief (height field) over an egg-shaped
+# oval: every feature is a soft Gaussian swell or hollow, so the whole face reads as one
+# continuous form (Brancusi, "Sleeping Muse") with no crease anywhere.
+
+def egg(c, r, taper, chin=0.0):
+    """Ellipsoid whose x radius shrinks towards -Y (taper > 0) and narrows quadratically in its
+    lower half (``chin``): an egg / face oval with a delicate chin."""
+    c = v3(c)
+    r = v3(r)
+
+    def f(p):
+        q = p - c
+        t = q[:, 1] / r[1]
+        sx = np.clip(1.0 + taper * t - chin * np.clip(-t, 0.0, 1.0) ** 2, 0.45, 1.4)
+        rr = np.empty_like(q)
+        rr[:, 0] = r[0] * sx
+        rr[:, 1] = r[1]
+        rr[:, 2] = r[2]
+        k0 = np.sqrt(np.sum((q / rr) ** 2, axis=1))
+        k1 = np.sqrt(np.sum((q / (rr * rr)) ** 2, axis=1))
+        return k0 * (k0 - 1.0) / np.maximum(k1, 1e-12)
+    return S.with_bound(f, c, float(np.max(r)) * 1.4)
 
 
-S.with_bound(_head_mass, (0, 0, 0), 0.42)
+def _g(x, y, cx, cy, sx, sy):
+    return np.exp(-((x - cx) / sx) ** 2 - ((y - cy) / sy) ** 2)
 
 
-def _head():
-    """Head in head-centre coordinates (+Z = face)."""
-    base = _head_mass
-    feats = []
-    for s in (-1.0, 1.0):
-        # shallow socket, then a large almond lid (closed) that nearly fills it
-        feats.append(("sub", S.ellipsoid((s * 0.072, 0.010, 0.232), (0.064, 0.036, 0.046)), 0.06))
-        feats.append(("add", S.ellipsoid((s * 0.071, 0.004, 0.192), (0.060, 0.030, 0.034),
-                                         S.rot_z(-s * 0.12)), 0.022))
-        # closed-lid line: a faint arc along the lower edge of the lid
-        arc = S.tube([(s * 0.026, -0.006, 0.212), (s * 0.070, -0.018, 0.221),
-                      (s * 0.116, -0.004, 0.197)], [0.0045, 0.0055, 0.0045])
-        feats.append(("sub", arc, 0.012))
-        feats.append(("add", S.ellipsoid((s * 0.078, 0.064, 0.192), (0.074, 0.02, 0.026),
-                                         S.rot_z(s * 0.12)), 0.06))
-        feats.append(("add", S.ellipsoid((s * 0.1, -0.045, 0.118), (0.07, 0.05, 0.06)), 0.12))
-        feats.append(("add", S.sphere((s * 0.019, -0.08, 0.244), 0.014), 0.018))
-    feats.append(("add", S.round_cone((0, 0.06, 0.222), (0, -0.062, 0.272), 0.016, 0.02), 0.03))
-    feats.append(("add", S.sphere((0, -0.068, 0.263), 0.022), 0.02))
-    feats.append(("add", S.ellipsoid((0, -0.152, 0.2), (0.042, 0.028, 0.03)), 0.04))
+def face_relief(x, y):
+    """Height (z) of the face surface above the point (x, y) of the head frame."""
+    ax = np.abs(x)
+    # base: gently arched profile; elliptic cross-section whose half-width follows the face oval,
+    # so the front plane turns into the sides without a mask edge
+    z = 0.214 - 0.5 * (y + 0.02) ** 2
+    t = np.clip((y + 0.03) / 0.27, -0.97, 0.97)
+    b = 1.05 * 0.15 * (1.0 + 0.08 * t - 0.42 * np.clip(-t, 0.0, 1.0) ** 2) * np.sqrt(1.0 - t * t)
+    b = np.maximum(b, 0.08)
+    depth = 0.14 + 0.05 * np.clip(y / 0.2, 0.0, 1.0)            # rounder forehead
+    z = z - depth * (np.cosh(2.5 * ax / b) - 1.0) / (math.cosh(2.5) - 1.0)
+    # forehead: a full, smooth dome down to a subtle brow
+    z = z + 0.006 * _g(x, y, 0.0, 0.14, 0.11, 0.08)
+    z = z + 0.005 * _g(x, y, 0.0, 0.058, 0.03, 0.022)           # glabella
+    # brow arcs flowing into the root of the nose
+    arc_y = 0.05 - 2.5 * (ax - 0.058) ** 2
+    z = z + 0.005 * np.exp(-((ax - 0.058) / 0.05) ** 2 - ((y - arc_y) / 0.018) ** 2)
+    z = z - 0.008 * _g(ax, y, 0.14, 0.07, 0.03, 0.05)          # temples
+    # eye: shallow socket, the eyeball swelling under the closed upper lid, a faint lash line
+    # curving gently downwards and a soft lower lid
+    z = z - 0.028 * _g(ax, y, 0.068, 0.006, 0.044, 0.036)
+    z = z + 0.008 * _g(ax, y, 0.067, 0.0, 0.034, 0.022)        # eyeball under the lid
+    d = (ax - 0.067) / 0.038
+    span = np.clip(1.0 - d * d, 0.0, 1.0) ** 0.8
+    y_c = -0.001 + 0.04 * (ax - 0.067)                          # canthi: outer a touch higher
+    y_up = y_c + 0.02 * span                                    # upper lid fold (soft)
+    y_lash = y_c - 0.009 * span                                 # lash line (crisper arc)
+    lid = smoothstep(-0.002, 0.012, y_up - y) * smoothstep(-0.0015, 0.0045, y - y_lash)
+    z = z + 0.012 * lid * np.clip(1.0 - d * d, 0.0, 1.0) ** 0.4
+    z = z + 0.004 * _g(ax, y, 0.066, y_c - 0.02, 0.03, 0.008)  # lower lid
+    # cheekbones and soft cheeks
+    z = z + 0.012 * _g(ax, y, 0.1, -0.04, 0.045, 0.035)
+    z = z + 0.006 * _g(ax, y, 0.07, -0.1, 0.05, 0.05)
+    # nose: a fine straight ridge from the brow to a small rounded tip
+    u = (0.03 - y) / 0.10                                      # 0 = root, 1 = tip
+    h_ridge = np.where(u < 0.0, 0.004 * np.exp(-(u / 0.25) ** 2),
+                       np.where(u <= 1.0, 0.004 + 0.04 * np.clip(u, 0, 1) ** 1.35,
+                                0.044 * np.exp(-((u - 1.0) / 0.21) ** 2)))
+    w_ridge = 0.013 + 0.009 * np.clip(u, 0.0, 1.1) ** 2 + 0.04 * np.clip(-u, 0.0, 1.0)
+    z = z + h_ridge * np.exp(-(x / w_ridge) ** 2)
+    z = z + 0.009 * _g(ax, y, 0.021, -0.08, 0.014, 0.012)     # nostril wings
+    # mouth: a soft muzzle, lips as faint swells, the parting barely there
+    z = z + 0.006 * _g(x, y, 0.0, -0.13, 0.05, 0.035)
+    z = z + 0.010 * _g(x, y, 0.0, -0.124, 0.034, 0.011)
+    z = z - 0.004 * _g(x, y, 0.0, -0.137, 0.034, 0.0055)
+    z = z + 0.009 * _g(x, y, 0.0, -0.149, 0.028, 0.011)
+    z = z - 0.004 * _g(ax, y, 0.036, -0.138, 0.01, 0.012)       # mouth corners
+    z = z - 0.005 * _g(x, y, 0.0, -0.176, 0.04, 0.012)
+    # small, delicate chin; below the jaw line the relief turns under (submental plane)
+    z = z + 0.015 * _g(x, y, 0.0, -0.212, 0.036, 0.028)
+    y_jaw = -0.255 + 3.0 * x * x
+    z = z - 12.0 * np.clip(y_jaw - y, 0.0, None) ** 2
+    return z
 
-    return S.sculpt(base, feats)
+
+FACE_OVAL = egg((0, -0.03, -0.04), (0.15, 0.27, 0.4), 0.08, 0.42)
 
 
-# gathered hair: a compact bun on the back of the skull; the runtime ribbons leave from its
-# upper-back end, heading up and back (tangent 55 degrees above the horizontal, world)
-BUN_C = v3(0.0, 0.07, -0.25)
-BUN_R = (0.125, 0.105, 0.095)
-_ROOT_WORLD = normalize((0.0, math.sin(math.radians(55.0)), -math.cos(math.radians(55.0))))
+def _face_solid(p):
+    x, y = p[:, 0], p[:, 1]
+    e = 1e-3
+    z0 = face_relief(x, y)
+    zx = (face_relief(x + e, y) - z0) / e
+    zy = (face_relief(x, y + e) - z0) / e
+    d = (p[:, 2] - z0) / np.sqrt(1.0 + zx * zx + zy * zy)
+    d = S.smax(d, FACE_OVAL(p), 0.045)
+    # the mask only reaches back to the jaw angle; the cranium carries the rest
+    return S.smax(d, -0.06 - p[:, 2], 0.06)
+
+
+S.with_bound(_face_solid, (0, -0.03, 0.05), 0.36)
+_CRANIUM = S.ellipsoid((0, 0.045, -0.035), (0.163, 0.216, 0.205))
+_FOREHEAD = S.ellipsoid((0, 0.13, 0.06), (0.13, 0.12, 0.14))
+
+
+def _skull_raw(p):
+    d = S.smin(_CRANIUM(p), _FOREHEAD(p), 0.05)
+    return S.smin(d, _face_solid(p), 0.06)
+
+
+_skull = S.with_bound(_skull_raw, (0, 0, 0), 0.42)
+
+
+def _face():
+    """Extra volumes on top of the skull (none: the relief carries every feature)."""
+    return []
+
+
+# gathered hair: the cap hugs the skull and sweeps back into a low chignon on the occiput; the
+# runtime ribbons leave from its back end, heading up and back (ROOT_ELEV above horizontal, world)
+CHIG_C = v3(0.0, -0.045, -0.235)
+CHIG_R = (0.13, 0.075, 0.08)
+ROOT_ELEV = 42.0
+_ROOT_WORLD = normalize((0.0, math.sin(math.radians(ROOT_ELEV)), -math.cos(math.radians(ROOT_ELEV))))
 ROOT_DIR = R_HEAD.T @ _ROOT_WORLD   # the same direction in head coordinates
 KNOT_T = (0.0, 0.07)
+HAIR_GROOVES = 22      # combed relief lines around the cap
+HAIR_GROOVE_AMP = 0.0015
 
 
 def _knot_points():
-    """Two points along the ribbon exit direction starting at the bun centre (for anchors)."""
-    return [tuple(BUN_C + ROOT_DIR * t) for t in KNOT_T]
+    """Two points along the ribbon exit direction starting at the chignon centre (for anchors)."""
+    return [tuple(CHIG_C + ROOT_DIR * t) for t in KNOT_T]
+
+
+HAIRLINE = (  # azimuth from the face (rad) -> hairline height (head frame)
+    (0.0, 0.5, 0.9, 1.25, 1.55, 1.9, 2.5, math.pi),
+    (0.19, 0.178, 0.135, 0.06, -0.035, -0.085, -0.135, -0.15),
+)
+
+
+def _hair_region(p):
+    """> 0 inside the hair: above a hairline that runs over the forehead, down in front of the
+    (unmodelled) ear to its middle, and back to the nape; the hair covers the upper ear."""
+    th = np.abs(np.arctan2(p[:, 0], p[:, 2]))
+    return p[:, 1] - np.interp(th, *HAIRLINE)
 
 
 def _hair():
-    """Smooth hair gathered close to the skull: a soft hairline (no ledge) and a broad volume
-    swept back where the runtime ribbons start."""
-    n_top = normalize((0.0, 0.8, -0.6))
-    c_top = float(np.dot(v3(0, 0.155, 0.2), n_top))
-    bun = S.ellipsoid(BUN_C, BUN_R, S.rot_x(-0.35))
-    flow = S.round_cone(BUN_C - ROOT_DIR * 0.02, BUN_C + ROOT_DIR * 0.075, 0.085, 0.06)
-    knot = S.union(bun, flow, k=0.03)
+    chig = S.ellipsoid(CHIG_C, CHIG_R)
+    flow = S.round_cone(CHIG_C, CHIG_C + ROOT_DIR * 0.075, 0.07, 0.045)
+    knot = S.union(chig, flow, k=0.05)
+    # combed lines: meridians around an axis through the chignon and the face, so they sweep
+    # back from the hairline and converge (hidden) under the chignon
+    pole = normalize(CHIG_C - v3(0, 0.0, 0.3))
+    e1 = normalize(np.cross(pole, (1.0, 0.0, 0.0)))
+    e2 = np.cross(pole, e1)
 
     def cap(p):
-        # hair region = above the forehead/temple line  OR  behind the ear and above the nape;
-        # the union draws the natural hairline curve around the (unmodelled) ear
-        top = (p @ n_top) - c_top - 0.5 * p[:, 0] ** 2
-        # behind the ear: an arc that comes forward above and below the ear, closed at the nape
-        back = -p[:, 2] - 0.035 + 1.1 * (p[:, 1] + 0.02) ** 2
-        back = S.smin(back, (p[:, 1] + 0.2) * 0.8, 0.04)
-        s = S.smax(top, back, 0.07)
-        thick = 0.017 * smoothstep(-0.008, 0.045, s)
-        d = _head_mass(p) - thick
-        return S.smin(d, knot(p), 0.05)
-    return S.with_bound(cap, (0, 0.05, -0.15), 0.72)
+        s = _hair_region(p)
+        ramp = smoothstep(0.0, 0.05, s)
+        back = smoothstep(0.12, -0.2, p[:, 2])
+        thick = (0.009 + 0.017 * back) * ramp
+        q = p - CHIG_C
+        a1, a2 = q @ e1, q @ e2
+        phi = np.arctan2(a1, a2)
+        fade = smoothstep(0.02, 0.05, s) * smoothstep(0.07, 0.16, np.sqrt(a1 * a1 + a2 * a2))
+        groove = HAIR_GROOVE_AMP * np.cos(HAIR_GROOVES * phi) * fade
+        d = _skull(p) - thick + groove
+        return S.smin(d, knot(p), 0.07)
+    return S.with_bound(cap, (0, 0.0, -0.1), 0.6)
 
 
 def _head_and_hair():
-    head = _head()
-    hair = _hair()
-
-    return S.union(head, hair, k=0.006)
+    return S.sculpt(_hair(), _face())
 
 
 # ------------------------------------------------------------------ torso (neutral frame)
