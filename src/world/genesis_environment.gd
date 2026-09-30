@@ -12,6 +12,10 @@ extends RefCounted
 ## every uniform change). Colours come only from Palette.
 ## Ownership: exposure, fog and sky energy per mode are written here only. A GENESIS light rig
 ## that receives `environment` may modulate `ambient_light_energy` and nothing else.
+## Volumetric haze: directional lights fill the whole froxel volume evenly and turn it milky
+## (verified with stand-in bodies: the night stone reads brown-grey). Rig directionals must use
+## `light_volumetric_fog_energy` ≤ DIRECTIONAL_FOG_ENERGY; local lights (the planet's GOLD glow)
+## give the haze its body.
 
 ## Sky `motion_time` updates per second (≤ 5 Hz, bible §11). LOW keeps the sky static.
 const SKY_MOTION_HZ := 4.0
@@ -21,6 +25,8 @@ const AMBIENT_ENERGY := 0.3
 const FOG_COLOR := Palette.SPACE_DEEP
 const VOLUMETRIC_ALBEDO := Palette.PEARL
 const VOLUMETRIC_DENSITY := 0.006
+## Maximum Light3D.light_volumetric_fog_energy for the GENESIS rig's directional lights.
+const DIRECTIONAL_FOG_ENERGY := 0.05
 ## Radiance cubemap size per quality level (QualityProfiles.Level LOW..ULTRA).
 const RADIANCE_SIZE: Array[int] = [Sky.RADIANCE_SIZE_32, Sky.RADIANCE_SIZE_64, Sky.RADIANCE_SIZE_64, Sky.RADIANCE_SIZE_128]
 ## Depth fog starts this much closer when volumetric fog is off (LOW).
@@ -42,7 +48,7 @@ const MODES := {
 	},
 	SessionState.Mode.OBSERVATORY: {
 		"tonemap_exposure": 1.0, "fog_depth_begin": 22.0, "fog_depth_end": 80.0, "fog_density": 0.6,
-		"volumetric_fog_length": 40.0, "sky_energy": 0.7, "star_intensity": 0.7, "nebula_intensity": 0.75,
+		"volumetric_fog_length": 40.0, "sky_energy": 0.8, "star_intensity": 0.75, "nebula_intensity": 0.8,
 	},
 }
 const SKY_UNIFORMS: Array[String] = ["sky_energy", "star_intensity", "nebula_intensity"]
