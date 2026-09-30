@@ -13,6 +13,13 @@ extends CanvasLayer
 ## Mode changes cross-fade the mode panels (Palette.T_BASE in, T_FAST out). `Session.hud_visible`
 ## (H) fades out everything except the badge. Layout nodes never catch the mouse; only panels do.
 ## Time/phase text refreshes at Palette.T_UI_REFRESH; lists rebuild on events / world_rebuilt only.
+##
+## Two dialects, one per scenario (Simulation.scenario_changed): the panels above (`chrome`) speak
+## for ORIGIN CHAMBER until the Phase C switch-over; GENESIS gets its own diegetic HUD (`genesis`,
+## src/ui/genesis/genesis_hud.gd). Exactly one of them is shown (and H fades that one); the badge
+## follows the scenario's dialect (DemoBadge.set_genesis). The smoke contract holds in both: the
+## group "ui_transport" always holds exactly the active transport (Start/Pause/Reset), and the one
+## "demo_badge" stays visible everywhere.
 
 const SIDE_WIDTH := 264.0
 const INSPECTOR_WIDTH := 288.0
@@ -29,6 +36,8 @@ var inspector: Inspector
 var forge_panel: ForgePanel
 var universe_panel: UniversePanel
 var observatory_panel: ObservatoryPanel
+## GENESIS dialect (shown while GENESIS is the active scenario).
+var genesis: GenesisHud
 
 var _refresh_left := 0.0
 ## Y (offset from the bottom edge) of the top of the transport, minus the gap.
@@ -105,6 +114,10 @@ func _ready() -> void:
 	settings.offset_top = 14.0
 	chrome.add_child(settings)
 
+	genesis = GenesisHud.new()
+	genesis.visible = false
+	root.add_child(genesis)
+
 	# The badge lives outside the chrome: hiding the HUD never hides it.
 	badge = DemoBadge.new()
 	_place_top_left(badge, edge, 18.0, 0.0)
@@ -113,8 +126,10 @@ func _ready() -> void:
 	inspector.visibility_wanted.connect(_on_inspector_wanted)
 	Session.mode_changed.connect(_on_mode_changed)
 	Session.hud_visibility_changed.connect(_on_hud_visibility_changed)
+	Simulation.scenario_changed.connect(_on_scenario_changed)
 	_layout_bottom()
 	_apply_mode(false)
+	_apply_scenario()
 	_apply_hud_visible(Session.hud_visible, false)
 	_on_inspector_wanted(inspector.wants_visible())
 
@@ -165,15 +180,54 @@ func _on_hud_visibility_changed(v: bool) -> void:
 	_apply_hud_visible(v, true)
 
 
+## True while the GENESIS dialect is the one shown.
+func is_genesis() -> bool:
+	return Simulation.scenario == Scenario.GENESIS
+
+
+## The chrome of the active scenario's dialect (`genesis` or the ORIGIN `chrome`).
+func active_chrome() -> Control:
+	return genesis if is_genesis() else chrome
+
+
+## The transport of the active dialect (the only member of group "ui_transport").
+func active_transport() -> Control:
+	return genesis.transport if is_genesis() else transport
+
+
+func _on_scenario_changed(_id: StringName) -> void:
+	_apply_scenario()
+	_apply_hud_visible(Session.hud_visible, true)
+
+
+## Badge dialect and transport group membership follow the active scenario.
+func _apply_scenario() -> void:
+	var g := is_genesis()
+	badge.set_genesis(g)
+	var on := active_transport()
+	var off: Control = transport if g else genesis.transport
+	if off.is_in_group(Transport.GROUP):
+		off.remove_from_group(Transport.GROUP)
+	if not on.is_in_group(Transport.GROUP):
+		on.add_to_group(Transport.GROUP)
+
+
 func _apply_hud_visible(v: bool, animated: bool) -> void:
 	if not v:
 		settings.set_open(false)
+	var active := active_chrome()
+	var inactive: Control = chrome if active == genesis else genesis
+	if not v or inactive == genesis:
+		genesis.on_hidden()
 	if animated:
-		UiKit.fade(chrome, v, Palette.T_BASE if v else Palette.T_FAST)
+		UiKit.fade(active, v, Palette.T_BASE if v else Palette.T_FAST, Tween.EASE_IN_OUT)
+		UiKit.fade(inactive, false, Palette.T_FAST)
 	else:
-		chrome.visible = v
-		chrome.modulate.a = 1.0 if v else 0.0
-	if v:
+		active.visible = v
+		active.modulate.a = 1.0 if v else 0.0
+		inactive.visible = false
+		inactive.modulate.a = 0.0
+	if v and active == chrome:
 		transport.refresh()
 
 

@@ -87,7 +87,7 @@ static func panel(variation: StringName = &"HudPanel") -> PanelContainer:
 
 ## Fades `node` in/out (modulate alpha) over `duration`; hidden (no input) once faded out.
 ## Re-entrant: a running fade of the same node is replaced.
-static func fade(node: CanvasItem, on: bool, duration: float) -> void:
+static func fade(node: CanvasItem, on: bool, duration: float, ease := Tween.EASE_OUT) -> void:
 	var old: Variant = node.get_meta(&"ui_fade") if node.has_meta(&"ui_fade") else null
 	if old is Tween and (old as Tween).is_valid():
 		(old as Tween).kill()
@@ -103,8 +103,25 @@ static func fade(node: CanvasItem, on: bool, duration: float) -> void:
 		node.visible = on
 		return
 	var tw := node.create_tween()
-	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.set_trans(Tween.TRANS_SINE).set_ease(ease)
 	tw.tween_property(node, "modulate:a", target, duration)
 	if not on:
 		tw.tween_callback(node.hide)
 	node.set_meta(&"ui_fade", tw)
+
+
+## Group of the AudioDirector (composed by the world); UI sounds go through it, never directly.
+const AUDIO_GROUP := &"audio_director"
+
+
+## Plays a UI sound (&"ui_tick" | &"ui_select") through the audio director, if one exists. Only for
+## user interaction with the UI; silent (no error) in tests and without the director.
+static func ui_sound(node: Node, sound: StringName) -> void:
+	if sound == &"" or node == null or not node.is_inside_tree():
+		return
+	node.get_tree().call_group(AUDIO_GROUP, &"play_ui", sound)
+
+
+## Sine fade in/out (UI v2): like fade(), but eased at both ends (nothing pops).
+static func fade_sine(node: CanvasItem, on: bool, duration: float) -> void:
+	fade(node, on, duration, Tween.EASE_IN_OUT)

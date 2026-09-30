@@ -93,3 +93,49 @@ const T_SWELL := 3.2
 const T_CRANE := 7.0
 ## One full turn of MIKU's astrolabe halo.
 const T_HALO_TURN := 90.0
+
+# --- UI v2 (Loop 4, GENESIS HUD; docs/VISUAL_DIRECTION.md section 8) ------------------------------
+# The UI speaks in pearl ink at a few opacities over the night, never in boxes; it never uses GOLD
+# (the UI creates nothing). Ink levels, from the word being read to the thread that leads to it:
+
+## Active word, card title, a whisper at its peak.
+const UI_INK := Color(0.957, 0.937, 0.914, 0.9)
+## Secondary text, hovered words, done objectives, the elapsed part of the transport arc.
+const UI_INK_SOFT := Color(0.957, 0.937, 0.914, 0.6)
+## Inactive words, pending objectives, the legend.
+const UI_INK_FAINT := Color(0.957, 0.937, 0.914, 0.34)
+## Leader lines of labels in space, the revealed arc track.
+const UI_THREAD := Color(0.957, 0.937, 0.914, 0.22)
+## The collapsed transport line (the scene is the hero).
+const UI_THREAD_FAINT := Color(0.957, 0.937, 0.914, 0.1)
+## Night veil behind a floating card (SPACE_DEEP, translucent: the universe stays visible).
+const UI_VEIL := Color(0.02, 0.024, 0.043, 0.62)
+## Soft night shade under text and at the bottom edge when the transport is revealed.
+const UI_SHADE := Color(0.02, 0.024, 0.043, 0.55)
+
+## Type v2: thin, widely spaced capitals (Inter light) for whispers and words; Plex Mono for time.
+const WEIGHT_THIN := 300
+const WEIGHT_WORD := 420
+const SIZE_WHISPER := 15
+const TRACKING_WORD := 3
+const TRACKING_WHISPER := 7
+
+## Motion v2 of the UI (seconds, sine fades only, nothing pops).
+## Whisper of an event: rises, rests, dissolves.
+const T_WHISPER_IN := 1.4
+const T_WHISPER_HOLD := 3.0
+const T_WHISPER_OUT := 2.4
+## Transport arc: reveal when the pointer nears the bottom edge (or on pause), conceal after a linger.
+const T_REVEAL := 0.8
+const T_CONCEAL := 1.6
+const T_REVEAL_LINGER := 1.4
+## A label in space fading in/out beside its body.
+const T_LABEL := 0.9
+
+## Layout v2 (px): pointer distance to the bottom edge that reveals the transport; arc width share
+## and sagitta; leader line of a label in space (diagonal, then horizontal run).
+const UI_REVEAL_ZONE := 120
+const UI_ARC_SHARE := 0.5
+const UI_ARC_SAG := 9.0
+const UI_LEADER := 26.0
+const UI_LEADER_RUN := 12.0

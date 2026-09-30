@@ -30,9 +30,16 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	rebuild_marks()
+	mouse_exited.connect(_on_mouse_exited)
+	Simulation.scenario_changed.connect(func(_id: StringName) -> void: rebuild_marks())
+
+
+## Duration and phase marks of the active scenario's timeline.
+func rebuild_marks() -> void:
 	duration = maxf(Simulation.duration(), 0.001)
 	marks = phase_marks(Simulation.timeline.events)
-	mouse_exited.connect(_on_mouse_exited)
+	queue_redraw()
 
 
 ## Phase-change points of `events` (sorted by time): replays them through a WorldState and records

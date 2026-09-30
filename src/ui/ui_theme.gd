@@ -9,6 +9,13 @@ extends RefCounted
 ##   Button: ModeTab (top bar) · TransportButton (outlined) · Chip (small toggles) · Action (flat link)
 ##   PanelContainer: HudPanel (default: translucent PANEL + hairline) · BadgePanel · Sheet (OBSERVATORY)
 ## Nothing here is EMBER or PALE: the UI carries no energy and does not verify anything.
+##
+## GENESIS (UI v2, src/ui/genesis): pearl ink over the night, no boxes, never GOLD.
+##   Label:  Whisper (thin, widely spaced capitals) · Word / WordSoft / WordFaint (spaced capitals at
+##           three ink levels) · Verse (12 px prose, soft) · CardTitle · Clock (mono) · SealText
+##   Button: WordButton (flat word: faint -> soft on hover -> ink when pressed) · ModeWord (pearl;
+##           the owner fades it with self_modulate) · GlyphButton (no text: the glyph is drawn)
+##   PanelContainer: Card (night veil + one pearl hairline on the left) · Seal (bare)
 
 static var _theme: Theme
 ## Cache of fonts and shared styleboxes.
@@ -29,6 +36,17 @@ static func font_sans(weight: int = 420, tracking: int = 0) -> Font:
 		fv.base_font = load(Palette.FONT_SANS) as FontFile
 		var ts := TextServerManager.get_primary_interface()
 		fv.variation_opentype = {ts.name_to_tag("wght"): weight}
+		fv.spacing_glyph = tracking
+		_fonts[key] = fv
+	return _fonts[key]
+
+
+## Plex Mono with letter spacing (px per glyph), cached.
+static func font_mono_spaced(medium: bool, tracking: int) -> Font:
+	var key := "mono_%s_%d" % [medium, tracking]
+	if not _fonts.has(key):
+		var fv := FontVariation.new()
+		fv.base_font = font_mono(medium)
 		fv.spacing_glyph = tracking
 		_fonts[key] = fv
 	return _fonts[key]
@@ -174,7 +192,61 @@ static func build() -> Theme:
 	t.set_stylebox("hover", "Chip", box(Palette.PANEL_HOVER, Palette.PANEL_LINE, Vector4i.ONE, 6, 4))
 	t.set_stylebox("pressed", "Chip", box(Palette.PANEL_ACTIVE, Palette.LINE_STRONG, Vector4i.ONE, 6, 4))
 	t.set_stylebox("hover_pressed", "Chip", box(Palette.PANEL_ACTIVE, Palette.LINE_STRONG, Vector4i.ONE, 6, 4))
+	_build_genesis(t)
 	return t
+
+
+## UI v2 (GENESIS) variations: see the header. Text keeps a soft night shade so thin pearl letters
+## stay legible over the warm nebula core.
+static func _build_genesis(t: Theme) -> void:
+	var clear := Palette.CLEAR
+	var word := font_sans(Palette.WEIGHT_WORD, Palette.TRACKING_WORD)
+	_label(t, "Whisper", font_sans(Palette.WEIGHT_THIN, Palette.TRACKING_WHISPER), Palette.SIZE_WHISPER, Palette.PEARL)
+	_label(t, "Word", word, Palette.SIZE_SMALL, Palette.UI_INK)
+	_label(t, "WordSoft", word, Palette.SIZE_SMALL, Palette.UI_INK_SOFT)
+	_label(t, "WordFaint", word, Palette.SIZE_SMALL, Palette.UI_INK_FAINT)
+	_label(t, "Verse", font_sans(400, 0), Palette.SIZE_BODY, Palette.UI_INK_SOFT)
+	_label(t, "CardTitle", font_sans(480, Palette.TRACKING_WORD), Palette.SIZE_TITLE, Palette.UI_INK)
+	_label(t, "Clock", font_mono_spaced(false, 1), Palette.SIZE_SMALL, Palette.UI_INK_SOFT)
+	_label(t, "SealText", font_mono_spaced(true, 2), Palette.SIZE_SMALL, Palette.UI_INK_SOFT)
+	for v in ["Whisper", "Word", "WordSoft", "WordFaint", "Verse", "CardTitle", "Clock", "SealText"]:
+		t.set_color("font_shadow_color", v, Palette.UI_SHADE)
+		t.set_constant("shadow_offset_x", v, 0)
+		t.set_constant("shadow_offset_y", v, 1)
+		t.set_constant("shadow_outline_size", v, 3)
+
+	t.set_type_variation("WordButton", "Button")
+	t.set_font("font", "WordButton", word)
+	t.set_font_size("font_size", "WordButton", Palette.SIZE_SMALL)
+	t.set_color("font_color", "WordButton", Palette.UI_INK_FAINT)
+	t.set_color("font_hover_color", "WordButton", Palette.UI_INK_SOFT)
+	t.set_color("font_focus_color", "WordButton", Palette.UI_INK_FAINT)
+	t.set_color("font_pressed_color", "WordButton", Palette.UI_INK)
+	t.set_color("font_hover_pressed_color", "WordButton", Palette.UI_INK)
+	t.set_color("font_disabled_color", "WordButton", Palette.UI_THREAD)
+	t.set_color("font_outline_color", "WordButton", clear)
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		t.set_stylebox(st, "WordButton", empty(6, 4))
+	t.set_stylebox("focus", "WordButton", empty())
+
+	t.set_type_variation("ModeWord", "Button")
+	t.set_font("font", "ModeWord", word)
+	t.set_font_size("font_size", "ModeWord", Palette.SIZE_SMALL)
+	for c in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+		t.set_color(c, "ModeWord", Palette.PEARL)
+	t.set_color("font_outline_color", "ModeWord", clear)
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		t.set_stylebox(st, "ModeWord", empty(12, 8))
+	t.set_stylebox("focus", "ModeWord", empty())
+
+	t.set_type_variation("GlyphButton", "Button")
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		t.set_stylebox(st, "GlyphButton", empty())
+
+	t.set_type_variation("Card", "PanelContainer")
+	t.set_stylebox("panel", "Card", box(Palette.UI_VEIL, Palette.UI_THREAD, Vector4i(1, 0, 0, 0), 16, 12))
+	t.set_type_variation("Seal", "PanelContainer")
+	t.set_stylebox("panel", "Seal", empty(0, 2))
 
 
 static func _label(t: Theme, variation: String, font: Font, size: int, color: Color) -> void:
