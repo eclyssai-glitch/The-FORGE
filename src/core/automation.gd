@@ -29,6 +29,29 @@ const CAPTURES: Array = [
 	["12_universe_seed_focus", 49.0, SessionState.Mode.UNIVERSE, &"seed_aurel", &"seed_aurel"],
 	["13_hud_hidden", 49.0, SessionState.Mode.FORGE, {"hud": false}],
 ]
+## GENESIS capture points (same entry format; key phases x modes, HUD visible except the last).
+## Event times in GenesisScript: awaken 3, hands 8, dust 13, seeded 18, layers 22/27/32,
+## moons 37/40, ring 43, belt 46, links 50, stable 53, completed 56.
+const CAPTURES_GENESIS: Array = [
+	["g01_still", 1.5, SessionState.Mode.FORGE],
+	["g02_awaken", 5.5, SessionState.Mode.FORGE],
+	["g03_hands", 10.5, SessionState.Mode.FORGE],
+	["g04_dust", 15.5, SessionState.Mode.FORGE],
+	["g05_seeded", 19.5, SessionState.Mode.FORGE],
+	["g06_mantle", 24.5, SessionState.Mode.FORGE],
+	["g07_crust", 29.5, SessionState.Mode.FORGE],
+	["g08_sky", 34.5, SessionState.Mode.FORGE],
+	["g09_moons", 41.5, SessionState.Mode.FORGE],
+	["g10_ring", 44.5, SessionState.Mode.FORGE],
+	["g11_belt_universe", 48.0, SessionState.Mode.UNIVERSE],
+	["g12_links_observatory", 51.5, SessionState.Mode.OBSERVATORY],
+	["g13_stable_forge", 55.5, SessionState.Mode.FORGE],
+	["g14_stable_universe", 55.5, SessionState.Mode.UNIVERSE],
+	["g15_stable_observatory", 55.5, SessionState.Mode.OBSERVATORY],
+	["g16_planet_inspector", 55.5, SessionState.Mode.FORGE, &"planet_forming"],
+	["g17_planet_focus", 55.5, SessionState.Mode.UNIVERSE, &"planet_forming", &"planet_forming"],
+	["g18_hud_hidden", 55.5, SessionState.Mode.FORGE, {"hud": false}],
+]
 ## Real seconds a capture waits after seek/mode change (and after a focus request).
 const CAPTURE_SETTLE := 2.4
 const FOCUS_SETTLE := 3.6
@@ -45,10 +68,17 @@ var options: Dictionary = {}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	if options.has("capture"):
+	if options.has("style-frames"):
+		_run_style_frames.call_deferred(String(options["style-frames"]))
+	elif options.has("capture"):
 		_run_capture.call_deferred(String(options["capture"]))
 	elif options.has("smoke-test"):
 		_run_smoke.call_deferred()
+
+
+## Capture list of a scenario.
+static func captures_for(scenario: StringName) -> Array:
+	return CAPTURES_GENESIS if scenario == Scenario.GENESIS else CAPTURES
 
 
 func _run_smoke() -> void:
@@ -75,20 +105,24 @@ func _run_smoke() -> void:
 	lines.append("quality=%s" % Quality.level_name())
 	# Every expected world module must have loaded: a missing entity/fx/camera script would
 	# otherwise only print a warning and the demo would still "complete".
-	var expected_modules := WorldScript.expected_module_names()
+	var expected_modules := WorldScript.expected_module_names(Simulation.scenario)
 	var missing: Array[String] = expected_modules.duplicate()
 	var world := _world()
 	if world:
 		missing = world.missing_modules()
+		if world.scenario != Simulation.scenario:
+			missing = expected_modules.duplicate()
+			lines.append("FAIL world composed for %s, not %s" % [world.scenario, Simulation.scenario])
 	lines.append("modules=%d/%d" % [expected_modules.size() - missing.size(), expected_modules.size()])
 	if not missing.is_empty():
 		lines.append("FAIL modules missing: %s" % ", ".join(PackedStringArray(missing)))
+	var audio_ok := _smoke_audio(world, lines)
 	lines.append("events_received=%d expected=%d" % [received.size(), expected])
 	lines.append(phase_line(Simulation.state))
 	lines.append("frames=%d wall_seconds=%.2f avg_fps=%.1f" % [frames, elapsed, frames / maxf(elapsed, 0.001)])
 	var mission := Mission.evaluate(Simulation.emitted_events(), Simulation.scenario)
 	lines.append("mission_objectives=%d/%d" % [Mission.completed_count(mission), mission.size()])
-	ok = ok and missing.is_empty() and received.size() == expected and Simulation.state.is_complete() \
+	ok = ok and missing.is_empty() and audio_ok and received.size() == expected and Simulation.state.is_complete() \
 		and Mission.completed_count(mission) == mission.size()
 	# Exercise pause / reset on the live game.
 	Simulation.seek(20.0)
@@ -107,6 +141,26 @@ func _run_smoke() -> void:
 	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
 	_write_report(lines)
 	_quit(0 if ok else 1)
+
+
+## Audio report: the AudioDirector (group "audio_director") and, in GENESIS, the anchors every
+## scene must register (World.GENESIS_AUDIO_ANCHORS). Line `audio=present|absent anchors=...`.
+## A missing director is already a missing module; missing GENESIS anchors fail here.
+static func _smoke_audio(world: WorldScript, lines: PackedStringArray) -> bool:
+	if world == null or world.audio_director == null:
+		lines.append("audio=absent")
+		return true
+	var kinds := world.audio_anchor_kinds()
+	lines.append("audio=present anchors=%s" % ",".join(PackedStringArray(kinds)))
+	if Simulation.scenario != Scenario.GENESIS:
+		return true
+	var missing: PackedStringArray = []
+	for k in WorldScript.GENESIS_AUDIO_ANCHORS:
+		if not kinds.has(k):
+			missing.append(String(k))
+	if not missing.is_empty():
+		lines.append("FAIL audio anchors missing: %s" % ", ".join(missing))
+	return missing.is_empty()
 
 
 ## Report line with the final phase and the scenario's formation counters.
@@ -221,7 +275,7 @@ func _run_capture(dir: String) -> void:
 		main.call(&"finish_fade")
 	await _settle(1.5)
 	var only := String(options.get("capture-only", ""))
-	for c in CAPTURES:
+	for c in captures_for(Simulation.scenario):
 		if only != "" and not String(c[0]).begins_with(only):
 			continue
 		Session.set_mode(c[2])
@@ -240,6 +294,62 @@ func _run_capture(dir: String) -> void:
 		img.save_png(path)
 		print("[capture] %s (t=%.1f, %s, selected=%s, hud=%s, %dx%d)" % [path, c[1], Session.mode_name(),
 			Session.selected, Session.hud_visible, img.get_width(), img.get_height()])
+	Session.set_hud_visible(true)
+	_quit(0)
+
+
+## Style frames (GENESIS): for each StyleFrames pose (the CameraDirector's `style_frame_poses()`
+## or StyleFrames.DEFAULT_POSES) seek, set the mode, hide the HUD (the DEMO badge stays), put an
+## automation-owned Camera3D (current) on the pose and save `<name>.png`; the window is resized to
+## StyleFrames.SIZE first. Writes StyleFrames.MANIFEST (one file name per line) at the end.
+func _run_style_frames(dir: String) -> void:
+	var abs_dir := dir if dir.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(dir)
+	DirAccess.make_dir_recursive_absolute(abs_dir)
+	if Simulation.scenario != Scenario.GENESIS:
+		Simulation.set_scenario(Scenario.GENESIS)
+	var main := get_parent()
+	if main and main.has_method(&"finish_fade"):
+		main.call(&"finish_fade")
+	var window := get_window()
+	if window.mode != Window.MODE_WINDOWED:
+		window.mode = Window.MODE_WINDOWED
+	window.size = StyleFrames.SIZE
+	await _settle(1.5)
+	var director: Node = null
+	var directors := get_tree().get_nodes_in_group(&"camera_director")
+	if not directors.is_empty():
+		director = directors[0]
+	var poses := StyleFrames.poses_from(director)
+	var cam := Camera3D.new()
+	cam.name = "StyleFrameCamera"
+	cam.near = 0.05
+	cam.far = 800.0
+	var world := _world()
+	var parent: Node = world if world else get_tree().current_scene
+	parent.add_child(cam)
+	Session.select(&"")
+	Session.set_hud_visible(false)
+	var names: PackedStringArray = []
+	for pose in poses:
+		Session.set_mode(int(pose["mode"]) as SessionState.Mode)
+		Simulation.seek(float(pose["time"]))
+		_snap_cameras()
+		StyleFrames.apply_pose(cam, pose)
+		cam.make_current()
+		await _settle(CAPTURE_SETTLE)
+		var img := get_viewport().get_texture().get_image()
+		var file := "%s.png" % pose["name"]
+		img.save_png(abs_dir.path_join(file))
+		names.append(file)
+		print("[style-frame] %s (t=%.1f, %s, %dx%d)" % [abs_dir.path_join(file), float(pose["time"]),
+			Session.mode_name(), img.get_width(), img.get_height()])
+		if Vector2i(img.get_width(), img.get_height()) != StyleFrames.SIZE:
+			push_warning("style frame %s is %dx%d, not %dx%d" % [file, img.get_width(), img.get_height(),
+				StyleFrames.SIZE.x, StyleFrames.SIZE.y])
+	var f := FileAccess.open(abs_dir.path_join(StyleFrames.MANIFEST), FileAccess.WRITE)
+	if f:
+		f.store_string("\n".join(names) + "\n")
+		f.close()
 	Session.set_hud_visible(true)
 	_quit(0)
 

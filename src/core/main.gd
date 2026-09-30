@@ -5,8 +5,11 @@ extends Node
 ##   --capture=<dir>         save evidence screenshots of each demo phase to <dir>, then exit
 ##   --capture-only=<prefix> with --capture: only captures whose name starts with <prefix>
 ##   --quality=<low|medium|high|ultra>   force a quality level for this run (not persisted)
-##   --scenario=<origin_chamber|genesis> play that scenario (Simulation.set_scenario) instead
-##                           of the default one; unknown ids are warned about and ignored
+##   --scenario=<origin_chamber|genesis> play that scenario instead of the default one (read
+##                           by the Simulation autoload at startup, so the world composes it
+##                           directly); unknown ids are warned about and ignored
+##   --style-frames=<dir>    save the GENESIS style frames (StyleFrames, HUD hidden, 1920x1080)
+##                           to <dir>, then exit
 ##   --allow-missing-ui      with --smoke-test: a HUD without the "ui_transport"/"demo_badge"
 ##                           groups is reported as `ui=absent` instead of failing
 ## Global keyboard shortcuts live in the "Shortcuts" child (src/core/shortcuts.gd).
@@ -28,9 +31,7 @@ func _ready() -> void:
 		var idx := QualityProfiles.LEVEL_NAMES.find(String(args["quality"]).to_upper())
 		if idx >= 0:
 			Quality.override_for_session(idx as QualityProfiles.Level)
-	if args.has("scenario"):
-		Simulation.set_scenario(StringName(String(args["scenario"]).to_lower()))
-	if args.has("smoke-test") or args.has("capture"):
+	if args.has("smoke-test") or args.has("capture") or args.has("style-frames"):
 		var automation := preload("res://src/core/automation.gd").new()
 		automation.name = "Automation"
 		automation.options = args

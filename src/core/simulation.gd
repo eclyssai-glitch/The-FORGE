@@ -36,8 +36,24 @@ var state: ScenarioState:
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# `--scenario=<id>` is applied here (autoloads are ready before the main scene), so the
+	# world composes the requested scenario directly. Unknown ids are warned about and ignored.
+	var requested := scenario_from_args(OS.get_cmdline_user_args())
+	if requested != &"":
+		if Scenario.is_valid(requested):
+			scenario = requested
+		else:
+			push_warning("Simulation: unknown scenario %s" % requested)
 	timeline = EventTimeline.new(Scenario.build_events(scenario))
 	_fresh_states()
+
+
+## Scenario id given as `--scenario=<id>` among user arguments (lower-cased), or &"".
+static func scenario_from_args(args: PackedStringArray) -> StringName:
+	for a in args:
+		if a.begins_with("--scenario="):
+			return StringName(a.substr(11).to_lower())
+	return &""
 
 
 ## Switches the active scenario: new timeline (IDLE at 0, playback speed kept) and a fresh
