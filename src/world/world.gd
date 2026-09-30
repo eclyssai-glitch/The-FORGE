@@ -249,7 +249,7 @@ func audio_anchor_kinds() -> Array[StringName]:
 		var n: Variant = audio_anchors[k]
 		if is_instance_valid(n) and (n as Node).is_inside_tree():
 			out.append(k)
-	out.sort()
+	out.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	return out
 
 
