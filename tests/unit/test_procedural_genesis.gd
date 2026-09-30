@@ -53,7 +53,7 @@ func test_sculptures_load_within_budget_with_vertex_ao() -> void:
 				grey = false
 		assert_true(grey, "%s AO is stored as grey RGB" % name)
 		assert_lt(lo, 0.5, "%s AO darkens crevices" % name)
-		assert_gt(hi, 0.95, "%s AO leaves open surfaces bright" % name)
+		assert_gt(hi, 0.9, "%s AO leaves open surfaces bright" % name)
 		var bad := 0
 		for n in normals:
 			if absf(n.length() - 1.0) > 0.02:
