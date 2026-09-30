@@ -3,6 +3,9 @@
 # default; extra arguments reach the game, e.g. `tools/smoke_test.sh --scenario=genesis`) is
 # played at 8x, then pause and reset are exercised, then the native UI (transport buttons
 # Start/Pause/Reset of group "ui_transport", visible "demo_badge" with "DEMO" in every mode).
+# The world must be composed for the scenario with every module (`modules=N/N`, AudioDirector
+# included); GENESIS also requires the audio anchors planet/miku/hands (`audio=present anchors=`).
+# Without a sound card (Linux, no /dev/snd) the Dummy audio driver is used (tools/_proc.sh).
 # Exit 0 = PASS. A HUD without those groups fails (`ui=absent`) unless SMOKE_ALLOW_MISSING_UI=1,
 # which passes --allow-missing-ui to the game (only for branches where the UI does not exist yet).
 # Fails on: RESULT=FAIL, missing RESULT line (e.g. a script failed to load),
@@ -28,9 +31,9 @@ log="$(mktemp)"
 PROC_ON_EXIT='rm -f "$log"'
 trap 'rm -f "$log"' EXIT
 if [ -n "$pack" ]; then
-  cmd=(tools/godot.sh --main-pack "$pack" -- "${game_flags[@]}" "$@")
+  cmd=(tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --main-pack "$pack" -- "${game_flags[@]}" "$@")
 else
-  cmd=(tools/godot.sh --path . -- "${game_flags[@]}" "$@")
+  cmd=(tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --path . -- "${game_flags[@]}" "$@")
 fi
 has_result() { grep -qE "^RESULT=(PASS|FAIL)" "$log"; }
 proc_start "$log" tools/_display.sh "${cmd[@]}"

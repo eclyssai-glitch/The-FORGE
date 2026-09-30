@@ -1,6 +1,7 @@
 extends GutTest
-## World composition: environment, quality and mode wiring, missing modules, universe seeds and
-## picking. Works whether or not the animator's modules (entities/fx/camera) are present.
+## World composition (ORIGIN CHAMBER, the default scenario): environment, quality and mode wiring,
+## missing modules, universe seeds and picking. Works whether or not the animator's modules
+## (entities/fx/camera) are present. GENESIS and recomposition: test_scenario_composition.gd.
 
 const WorldScene := preload("res://scenes/world.tscn")
 const WorldScript := preload("res://src/world/world.gd")
@@ -144,10 +145,11 @@ func test_sky_radiance_pass_has_a_lift() -> void:
 
 func test_module_report_matches_scripts() -> void:
 	var names := WorldScript.expected_module_names()
-	assert_eq(names.size(), WorldScript.MODULES.size() + 1, "MODULES + CameraDirector")
+	assert_eq(names.size(), WorldScript.MODULES.size() + 2, "MODULES + AudioDirector + CameraDirector")
+	assert_eq(names[-2], String(WorldScript.AUDIO_DIRECTOR[0]))
 	assert_eq(names[-1], String(WorldScript.CAMERA_DIRECTOR[0]))
 	var missing := world.missing_modules()
-	for m in WorldScript.MODULES + [WorldScript.CAMERA_DIRECTOR]:
+	for m in WorldScript.MODULES + [WorldScript.AUDIO_DIRECTOR, WorldScript.CAMERA_DIRECTOR]:
 		assert_eq(missing.has(String(m[0])), not ResourceLoader.exists(m[1]), "%s missing iff its script is absent" % m[0])
 
 

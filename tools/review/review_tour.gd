@@ -296,7 +296,10 @@ func _finish(reason: String) -> void:
 	_finished = true
 	print("[review] done reason=%s t=%.2f frames=%d sim=T+%04.1f mode=%s size=%s" % [reason, time, _frames,
 		Simulation.time, Session.mode_name(), _view_size()])
-	get_tree().quit()
+	if main and main.has_method(&"quit_game"):
+		main.call(&"quit_game", 0)
+	else:
+		get_tree().quit()
 
 
 func _on_event(e: SimEvent) -> void:

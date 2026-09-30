@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Captures evidence screenshots of every demo phase and every mode from the real
-# game (see src/core/automation.gd CAPTURES).
+# game (see src/core/automation.gd CAPTURES, or CAPTURES_GENESIS with --scenario=genesis).
 #   tools/capture_evidence.sh docs/evidence/loop-02 [--quality=high] [--capture-only=<prefix>]
 #                                                   [--resolution=WxH] [--timeout=<s>]
+#                                                   [--scenario=<origin_chamber|genesis>]
+# --scenario=<id>: play that scenario (passed to the game) and expect its capture list.
+# Style frames (GENESIS, 1920x1080, HUD hidden) have their own script: tools/style_frames.sh.
 # --resolution=WxH: window (and Xvfb screen) size, default 1600x900 (e.g. 1280x720).
 # Total time limit: --timeout=<s> or CAPTURE_TIMEOUT (default 900 s).
 # Exit 0 = every expected PNG (CAPTURES, filtered by --capture-only) was written by this run —
@@ -17,9 +20,12 @@ timeout_s="${CAPTURE_TIMEOUT:-900}"
 grace_s="${CAPTURE_GRACE:-15}"
 only=""
 resolution="1600x900"
+list="CAPTURES"
 game_args=()
 for a in "$@"; do
   case "$a" in
+    --scenario=genesis) list="CAPTURES_GENESIS"; game_args+=("$a") ;;
+    --scenario=*) game_args+=("$a") ;;
     --timeout=*) timeout_s="${a#--timeout=}" ;;
     --resolution=*) resolution="${a#--resolution=}" ;;
     --capture-only=*) only="${a#--capture-only=}"; game_args+=("$a") ;;
@@ -31,12 +37,13 @@ if ! [[ "$resolution" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
 fi
 mkdir -p "$dir"
 
-# Expected files: names of src/core/automation.gd CAPTURES, same prefix filter as the game.
+# Expected files: names of the scenario's list in src/core/automation.gd (CAPTURES or
+# CAPTURES_GENESIS), same prefix filter as the game.
 expected=()
 while IFS= read -r name; do
   [ -n "$name" ] || continue
   if [ -z "$only" ] || [[ "$name" == "$only"* ]]; then expected+=("$dir/$name.png"); fi
-done < <(awk '/^const CAPTURES/{f=1; next} f && /^\]/{exit} f' src/core/automation.gd \
+done < <(awk -v head="const ${list}: Array = [" '$0 == head {f=1; next} f && /^\]/{exit} f' src/core/automation.gd \
   | sed -nE 's/^[[:space:]]*\["([^"]+)".*/\1/p')
 if [ "${#expected[@]}" -eq 0 ]; then
   echo "capture_evidence: no capture matches --capture-only='$only'." >&2; exit 1
@@ -58,7 +65,7 @@ all_written() {
 
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
 proc_start "$log" env SCREEN="${SCREEN:-${resolution}x24}" tools/_display.sh \
-  tools/godot.sh --path . --resolution "$resolution" -- "--capture=$dir" "${game_args[@]}"
+  tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --path . --resolution "$resolution" -- "--capture=$dir" "${game_args[@]}"
 proc_supervise "$timeout_s" "$grace_s" all_written
 
 missing=()

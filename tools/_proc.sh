@@ -12,6 +12,16 @@
 #   After proc_supervise: PROC_STATUS (exit status, 124 on timeout), PROC_OUTCOME
 #   (exited | forced | timeout). The whole session is always killed at the end.
 
+# Audio driver flags for the game: on Linux without a sound card (/dev/snd, e.g. CI or a
+# container) the Dummy driver is requested up front instead of letting ALSA/Pulse fail first
+# (the AudioDirector and the mix run the same; nothing is heard). AUDIO_DRIVER=<name> forces one.
+GODOT_AUDIO_FLAGS=()
+if [ -n "${AUDIO_DRIVER:-}" ]; then
+  GODOT_AUDIO_FLAGS=(--audio-driver "$AUDIO_DRIVER")
+elif [ "$(uname -s)" = "Linux" ] && [ ! -e /dev/snd ]; then
+  GODOT_AUDIO_FLAGS=(--audio-driver Dummy)
+fi
+
 PROC_PID=""
 PROC_TAIL=""
 PROC_STATUS=0
