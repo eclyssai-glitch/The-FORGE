@@ -85,6 +85,8 @@ func _apply() -> void:
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if profile["fxaa"] else Viewport.SCREEN_SPACE_AA_DISABLED
 	vp.positional_shadow_atlas_size = profile["shadow_size"]
 	RenderingServer.directional_shadow_atlas_set_size(profile["shadow_size"], true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(profile["shadow_filter"])
+	RenderingServer.positional_soft_shadow_filter_set_quality(profile["shadow_filter"])
 	profile_changed.emit(profile)
 
 

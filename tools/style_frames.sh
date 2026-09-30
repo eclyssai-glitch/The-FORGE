@@ -2,7 +2,11 @@
 # Saves the GENESIS style frames (src/core/style_frames.gd: the CameraDirector's
 # style_frame_poses() or StyleFrames.DEFAULT_POSES; >= 6 frames, HUD hidden, 1920x1080) from the
 # real game into <dir>.
-#   tools/style_frames.sh docs/evidence/loop-04/style_frames [--quality=high] [--timeout=<s>]
+#   tools/style_frames.sh docs/evidence/loop-04/style_frames [--quality=<low|medium|high|ultra|auto>]
+#                                                             [--timeout=<s>]
+# Quality: HIGH unless --quality= is given (the frames judge the art at the target profile — a
+# desktop with a discrete GPU; AUTO would pick LOW under Xvfb + llvmpipe). --quality=auto keeps the
+# detection. Each "[style-frame]" log line names the level used.
 # Total time limit: --timeout=<s> or STYLE_TIMEOUT (default 600 s).
 # Exit 0 = the manifest (style_frames.txt) and every PNG it lists were written by this run, there
 # are at least 6 of them and each is 1920x1080. The game's whole process session (godot,
@@ -15,13 +19,17 @@ timeout_s="${STYLE_TIMEOUT:-600}"
 grace_s="${STYLE_GRACE:-15}"
 min_frames=6
 width=1920; height=1080
+quality="high"
 game_args=()
 for a in "$@"; do
   case "$a" in
     --timeout=*) timeout_s="${a#--timeout=}" ;;
+    --quality=*) quality="${a#--quality=}" ;;
     *) game_args+=("$a") ;;
   esac
 done
+# HIGH unless asked otherwise (see the header); "auto" keeps the GPU detection.
+game_args+=("--quality=${quality}")
 mkdir -p "$dir"
 manifest="$dir/style_frames.txt"
 

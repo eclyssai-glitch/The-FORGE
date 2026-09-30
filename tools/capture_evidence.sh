@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Captures evidence screenshots of every demo phase and every mode from the real
 # game (see src/core/automation.gd CAPTURES, or CAPTURES_GENESIS with --scenario=genesis).
-#   tools/capture_evidence.sh docs/evidence/loop-02 [--quality=high] [--capture-only=<prefix>]
+#   tools/capture_evidence.sh docs/evidence/loop-02 [--quality=<low|medium|high|ultra|auto>]
+#                                                   [--capture-only=<prefix>]
 #                                                   [--resolution=WxH] [--timeout=<s>]
 #                                                   [--scenario=<origin_chamber|genesis>]
 # --scenario=<id>: play that scenario (passed to the game) and expect its capture list.
 # Style frames (GENESIS, 1920x1080, HUD hidden) have their own script: tools/style_frames.sh.
+# Quality: HIGH unless --quality= is given (evidence judges the target profile — a desktop with a
+# discrete GPU; AUTO would pick LOW under Xvfb + llvmpipe); --quality=auto keeps the detection.
+# Each "[capture]" log line names the level used.
 # --resolution=WxH: window (and Xvfb screen) size, default 1600x900 (e.g. 1280x720).
 # Total time limit: --timeout=<s> or CAPTURE_TIMEOUT (default 900 s).
 # Exit 0 = every expected PNG (CAPTURES, filtered by --capture-only) was written by this run —
@@ -21,6 +25,7 @@ grace_s="${CAPTURE_GRACE:-15}"
 only=""
 resolution="1600x900"
 list="CAPTURES"
+quality="high"
 game_args=()
 for a in "$@"; do
   case "$a" in
@@ -29,9 +34,12 @@ for a in "$@"; do
     --timeout=*) timeout_s="${a#--timeout=}" ;;
     --resolution=*) resolution="${a#--resolution=}" ;;
     --capture-only=*) only="${a#--capture-only=}"; game_args+=("$a") ;;
+    --quality=*) quality="${a#--quality=}" ;;
     *) game_args+=("$a") ;;
   esac
 done
+# HIGH unless asked otherwise (see the header); "auto" keeps the GPU detection.
+game_args+=("--quality=${quality}")
 if ! [[ "$resolution" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
   echo "capture_evidence: --resolution must be WxH (e.g. 1280x720), got '$resolution'." >&2; exit 2
 fi
