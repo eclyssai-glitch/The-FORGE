@@ -167,7 +167,7 @@ versionadas em `assets/meshes/`.
 | arquivo | papel |
 |---|---|
 | `sdf.py` | biblioteca SDF vetorizada: `sphere`, `ellipsoid`, `capsule`, `round_cone` (exato), `round_box`, `halfspace`, `tube` (cadeia de round cones); `smin`/`smax` polinomiais com k em unidades de mundo; `union`, `blend`, `subtract`, `intersect`, `sculpt` (lista ordenada de add/sub); `place` (rotação + translação), `mirror_x`, `scale` (uniforme/por eixo), `bend`, `twist`, `cup` (arco transversal), `displace`, `offset`, `shell`. Cada forma carrega uma esfera envolvente (`f.bound`) e as booleanas só avaliam uma parte onde ela pode mudar o resultado (cull). |
-| `mesher.py` | amostragem em banda estreita **hierárquica** (passos 16→8→4→2→1 da grade fina; só células a < 2 diagonais da superfície são subdivididas), `skimage.measure.marching_cubes` com `mask` (só células ativas), maior componente conexa (sem ilhas), **decimação QEM** vetorizada em lotes, projeção dos vértices de volta à SDF (Newton), **normais = gradiente da SDF** (4 taps), **AO por vértice** e escritor OBJ determinístico. |
+| `mesher.py` | amostragem em banda estreita **hierárquica** (passos 16→8→4→2→1 da grade fina; só células a < 2 diagonais da superfície são subdivididas), `skimage.measure.marching_cubes` com `mask` (só células ativas), maior componente conexa (sem ilhas), **decimação QEM** vetorizada em lotes (com **importância** por vértice opcional), projeção dos vértices de volta à SDF (Newton), **normais = gradiente da SDF** (4 taps), **AO por vértice**, **`RadialWarp`** (refino local da grade) e escritor OBJ determinístico. |
 | `hand.py` | mão paramétrica: palma, polegar, 4 dedos de 3 falanges, almofadas, nós, tendões, vincos, unha insinuada, antebraço fusiforme. |
 | `giant_hands.py` | poses das mãos gigantes e referencial de exportação. |
 | `miku.py` | a escultura de MIKU e o cálculo das âncoras. |
@@ -183,6 +183,17 @@ Algoritmos:
   aresta é a mais barata no 2-anel dos dois extremos ⇒ estrelas disjuntas) e rejeita colapsos que
   violam a condição de link, deixam vizinho com grau < 3, invertem face (cos < 0,2) ou criam lasca.
   Arestas rejeitadas ficam fora por 8 passadas. Qualidade de triângulo (1º percentil) ≈ 0,6.
+- **Refino local (`RadialWarp`)**: o marching cubes roda num espaço u deformado, mundo =
+  c + (u − c)·φ(r)/r com φ' = 1/m dentro de r0 e transição suave (smoothstep) até 1 em r1; o
+  mapa nunca expande distâncias, então f(mundo(u)) continua sendo um limite de distância e o
+  recorte da banda estreita segue conservador. Os vértices voltam ao mundo pelo mesmo mapa e são
+  projetados na SDF real. MIKU usa m = 1,8 em volta da cabeça (r0 0,34, r1 0,62): grade efetiva
+  0,004 no rosto contra 0,0072 no resto.
+- **Importância na QEM**: `decimate(importance=f)` multiplica as quádricas (e o termo de
+  comprimento) de cada vértice pelo peso f(p) ≥ 1; o vértice sobrevivente herda o maior peso.
+  MIKU: 1 + 11 na cabeça, +150 na frente do rosto (praticamente não simplificado), +4 nas mãos
+  (`miku.bake_spec()`). Sem isso a saia/vestido consumia o orçamento (a cabeça ficava com ~3,8k
+  triângulos no bake anterior).
 - **AO**: em 6 escalas h (MIKU 0,012–0,45; mãos 0,06–1,4) amostra a SDF ao longo da normal e de 4
   direções num cone de 31°: `occ += w·clamp((h − d)/h)`; `ao = 1 − occ/Σw`. Guardado **linear** em
   cinza (R = G = B), 1 = aberto.
