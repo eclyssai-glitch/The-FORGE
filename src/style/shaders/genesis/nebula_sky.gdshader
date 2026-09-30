@@ -21,6 +21,9 @@ uniform vec3 nebula_color : source_color;
 uniform vec3 lilac_color : source_color;
 uniform vec3 warm_color : source_color;
 uniform vec3 core_color : source_color;
+// Light of the warm core: pearl heart and gold body (the rose/lilac edges reuse warm/lilac).
+uniform vec3 pearl_color : source_color;
+uniform vec3 gold_color : source_color;
 uniform vec3 star_color : source_color;
 uniform vec3 star_warm_color : source_color;
 uniform vec3 star_cool_color : source_color;
@@ -32,6 +35,8 @@ uniform float warm_spread = 0.08;
 uniform float warm_intensity = 1.0;
 // Hot centre of the core (kept soft: a presence behind MIKU, not a sun).
 uniform float core_intensity = 1.0;
+// Filaments of gas lit by the core (0 = smooth halo, which reads as mud under AgX).
+uniform float filament_strength = 1.0;
 uniform float nebula_intensity = 1.0;
 uniform float nebula_scale = 2.4;
 uniform float dust_strength : hint_range(0.0, 1.0) = 0.6;
@@ -63,7 +68,26 @@ vec3 nebula(vec3 dir, int oct, out float dust_mask, out float cloud_out) {
 	float dens = k_fbm(q, oct) + (k_vnoise(q * 4.3 + 1.7) - 0.5) * 0.12;
 	float envelope = clamp(band_env * 0.8 + wide * 0.7, 0.0, 1.0);
 	float cloud = smoothstep(0.42, 0.85, dens) * envelope;
-	// Faux scattering: cloud close to the core is lit warm; far cloud stays violet/indigo.
+	// The warm core is light, not paint: a pearl heart, a gold body, dusk rose and then lilac towards
+	// the edges (a radial ramp), carried by filamentary gas lit from within (thin ridges of the warped
+	// field at two scales) and cut by the dust lanes. A smooth halo alone turns to beige mud under AgX.
+	// Filaments stream outwards from the core: noise in polar coordinates around warm_dir (fast
+	// across the angle, slow along the radius), warped so they curl like gas and never read as rays.
+	vec3 b1 = normalize(cross(wd, vec3(0.0, 1.0, 0.0)) + vec3(1e-4));
+	vec3 b2 = cross(wd, b1);
+	vec3 tv = dir - wd * c;
+	float rr = length(tv);
+	vec2 ang = vec2(dot(tv, b1), dot(tv, b2)) / max(rr, 1e-4);
+	vec3 sp = vec3(ang * 1.5, rr * 4.2) + (w - 0.5) * 1.8;
+	float streak = pow(k_ridge(sp * 1.5 + 5.0), 7.0);
+	float iso = pow(k_ridge(q * 2.1 + 11.0), 6.0) * 0.8 + pow(k_ridge(q * 4.7 + 3.0), 10.0) * 0.35;
+	float fil = mix(iso, streak, 0.4 * smoothstep(0.03, 0.14, rr)) * mix(0.5, 1.0, smoothstep(0.02, 0.2, rr)) * smoothstep(0.35, 0.7, dens + near * 0.2);
+	float gas = smoothstep(0.3, 0.9, dens);
+	vec3 ramp = mix(lilac_color * 0.55, warm_color, smoothstep(0.02, 0.3, near));
+	ramp = mix(ramp, gold_color, smoothstep(0.3, 0.72, near));
+	ramp = mix(ramp, mix(gold_color, pearl_color, 0.2), smoothstep(0.55, 1.0, tight));
+	float structure = 0.25 + 0.55 * gas + fil * 1.6 * filament_strength;
+	// Faux scattering: cloud close to the core takes the core's light; far cloud stays violet/indigo.
 	float lit = clamp(near * smoothstep(0.35, 0.8, dens) * 1.3, 0.0, 1.0);
 
 	float lanes = k_ridge(q * 1.7 + 4.0);
@@ -74,10 +98,10 @@ vec3 nebula(vec3 dir, int oct, out float dust_mask, out float cloud_out) {
 	// Base: deep space lifted to indigo inside the band and around the core.
 	vec3 sky = mix(deep_color, indigo_color, clamp(band_env * 0.7 + wide * 0.6, 0.0, 1.0)) * 0.6;
 	vec3 cloud_col = mix(nebula_color, lilac_color * 0.35, smoothstep(0.5, 1.0, cloud));
-	cloud_col = mix(cloud_col, warm_color * 0.45, lit);
+	cloud_col = mix(cloud_col, ramp * 0.5, lit);
 	sky += cloud_col * cloud * 0.55 * nebula_intensity;
-	sky += warm_color * (near * 0.05 + wide * 0.012) * warm_intensity * (0.7 + 0.6 * dens);
-	sky += core_color * tight * 0.35 * core_intensity * (0.7 + 0.5 * dens);
+	sky += ramp * (near * 0.21 + wide * 0.02) * structure * warm_intensity;
+	sky += mix(core_color, pearl_color, 0.15) * tight * 0.8 * core_intensity * (0.45 + 0.45 * gas + 0.8 * fil);
 	sky *= 1.0 - dust_strength * dust_mask;
 	return sky;
 }

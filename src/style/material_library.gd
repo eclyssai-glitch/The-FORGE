@@ -360,6 +360,8 @@ static func nebula_sky() -> ShaderMaterial:
 		m.set_shader_parameter("lilac_color", Palette.LILAC)
 		m.set_shader_parameter("warm_color", Palette.DUSK_ROSE)
 		m.set_shader_parameter("core_color", Palette.GOLD.lerp(Palette.BLUSH, 0.5))
+		m.set_shader_parameter("pearl_color", Palette.PEARL)
+		m.set_shader_parameter("gold_color", Palette.GOLD)
 		m.set_shader_parameter("star_color", Palette.PEARL)
 		m.set_shader_parameter("star_warm_color", Palette.BLUSH)
 		m.set_shader_parameter("star_cool_color", Palette.ICE)
