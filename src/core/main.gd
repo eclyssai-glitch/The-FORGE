@@ -41,6 +41,26 @@ func _ready() -> void:
 	_fade_tween.tween_callback(fade.hide)
 
 
+## Real seconds between silencing the audio and quitting (a few AudioServer mix steps).
+const AUDIO_RELEASE_SECONDS := 0.25
+
+var _quitting := false
+
+
+## Scripted quit (automation, review tour): stops every audio player of the world, waits
+## AUDIO_RELEASE_SECONDS so the AudioServer frees the stopped playbacks, then quits with `code`.
+## Without this, a sound still playing at shutdown is reported as "resources still in use at
+## exit" (AudioStreamOggVorbis + OggPacketSequence of the ambience). Repeated calls are ignored.
+func quit_game(code: int = 0) -> void:
+	if _quitting:
+		return
+	_quitting = true
+	if world and world.has_method(&"silence_audio"):
+		world.call(&"silence_audio")
+	await get_tree().create_timer(AUDIO_RELEASE_SECONDS, true, false, true).timeout
+	get_tree().quit(code)
+
+
 ## Ends the entry fade at once (fully transparent and hidden). Used by capture automation
 ## so the first screenshot never catches the fade half-way (deterministic brightness).
 func finish_fade() -> void:

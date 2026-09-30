@@ -250,6 +250,34 @@ func test_audio_anchors_rescanned_after_recomposition() -> void:
 	assert_eq(audio.get_anchor(&"planet"), planet, "anchors outside the scenario modules survive")
 
 
+func test_smoke_audio_report() -> void:
+	var lines: PackedStringArray = []
+	assert_true(AutomationScript._smoke_audio(world, lines), "ORIGIN needs no anchors")
+	assert_eq(lines[0], "audio=present anchors=")
+	Simulation.set_scenario(Scenario.GENESIS)
+	lines = []
+	assert_false(AutomationScript._smoke_audio(world, lines), "GENESIS without anchors fails")
+	assert_true(lines[-1].begins_with("FAIL audio anchors missing"))
+	for kind: StringName in WorldScript.GENESIS_AUDIO_ANCHORS:
+		var n := Node3D.new()
+		n.set_meta(WorldScript.AUDIO_ANCHOR_META, kind)
+		world.add_child(n)
+	await wait_process_frames(1)
+	lines = []
+	assert_true(AutomationScript._smoke_audio(world, lines), "\n".join(lines))
+	assert_eq(lines[0], "audio=present anchors=hands,miku,planet")
+
+
+func test_silence_audio_stops_every_player() -> void:
+	var audio := world.audio_director as AudioDirector
+	await wait_process_frames(1)
+	assert_true(audio.ambience_player.playing, "ambience plays in every scenario")
+	audio.play_sound(&"sfx_planet_seed")
+	assert_gte(world.silence_audio(), 1)
+	assert_false(audio.ambience_player.playing)
+	assert_eq(audio.active_voices(), 0)
+
+
 func test_picker_selects_genesis_entities() -> void:
 	Simulation.set_scenario(Scenario.GENESIS)
 	var body := StaticBody3D.new()

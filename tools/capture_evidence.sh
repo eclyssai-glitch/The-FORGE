@@ -65,7 +65,7 @@ all_written() {
 
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
 proc_start "$log" env SCREEN="${SCREEN:-${resolution}x24}" tools/_display.sh \
-  tools/godot.sh --path . --resolution "$resolution" -- "--capture=$dir" "${game_args[@]}"
+  tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --path . --resolution "$resolution" -- "--capture=$dir" "${game_args[@]}"
 proc_supervise "$timeout_s" "$grace_s" all_written
 
 missing=()

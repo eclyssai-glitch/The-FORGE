@@ -40,7 +40,7 @@ png_size() {
 
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
 proc_start "$log" env SCREEN="${SCREEN:-${width}x${height}x24}" tools/_display.sh \
-  tools/godot.sh --path . --resolution "${width}x${height}" -- --scenario=genesis "--style-frames=$dir" "${game_args[@]}"
+  tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --path . --resolution "${width}x${height}" -- --scenario=genesis "--style-frames=$dir" "${game_args[@]}"
 proc_supervise "$timeout_s" "$grace_s" manifest_written
 
 if ! manifest_written; then

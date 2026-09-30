@@ -253,6 +253,20 @@ func audio_anchor_kinds() -> Array[StringName]:
 	return out
 
 
+## Stops every audio player of the world at once (AudioDirector voices and ambience). Called
+## before a scripted quit: the AudioServer releases a stopped playback on its next mix step, so a
+## player still playing when the engine shuts down is reported as "resources still in use at
+## exit" (the ambience stream and its playback). Returns how many players were stopped.
+func silence_audio() -> int:
+	var n := 0
+	for p in find_children("*", "AudioStreamPlayer", true, false) \
+			+ find_children("*", "AudioStreamPlayer3D", true, false):
+		if p.get(&"playing") or p.get(&"stream_paused"):
+			p.call(&"stop")
+			n += 1
+	return n
+
+
 # ------------------------------------------------------------------ composition
 
 

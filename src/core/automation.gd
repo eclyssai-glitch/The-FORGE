@@ -369,7 +369,8 @@ static func capture_options(c: Array) -> Dictionary:
 	return c.back() if c.size() > 3 and c.back() is Dictionary else {}
 
 
-## Ends an automation run. quit() normally ends the main loop at the end of this frame; if
+## Ends an automation run through Main.quit_game (audio silenced first, see there). quit()
+## normally ends the main loop at the end of this frame; if
 ## the loop is still running EXIT_WATCHDOG_SECONDS later (seen under Xvfb + lavapipe), the
 ## process kills itself so scripts waiting on it never hang. Only reached in automation runs
 ## (--capture / --smoke-test). Hangs after the main loop (driver teardown) are covered by
@@ -379,7 +380,11 @@ func _quit(code: int) -> void:
 		func() -> void:
 			push_warning("automation: quit did not complete in %.0fs; killing process." % EXIT_WATCHDOG_SECONDS)
 			OS.kill(OS.get_process_id()))
-	get_tree().quit(code)
+	var main := get_parent()
+	if main and main.has_method(&"quit_game"):
+		main.call(&"quit_game", code)
+	else:
+		get_tree().quit(code)
 
 
 ## The composed world (scenes/world.tscn instanced as "World" under the main scene), or null.
