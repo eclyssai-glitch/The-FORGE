@@ -27,6 +27,12 @@ extends Node3D
 ## the framing settles; outside a cue it holds until reset, mode change or new input. Targets
 ## outside the mode's reach (CameraShots.FOCUS_REACH, e.g. a seed from FORGE) are ignored.
 ## Seek/reset keep a user framing that is not under a cue (the story cue always snaps).
+##
+## GENESIS (Simulation.scenario == Scenario.GENESIS): shots, cues, limits and focus come from
+## GenesisShots (pure); cue changes crane over GenesisShots.T_CUE (Palette.T_CRANE), user-driven
+## changes (mode, focus, reset) over GenesisShots.T_USER; every GENESIS entity can be focused from
+## any mode. A scenario change snaps to the new scenario's shot. `style_frame_poses()` gives the
+## GENESIS style frames to the automation (StyleFrames).
 
 const GROUP := &"camera_director"
 ## Seconds of user control before cinematic cues take the camera back.
@@ -64,13 +70,14 @@ func _ready() -> void:
 	camera = Camera3D.new()
 	camera.name = "Camera"
 	camera.near = 0.05
-	camera.far = 600.0
+	camera.far = 800.0
 	add_child(camera)
 	camera.current = true
 	Session.mode_changed.connect(_on_mode_changed)
 	Session.cinematic_changed.connect(_on_cinematic_changed)
 	Session.focus_requested.connect(focus_on)
 	Simulation.world_rebuilt.connect(_on_world_rebuilt)
+	Simulation.scenario_changed.connect(_on_scenario_changed)
 	snap_to_mode_shot()
 
 
@@ -110,18 +117,26 @@ func focus_on(id: StringName) -> bool:
 		var b := node_bounds(n as Node3D)
 		bounds = b if not found else bounds.merge(b)
 		found = true
-	if not found or not CameraShots.focus_reachable(Session.mode, bounds.get_center()):
+	if not found:
 		return false
-	CameraShots.focus_shot(Session.mode, bounds, _rig, _aspect(), _focus_goal)
+	if _genesis():
+		if not GenesisShots.focus_reachable(bounds.get_center()):
+			return false
+		GenesisShots.focus_shot(Session.mode, bounds, _rig, _aspect(), _focus_goal)
+	else:
+		if not CameraShots.focus_reachable(Session.mode, bounds.get_center()):
+			return false
+		CameraShots.focus_shot(Session.mode, bounds, _rig, _aspect(), _focus_goal)
 	_stop_blend()
 	_user = true
 	_press_travel = -1.0
 	_focusing = true
 	_focus_id = id
+	var dur := _user_blend_duration()
 	# The hold starts when the framing has settled.
-	_user_until = _now() + Palette.T_CINEMATIC + USER_HOLD
+	_user_until = _now() + dur + USER_HOLD
 	_from.copy_from(_rig)
-	_start_blend()
+	_start_blend(dur)
 	return true
 
 
@@ -175,12 +190,13 @@ func _process(delta: float) -> void:
 			_user = false
 			_end_focus()
 			_shot_id = id
-			_begin_transition()
+			_begin_transition(true)
 		elif _focusing:
 			CameraShots.blend(_from, _focus_goal, _blend, _rig)
 	elif id != _shot_id:
+		var story := _is_cue(id) and _is_cue(_shot_id)
 		_shot_id = id
-		_begin_transition()
+		_begin_transition(story)
 	if not _user:
 		CameraShots.blend(_from, _goal, _blend, _rig)
 	_apply()
@@ -205,7 +221,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_take_control()
 		_rig.yaw -= mm.relative.x * ORBIT_PER_PIXEL
 		_rig.pitch += mm.relative.y * ORBIT_PER_PIXEL
-		CameraShots.clamp_shot(_rig, Session.mode)
+		_clamp_shot(_rig)
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("camera_reset"):
 		reset_to_mode_shot()
@@ -215,7 +231,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _zoom(factor: float) -> void:
 	_take_control()
 	_rig.distance *= factor
-	CameraShots.clamp_shot(_rig, Session.mode)
+	_clamp_shot(_rig)
 	get_viewport().set_input_as_handled()
 
 
@@ -229,7 +245,7 @@ func _fly(delta: float) -> void:
 	var forward := Vector3(-sin(_rig.yaw), 0.0, -cos(_rig.yaw))
 	var right := Vector3(cos(_rig.yaw), 0.0, -sin(_rig.yaw))
 	_rig.target += (right * v.x - forward * v.y) * _rig.distance * FLY_SPEED * delta
-	CameraShots.clamp_shot(_rig, Session.mode)
+	_clamp_shot(_rig)
 
 
 func _take_control() -> void:
@@ -242,13 +258,35 @@ func _take_control() -> void:
 
 
 func _evaluate_goal() -> StringName:
+	if _genesis():
+		return GenesisShots.desired(Session.mode, Session.cinematic, Simulation.genesis, Simulation.time,
+			_now(), _goal)
 	return CameraShots.desired(Session.mode, Session.cinematic, Simulation.world, Simulation.time, _goal)
 
 
-func _begin_transition() -> void:
+## True while the GENESIS scenario is playing (its own shots, cues and limits).
+static func _genesis() -> bool:
+	return Simulation.scenario == Scenario.GENESIS
+
+
+## Mode limits of the active scenario.
+func _clamp_shot(s: CameraShots.Shot) -> void:
+	if _genesis():
+		GenesisShots.clamp_shot(s, Session.mode)
+	else:
+		CameraShots.clamp_shot(s, Session.mode)
+
+
+## Transition time of a user-driven change (mode, focus, reset, cinematic toggle).
+static func _user_blend_duration() -> float:
+	return GenesisShots.T_USER if _genesis() else Palette.T_CINEMATIC
+
+
+## `cue` = the story moved on (GENESIS cranes slowly between cues).
+func _begin_transition(cue := false) -> void:
 	_stop_blend()
 	_from.copy_from(_rig)
-	_start_blend()
+	_start_blend(GenesisShots.T_CUE if cue and _genesis() else _user_blend_duration())
 
 
 ## Starts a transition of _blend 0 -> 1 over Palette.T_CINEMATIC of wall-clock time.
@@ -256,10 +294,10 @@ func _begin_transition() -> void:
 ## game frame time only under the Movie Maker), not by the frame delta: the engine caps a frame's delta (max_physics_steps_per_frame /
 ## physics_ticks_per_second = 8/60 s), so on a slow renderer a delta-driven Tween would run
 ## several times slower than real time and a focus would not settle in the time it promises.
-func _start_blend() -> void:
+func _start_blend(duration := Palette.T_CINEMATIC) -> void:
 	_blend = 0.0
 	_blend_start = _now()
-	_blend_duration = Palette.T_CINEMATIC
+	_blend_duration = duration
 
 
 func _advance_blend() -> void:
@@ -285,7 +323,10 @@ func _stop_blend() -> void:
 ## Writes the rig to the camera. The rig is clamped here, after the blend of the frame
 ## (CameraShots.clamp_rig: never below the floor + clearance, also mid-transition).
 func _apply() -> void:
-	CameraShots.clamp_rig(_rig)
+	if _genesis():
+		GenesisShots.clamp_rig(_rig)
+	else:
+		CameraShots.clamp_rig(_rig)
 	var pos := _rig.position()
 	camera.transform = Transform3D(Basis.IDENTITY, pos).looking_at(_rig.target, Vector3.UP)
 	camera.fov = _rig.fov
@@ -307,6 +348,16 @@ func _on_world_rebuilt() -> void:
 
 func _on_mode_changed(_mode: SessionState.Mode) -> void:
 	reset_to_mode_shot()
+
+
+## A new scenario: its own shots from the first frame (no blend across worlds).
+func _on_scenario_changed(_id: StringName) -> void:
+	snap_to_mode_shot()
+
+
+## GENESIS style frames (StyleFrames: `style_frame_poses() -> Array` of pose dictionaries).
+func style_frame_poses() -> Array:
+	return GenesisShots.style_frame_poses()
 
 
 func _on_cinematic_changed(_enabled: bool) -> void:

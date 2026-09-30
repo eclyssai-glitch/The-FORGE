@@ -8,23 +8,25 @@ extends RefCounted
 ## refined in parallel and their anchors may move a little.
 ##
 ## Axes: +Y up, MIKU faces +Z (towards the hero camera); the warm nebula core is behind her (−Z).
-## Layout of docs/contracts/loop-04.md, refined with the style frames: MIKU is raised so that
-## the planet and the hands sit below her gown (planet and hands in the lower third of the hero
-## frame, MIKU in the upper third) instead of in front of her torso.
+## Layout of docs/contracts/loop-04.md, refined with the style frames: MIKU is larger (≈ 7.4 u,
+## her figure must lead the giant hands) and the new world with its hands sits below and in front
+## of her hem — a vertical composition: hair (out of frame) -> halo and face (upper third) -> gown
+## pouring its dust down -> the world held between the hands (lower third). In front of her torso
+## the hands hid the figure.
 
 const MESH_DIR := "res://assets/meshes/"
 
 # --- MIKU ---------------------------------------------------------------------------------------
 ## World position of the sculpture's origin (the waist centre) and its uniform scale.
-const MIKU_ORIGIN := Vector3(0.0, 6.35, -0.4)
-const MIKU_SCALE := 1.0
+const MIKU_ORIGIN := Vector3(0.0, 6.9, -0.6)
+const MIKU_SCALE := 1.2
 ## Slight turn towards the hero camera's left: a three-quarter hint reads the figure as volume.
 const MIKU_YAW := 0.1
 ## Forward lean (rad, around X): the head inclines towards the creation below.
 const MIKU_LEAN := 0.06
 
 # --- Forming planet (subagent ILVARA-7) -------------------------------------------------------------
-const PLANET_CENTER := Vector3(0.0, 1.0, 4.0)
+const PLANET_CENTER := Vector3(0.0, 0.1, 2.6)
 ## Final radius, and the radius of each formation step (seed core, mantle, crust, sky).
 const PLANET_RADIUS := 1.6
 const PLANET_STEP_RADII: Array[float] = [0.55, 1.2, 1.48, 1.6]
@@ -35,11 +37,13 @@ const PLANET_TILT := Vector3(0.32, 0.0, -0.22)
 ## Rest pose of each hand (palm centre, Euler YXZ in radians, uniform scale).
 ## Left cradles from below (palm up, fingers under the planet), right shapes from above (palm
 ## down, fingers hovering over the planet, index slightly extended).
-const HAND_LEFT_POS := Vector3(-2.35, -1.1, 4.35)
-const HAND_LEFT_EULER := Vector3(0.05, 0.42, 0.36)
-const HAND_RIGHT_POS := Vector3(3.05, 4.05, 4.55)
-const HAND_RIGHT_EULER := Vector3(-0.1, -0.3, 0.42)
-const HAND_SCALE := 0.95
+const HAND_LEFT_POS := Vector3(-1.55, -2.8, 2.9)
+const HAND_LEFT_EULER := Vector3(0.3, 0.35, 0.22)
+const HAND_RIGHT_POS := Vector3(2.3, 3.65, 2.9)
+const HAND_RIGHT_EULER := Vector3(-0.12, -0.3, 0.26)
+## Scale of both sculptures: wrist to middle fingertip ≈ 4.7 u, a hand ≈ 1.5× the final planet's
+## diameter — monumental next to the world they hold, and still below MIKU in the hierarchy.
+const HAND_SCALE := 0.72
 ## Where the hands wait before `hands.summoned`: this far below (and a little behind) their rest
 ## pose, inside the mist.
 const HAND_SUMMON_OFFSET := Vector3(0.0, -7.5, -1.5)
@@ -56,25 +60,30 @@ const MOON_PHASES: Array[float] = [0.18, 0.62]
 const RING_INNER := 2.2
 const RING_OUTER := 2.9
 ## Memory belt around MIKU (centre = her heart height), radii, thickness, tilt, rocks, period.
-const BELT_CENTER := Vector3(0.0, 6.4, -0.4)
+## Tilted steeply (front side high, back side low) so that the hero camera — outside the belt
+## radius — never looks through rocks: the belt reads as a tilted ring that passes behind the new
+## world and rises out of frame over the camera.
+const BELT_CENTER := Vector3(0.0, 6.6, -0.6)
 const BELT_INNER := 16.0
 const BELT_OUTER := 19.0
 const BELT_THICKNESS := 0.9
-const BELT_TILT := Vector3(0.1, 0.0, 0.05)
+const BELT_TILT := Vector3(-0.42, 0.0, 0.1)
 const BELT_ROCKS := 900
 const BELT_PERIOD := 900.0
 ## Distant worlds (older subagents, already formed): orbit radius around MIKU, planet radius,
 ## orbit tilt, period (s), start phase, their own small moon (orbit radius, moon radius, period).
-const FAR_ORBITS: Array[float] = [11.0, 24.0]
-const FAR_RADII: Array[float] = [0.9, 1.25]
-const FAR_TILTS: Array[Vector3] = [Vector3(0.12, 0.0, -0.08), Vector3(-0.06, 0.0, 0.1)]
-const FAR_PERIODS: Array[float] = [520.0, 1100.0]
-const FAR_PHASES: Array[float] = [0.84, 0.32]
-const FAR_MOON_ORBITS: Array[float] = [1.8, 2.5]
-const FAR_MOON_RADII: Array[float] = [0.16, 0.22]
+## Their orbits lie beyond the hero camera (≈ 22 u from MIKU): from FORGE they are either behind
+## her, far and small, or outside the frame — discreet; UNIVERSE sees the whole system.
+const FAR_ORBITS: Array[float] = [30.0, 42.0]
+const FAR_RADII: Array[float] = [1.3, 1.8]
+const FAR_TILTS: Array[Vector3] = [Vector3(0.1, 0.0, -0.06), Vector3(-0.05, 0.0, 0.08)]
+const FAR_PERIODS: Array[float] = [900.0, 1500.0]
+const FAR_PHASES: Array[float] = [0.36, 0.58]
+const FAR_MOON_ORBITS: Array[float] = [2.6, 3.4]
+const FAR_MOON_RADII: Array[float] = [0.26, 0.32]
 const FAR_MOON_PERIODS: Array[float] = [48.0, 66.0]
-## Centre of the distant orbits (MIKU's heart).
-const FAR_CENTER := Vector3(0.0, 6.2, -0.4)
+## Centre of the distant orbits (a little below MIKU's heart).
+const FAR_CENTER := Vector3(0.0, 5.2, -0.6)
 
 static var _anchor_cache: Dictionary = {}
 
