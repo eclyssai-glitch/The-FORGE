@@ -153,3 +153,174 @@ mudam triângulos). "inst." = instâncias (MultiMesh ou nós). Cada malha é con
   degenerados, AABB, UV em [0,1], determinismo do shard).
 - Conferência visual (Loop 2): cena temporária com as 5 MultiMeshes, núcleo, nervuras e anel,
   renderizada via `tools/_display.sh` nas poses final, torcida, montagem (t = 0,6) e scatter.
+
+---
+
+# GENESIS (Loop 4) — esculturas offline e geradores em runtime
+
+## Pipeline de escultura — `tools/sculpt/`
+
+Ferramenta offline (ADR-013), Python do venv `/opt/korium-py` (numpy, scipy, scikit-image). Sem
+rede, sem assets de terceiros, sem aleatoriedade. O jogo nunca roda Python: as saídas são
+versionadas em `assets/meshes/`.
+
+| arquivo | papel |
+|---|---|
+| `sdf.py` | biblioteca SDF vetorizada: `sphere`, `ellipsoid`, `capsule`, `round_cone` (exato), `round_box`, `halfspace`, `tube` (cadeia de round cones); `smin`/`smax` polinomiais com k em unidades de mundo; `union`, `blend`, `subtract`, `intersect`, `sculpt` (lista ordenada de add/sub); `place` (rotação + translação), `mirror_x`, `scale` (uniforme/por eixo), `bend`, `twist`, `cup` (arco transversal), `displace`, `offset`, `shell`. Cada forma carrega uma esfera envolvente (`f.bound`) e as booleanas só avaliam uma parte onde ela pode mudar o resultado (cull). |
+| `mesher.py` | amostragem em banda estreita **hierárquica** (passos 16→8→4→2→1 da grade fina; só células a < 2 diagonais da superfície são subdivididas), `skimage.measure.marching_cubes` com `mask` (só células ativas), maior componente conexa (sem ilhas), **decimação QEM** vetorizada em lotes, projeção dos vértices de volta à SDF (Newton), **normais = gradiente da SDF** (4 taps), **AO por vértice** e escritor OBJ determinístico. |
+| `hand.py` | mão paramétrica: palma, polegar, 4 dedos de 3 falanges, almofadas, nós, tendões, vincos, unha insinuada, antebraço fusiforme. |
+| `giant_hands.py` | poses das mãos gigantes e referencial de exportação. |
+| `miku.py` | a escultura de MIKU e o cálculo das âncoras. |
+| `bake_all.py` / `bake_all.sh` | regenera tudo: `tools/sculpt/bake_all.sh` (≈ 13 min em 4 núcleos; `--only hand_left`, `--quick` para iteração, `--out DIR`). |
+
+Determinismo: BLAS fixado em 1 thread, ordem de iteração fixa, números com casas fixas (`-0.0`
+normalizado), JSON com chaves ordenadas. Verificado: duas execuções completas independentes
+produziram os mesmos SHA-256 nos 6 arquivos.
+
+Algoritmos:
+- **QEM em lote**: a cada passada calcula custo/posição ótima de todas as arestas (quádricas
+  somadas, 3×3 pela adjunta; fallback ponto médio/extremos), escolhe um conjunto independente (a
+  aresta é a mais barata no 2-anel dos dois extremos ⇒ estrelas disjuntas) e rejeita colapsos que
+  violam a condição de link, deixam vizinho com grau < 3, invertem face (cos < 0,2) ou criam lasca.
+  Arestas rejeitadas ficam fora por 8 passadas. Qualidade de triângulo (1º percentil) ≈ 0,6.
+- **AO**: em 6 escalas h (MIKU 0,012–0,45; mãos 0,06–1,4) amostra a SDF ao longo da normal e de 4
+  direções num cone de 31°: `occ += w·clamp((h − d)/h)`; `ao = 1 − occ/Σw`. Guardado **linear** em
+  cinza (R = G = B), 1 = aberto.
+- Garantias por peça, checadas no bake (aborta se falharem): 0 arestas de borda, 0 não-manifold,
+  1 componente; os bakes finais têm Euler 2 (gênero 0).
+
+## Formato: OBJ com cor de vértice (decisão)
+
+Testado no Godot 4.7.2 (projeto descartável, `load()` + `surface_get_arrays`): linhas
+`v x y z r g b` chegam como `ARRAY_COLOR` (quantizadas em 8 bits: 0,5 → 0,498); faces OBJ
+anti-horárias vistas de fora viram a frente horária do Godot. Por isso **OBJ** (sem escritor glTF
+próprio). Importador `wavefront_obj` com os padrões: `generate_lods = true` (LODs automáticos),
+`generate_shadow_mesh = true`, compressão ligada. Sem UV: os materiais usam `COLOR.r` como AO e
+coordenadas de objeto — é o que `MaterialLibrary.miku_body()`/`hand_stone()` fazem.
+
+Carregar: `var mesh: Mesh = load("res://assets/meshes/miku_body.obj")` → `MeshInstance3D.mesh`.
+Metadados: `JSON.parse_string(FileAccess.get_file_as_string("res://assets/meshes/miku_body.json"))`
+(âncoras em coordenadas do mesh; aplique o transform do nó).
+
+## MIKU — `assets/meshes/miku_body.obj` + `.json`
+
+Estátua sacra estilizada original (abstração tipo Brancusi / mármore art déco), não anime: ~10
+cabeças (cabeça 0,6 u), cabeça oval curvada ~17° para a frente/baixo, levemente inclinada e girada;
+pálpebras fechadas por relevo, nariz reto, sem boca detalhada (só um leve relevo), pescoço longo,
+clavículas e esternocleidomastoides suaves, busto discreto, contrapposto (ombros e quadril
+inclinados em sentidos opostos, tronco girado), braços longos abertos para a frente e para baixo,
+mãos finas com dedos juntos (sulcos) e palmas para fora/baixo. Da cintura: vestido em sino alongado
+(quadril, leve estreitamento, alargamento final), pregas verticais com torção lenta, leve varrida
+para trás, perna relaxada insinuada sob o tecido, **aberto embaixo** (casca de 3–4 cm, domo interno
+em y ≈ −1,7) com barra irregular suave. Sem pés, sem pernas. Cabelo: calota lisa presa ao crânio,
+linha do cabelo em curva (testa → têmpora → em volta da orelha → nuca) e um **coque compacto** atrás;
+nenhuma mecha lateral. As fitas partem de `hair_root`.
+
+- Referencial: +Y para cima, **frente +Z**, **origem no centro da cintura**; mão esquerda dela em +X.
+- Bounds: min (−1,445, −4,334, −1,610), max (1,397, 1,802, 1,190) → **6,14 u de altura** (barra
+  irregular: −4,15 ± 0,19).
+- **117 998 triângulos**, 59 001 vértices, grade 0,0072 u; OBJ 8,9 MB. AO mín 0,18, média 0,83.
+
+| âncora (mesh) | valor |
+|---|---|
+| `head_top` | (−0,021, 1,771, 0,278) — topo ao longo do eixo da cabeça curvada |
+| `forehead` | (0,002, 1,516, 0,423) — semente de luz |
+| `hair_root` / `hair_root_tangent` | (−0,078, 1,726, −0,113) / (−0,070, 0,845, −0,531) — sai para cima/trás |
+| `palm_left` / `palm_left_normal` | (1,204, −0,584, 0,892) / (0,678, −0,150, −0,720) |
+| `palm_right` / `palm_right_normal` | (−1,028, −0,611, 0,991) / (−0,721, −0,232, −0,654) |
+| `chest` | (−0,015, 0,610, 0,207) |
+| `gown_hem_center` / `gown_hem_radius` | (−0,180, −4,116, −0,344) / 1,161 |
+
+## Mãos gigantes — `assets/meshes/hand_left.obj`, `hand_right.obj` + `.json`
+
+Anatômicas e estilizadas: eminências tenar/hipotenar e oco da palma, arco transversal, nós dos
+dedos, falanges com almofadas palmares e nós dorsais, vincos palmares suaves, unha insinuada (plano
+raso com borda de cutícula), tendões extensores sutis, estiloides do punho, antebraço fusiforme que
+se afina num fim macio (fica na névoa). Pulso → ponta do médio **desdobrado = 7,0 u**; na pose a
+corda é 6,58 (esq.) / 6,52 (dir.) — campo `wrist_to_middle_tip`.
+
+Poses próprias (a direita **não** é espelho da esquerda — o teste compara as pontas):
+- **esquerda** embala por baixo: palma para cima, arco transversal forte, dedos curvos em concha
+  rasa (flexão crescente do indicador ao mínimo), polegar aberto e erguido formando a borda.
+- **direita** modela por cima: palma para baixo, punho em leve extensão, indicador quase estendido,
+  médio/anelar/mínimo pairando curvos, polegar oposto por baixo.
+
+Referencial de exportação, **origem = centro da palma** (na superfície palmar):
+
+| | dedos | palma (`palm_normal`) | antebraço (`forearm_dir`) | polegar |
+|---|---|---|---|---|
+| esquerda | +X | +Y (0,017, 1,000, −0,005) | −X (−0,989, 0,138, −0,059) | −Z |
+| direita | −X | −Y (−0,017, −1,000, 0,004) | +X (0,954, 0,286, −0,095) | +Z |
+
+Outras âncoras: `wrist_center` (esq. (−2,05, −0,42, 0), dir. (2,05, 0,43, 0)), `forearm_end`,
+`tip_thumb/index/middle/ring/little`. Bounds esq. 9,83 × 3,27 × 3,74; dir. 9,71 × 4,15 × 3,61
+(inclui ~3,6 u de antebraço). **57 998 triângulos** cada (29 001 vértices), grade 0,022 u; OBJ
+4,3 MB cada. Na cena do contrato (esq. ≈ (−3,0, −1,5, 4,6), dir. ≈ (3,2, 3,4, 4,8), planeta
+(0, 1, 4)), com rotação identidade a esquerda aponta os dedos para o planeta com a palma para cima e
+a direita paira sobre ele com a palma para baixo; ajuste fino girando `palm_normal` para o planeta.
+
+## Geradores em runtime — `src/procedural/` (RefCounted, estáticos, determinísticos)
+
+Convenções: 1 superfície, triângulos indexados com frente horária (Godot), normais unitárias,
+UV em [0,1]. Construir uma vez; nunca por frame.
+
+**`HairRibbons`**
+- `curve_point(points, t)`, `sample_curve(points, samples)` — Catmull-Rom.
+- `generate_curves(root, direction, count, seed, length := 10.0, points := 9, spread := 0.5,
+  wave_amplitude := 0.45, waves := 1.4, rise := 0.9, root_radius := 0.05) -> Array[PackedVector3Array]`
+  — leque num cone de meia-abertura `spread`, ondas longas, direção que sobe progressivamente
+  (`rise`), comprimentos 0,72–1,08 × `length`. Use `hair_root`/`hair_root_tangent` (no mundo).
+- `build(curves, width := 0.06, tip_ratio := 0.15, samples := 48, facing := Vector3.BACK,
+  crossed := false) -> ArrayMesh` — UV.x raiz→ponta por comprimento de arco, UV.y na largura;
+  largura afina até `tip_ratio`; UV2 = (índice do fio normalizado, hash 0..1); COLOR branco com
+  **alfa = opacidade** (0,55–1 por fio → 0 na ponta), como `miku_hair()` espera; TANGENT ao longo
+  do fio; referencial por transporte paralelo. `crossed` duplica cada fio a 90° (não some de
+  perfil). Custo `2·(samples−1)` t por fio (×2 cruzado): 64 fios × 48 amostras = 6 016 t.
+
+**`OrbitLine`** (plano XZ; fase p → ângulo 2πp a partir de +Z para +X)
+- `point(rx, rz, phase)`, `outward(rx, rz, phase)`.
+- `build(rx, rz, width, segments := 256)` — faixa plana, UV.x = fase, UV.y interno→externo, normal +Y; `2·segments` t.
+- `build_tube(rx, rz, radius, segments := 256, radial := 4)` — tubo fino, UV.x = fase, UV.y em volta; `2·segments·radial` t.
+- `build_line(rx, rz, segments := 256)` — `PRIMITIVE_LINE_STRIP` fechado, UV.x = fase.
+
+**`PlanetSphere`**
+- `build(radius, sectors := 96, rings := 48)` — esfera UV (UV.x longitude com costura duplicada,
+  UV.y = 0 no polo norte), normais e **tangentes analíticas** (d/dφ, w = +1, iguais às de
+  `SurfaceTool.generate_tangents` — testado), polos sem degenerados; `triangle_count = 2·s·(r−1)`.
+- `segments_for_level(level)` / `build_for_level(radius, level)` por `QualityProfiles.Level`:
+  LOW 48×24 (2 208 t), MEDIUM 64×32 (3 968 t), HIGH 96×48 (9 024 t), ULTRA 128×64 (16 128 t).
+
+**`AsteroidField`**
+- `transforms(count, inner_radius, outer_radius, thickness, seed, min_scale := 0.05,
+  max_scale := 0.4, scale_bias := 3.0) -> Array[Transform3D]` — raio uniforme em área, altura
+  triangular em ±espessura/2, rotação uniforme (Shoemake), escala com viés de potência.
+- `build_multimesh(mesh, xforms) -> MultiMesh` (TRANSFORM_3D; `asteroid_memory()` usa INSTANCE_ID).
+- `rock_mesh(seed, radius := 1.0, subdivisions := 1, roughness := 0.3)` — icosfera achatada e
+  amassada por seed, facetada, UV por faceta e cor baricêntrica; 80 t (s1) / 320 t (s2).
+
+**`RelationThread`** (Bezier quadrática; ápice a `height` do ponto médio, curvando para `up`)
+- `bulge_dir`, `arc_point(a, b, height, t, up)`, `arc_tangent(...)`, `arc_points(a, b, height, segments := 48, up)`.
+- `build(a, b, height, width, segments := 48, up, facing := Vector3.ZERO)` — fita (no plano do arco por padrão); `2·segments` t.
+- `build_crossed(a, b, height, width, segments := 48, up)` — duas fitas a 90°; `4·segments` t.
+- `build_tube(a, b, height, radius, segments := 48, radial := 5, up)` — tubo; `2·segments·radial` t.
+  UV.x 0→1 de `a` para `b` em todos (pulso), UV.y na largura/em volta.
+
+## Previews (Godot real, Forward+ via xvfb)
+
+`tools/sculpt/previews/`: `miku_{front,q34,side,back,low}.png`, `miku_head_{face,q34l,sidel}.png`,
+`hand_left_{front,q34,top,under,low}.png`, `hand_right_{front,q34,top,under,low}.png` — argila
+neutra × AO do vértice, luz principal quente com sombra, recorte frio forte, fill fraco; cena de
+preview temporária (não versionada). Limites conhecidos, vistos nas previews: de perto o rosto é
+deliberadamente abstrato e sob luz frontal dura pode ler como manequim (a translucidez do material
+deve suavizar); os tendões dorsais das mãos ainda marcam sob luz rasante; mãos de MIKU são
+pequenas e simples (lidas à distância).
+
+## Testes — `tests/unit/test_procedural_genesis.gd`
+
+Esculturas: carregam como `Mesh` de 1 superfície; triângulos ≤ orçamento (120k / 60k); cor de
+vértice presente, cinza e com contraste; normais unitárias; enrolamento coerente com as normais
+(< 0,1% de exceções); AABB = `bounds` do JSON; altura de MIKU 5,8–6,2 com a origem dentro; âncoras
+presentes, dentro dos bounds e com a orientação do contrato; mãos com origem na palma, corda
+pulso→médio 5,6–7,2, palma para cima/baixo, direita não-espelho. Geradores: mesma seed ⇒ mesmos
+arrays, seed diferente ⇒ outros; UV em [0,1]; sem degenerados; frente horária; contagens;
+tangentes = SurfaceTool; transforms dentro do anel; alfa do cabelo; variantes cruzadas/tubo.

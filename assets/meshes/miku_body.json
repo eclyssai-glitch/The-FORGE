@@ -1,0 +1,86 @@
+{
+  "anchors": {
+    "chest": [
+      -0.0151,
+      0.6104,
+      0.2066
+    ],
+    "forehead": [
+      0.0019,
+      1.5158,
+      0.4227
+    ],
+    "gown_hem_center": [
+      -0.1796,
+      -4.1162,
+      -0.3443
+    ],
+    "gown_hem_radius": 1.1608,
+    "hair_root": [
+      -0.0779,
+      1.7264,
+      -0.1133
+    ],
+    "hair_root_tangent": [
+      -0.07,
+      0.8445,
+      -0.531
+    ],
+    "head_top": [
+      -0.0206,
+      1.7714,
+      0.2783
+    ],
+    "palm_left": [
+      1.2036,
+      -0.5837,
+      0.8919
+    ],
+    "palm_left_normal": [
+      0.678,
+      -0.15,
+      -0.7196
+    ],
+    "palm_right": [
+      -1.0281,
+      -0.6105,
+      0.9908
+    ],
+    "palm_right_normal": [
+      -0.7207,
+      -0.2315,
+      -0.6535
+    ]
+  },
+  "bounds": {
+    "max": [
+      1.397,
+      1.8016,
+      1.1901
+    ],
+    "min": [
+      -1.4449,
+      -4.3335,
+      -1.6101
+    ],
+    "size": [
+      2.8419,
+      6.1351,
+      2.8002
+    ]
+  },
+  "format_version": 1,
+  "frame": "+Y up, +Z front (MIKU faces +Z); her left hand is on +X",
+  "generator": {
+    "grid_spacing": 0.0072,
+    "quick": false,
+    "script": "tools/sculpt/bake_all.py"
+  },
+  "name": "miku_body",
+  "origin": "waist centre",
+  "triangles": 117998,
+  "units": "Godot units",
+  "up": "+Y",
+  "vertex_color": "RGB = ambient occlusion baked from the SDF (linear, 1 = fully open)",
+  "vertices": 59001
+}
