@@ -1,6 +1,7 @@
 extends SceneTree
 ## Offline sculpt preview: loads an OBJ (v x y z r g b / vn / f a//a) and renders views to PNG.
-## args: --obj=PATH --out=DIR --views=JSON_PATH
+## args: --obj=PATH --out=DIR --views=JSON_PATH [--ao=0..1 (vertex AO amount, default 0.85)]
+##       [--shadows=0 (diagnostics: no shadow maps, to tell shading from shadow artefacts)]
 
 var _args := {}
 
@@ -147,7 +148,7 @@ func _set_light(l: DirectionalLight3D, dir: Vector3, c: Color, e: float, shadow:
 	l.look_at_from_position(Vector3.ZERO, dir, up)
 	l.light_color = c
 	l.light_energy = e
-	l.shadow_enabled = shadow and e > 0.0
+	l.shadow_enabled = shadow and e > 0.0 and _args.get("shadows", "1") != "0"
 	l.light_angular_distance = 0.0
 	l.shadow_blur = blur
 	l.shadow_normal_bias = 2.0
