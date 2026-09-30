@@ -1,0 +1,139 @@
+class_name GenesisLightRig
+extends Node3D
+## Lights of the GENESIS scene (docs/VISUAL_DIRECTION.md §4). Owner: animator.
+## Backlight first: a warm directional (DUSK_ROSE -> GOLD) from the nebula core behind MIKU cuts
+## her, the hands and the planet out of the night; a cold ICE rim from behind/right separates the
+## forms; a soft PEARL key from the three-quarter left side (never frontal: frontal light flattens
+## the porcelain) gives volume and is the only shadow caster; a minimal NEBULA fill keeps the
+## shadows night, not black. The forming planet lights the palms with its own GOLD/MAGMA glow
+## (omni at the planet, energy with heat and formation).
+## Levels grow with the awakening (GenesisChoreography.light_levels), so seek/pause are exact.
+## `environment` (set by the world before add_child): only `ambient_light_energy` is written, and
+## only when it changes (GenesisEnvironment owns exposure, fog and sky per mode). Directional
+## lights use light_volumetric_fog_energy <= GenesisEnvironment.DIRECTIONAL_FOG_ENERGY (they turn
+## the whole froxel volume milky); the planet glow gives the haze its body.
+
+## Directions: from the light towards the scene (MIKU's heart).
+const BACK_DIR := Vector3(0.05, -0.28, 1.0)
+const RIM_DIR := Vector3(-0.85, -0.45, 0.6)
+const KEY_DIR := Vector3(0.9, -0.5, -0.28)
+const FILL_DIR := Vector3(-0.4, 0.35, -1.0)
+const BACK_COLOR := Palette.DUSK_ROSE
+## The warm backlight drifts from rose towards gold as the planet heats (creation light).
+const BACK_GOLD_SHARE := 0.28
+const RIM_COLOR := Palette.ICE
+const KEY_COLOR := Palette.PEARL
+const FILL_COLOR := Palette.NEBULA
+## Planet glow: colour, reach and falloff; how much it scatters in the volumetric haze.
+const PLANET_COLOR := Palette.GOLD
+const PLANET_HOT_COLOR := Palette.MAGMA
+const PLANET_RANGE := 7.5
+const PLANET_ATTENUATION := 1.6
+const PLANET_FOG := 0.6
+const PLANET_SPECULAR := 0.35
+## Directional haze energy (<= GenesisEnvironment.DIRECTIONAL_FOG_ENERGY).
+const DIRECTIONAL_FOG := 0.04
+## Key shadow (the only caster): reach covers MIKU, the hands and the planet from every hero
+## shot; soft blur and normal bias keep the sculptures free of acne.
+const KEY_SHADOW_MAX_DISTANCE := 60.0
+const KEY_SHADOW_MAX_DISTANCE_2_SPLITS := 36.0
+const KEY_SHADOW_BLUR := 1.6
+const KEY_SHADOW_BLUR_2_SPLITS := 2.2
+const KEY_SHADOW_NORMAL_BIAS := 1.4
+
+var environment: Environment
+
+var back: DirectionalLight3D
+var rim: DirectionalLight3D
+var key: DirectionalLight3D
+var fill: DirectionalLight3D
+var planet_glow: OmniLight3D
+
+var _levels := {}
+var _ambient_written := -1.0
+
+
+func _ready() -> void:
+	back = _directional("Back", BACK_COLOR, BACK_DIR)
+	rim = _directional("Rim", RIM_COLOR, RIM_DIR)
+	key = _directional("Key", KEY_COLOR, KEY_DIR)
+	fill = _directional("Fill", FILL_COLOR, FILL_DIR)
+	# The backlight faces the camera: its specular would paint a hot sheen over the front of the
+	# stone and porcelain. Keep it low; the rim and sheen of the materials do the edge work.
+	back.light_specular = 0.25
+	fill.light_specular = 0.0
+	# The key is the only shadow caster: in the haze its shadows draw dark shafts across the sky
+	# (the hands and MIKU cut long black bands). It lights surfaces only; the haze gets the others.
+	key.light_volumetric_fog_energy = 0.0
+	planet_glow = OmniLight3D.new()
+	planet_glow.name = "PlanetGlow"
+	planet_glow.position = GenesisLayout.PLANET_CENTER
+	planet_glow.light_color = PLANET_COLOR
+	planet_glow.omni_range = PLANET_RANGE
+	planet_glow.omni_attenuation = PLANET_ATTENUATION
+	planet_glow.light_specular = PLANET_SPECULAR
+	planet_glow.light_volumetric_fog_energy = PLANET_FOG
+	planet_glow.shadow_enabled = false
+	planet_glow.light_energy = 0.0
+	add_child(planet_glow)
+	Quality.profile_changed.connect(_on_quality)
+	_on_quality(Quality.profile)
+	Simulation.world_rebuilt.connect(_on_world_rebuilt)
+	_update()
+
+
+func _process(_delta: float) -> void:
+	_update()
+
+
+func _update() -> void:
+	var g := Simulation.genesis
+	var t := Simulation.time
+	GenesisChoreography.light_levels(g, t, _levels)
+	var heat := GenesisChoreography.planet_heat(g, t)
+	back.light_energy = _levels["back"]
+	back.light_color = BACK_COLOR.lerp(Palette.GOLD, BACK_GOLD_SHARE * heat)
+	rim.light_energy = _levels["rim"]
+	key.light_energy = _levels["key"]
+	fill.light_energy = _levels["fill"]
+	var pe := float(_levels["planet"])
+	planet_glow.light_energy = pe
+	planet_glow.light_color = PLANET_COLOR.lerp(PLANET_HOT_COLOR, 0.35 * heat)
+	planet_glow.visible = pe > 0.002
+	if environment == null:
+		return
+	var amb := float(_levels["ambient"])
+	if not is_equal_approx(amb, _ambient_written):
+		_ambient_written = amb
+		environment.ambient_light_energy = amb
+
+
+## Levels last computed: back, rim, key, fill, ambient, planet (tests/debug).
+func levels() -> Dictionary:
+	return _levels
+
+
+func _on_world_rebuilt() -> void:
+	_ambient_written = -1.0
+	_update()
+
+
+func _directional(n: String, color: Color, dir: Vector3) -> DirectionalLight3D:
+	var l := DirectionalLight3D.new()
+	l.name = n
+	l.light_color = color
+	l.light_energy = 0.0
+	l.light_volumetric_fog_energy = DIRECTIONAL_FOG
+	l.shadow_enabled = false
+	l.transform = Transform3D(Basis.looking_at(dir.normalized(), Vector3.UP if absf(dir.normalized().y) < 0.99 else Vector3.BACK), Vector3.ZERO)
+	add_child(l)
+	return l
+
+
+func _on_quality(profile: Dictionary) -> void:
+	var splits := int(profile.get("shadow_splits", 4))
+	key.shadow_enabled = bool(profile.get("shadows", true))
+	key.directional_shadow_mode = LightRig.shadow_mode_for(splits)
+	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DISTANCE_2_SPLITS if splits == 2 else KEY_SHADOW_MAX_DISTANCE
+	key.shadow_blur = KEY_SHADOW_BLUR_2_SPLITS if splits == 2 else KEY_SHADOW_BLUR
+	key.shadow_normal_bias = KEY_SHADOW_NORMAL_BIAS
