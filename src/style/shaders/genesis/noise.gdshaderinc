@@ -93,6 +93,43 @@ vec3 k_voronoi(vec3 p, float jitter) {
 	return vec3(sqrt(f1), sqrt(f2), id);
 }
 
+// Like k_voronoi, but also returns the hash of the SECOND nearest cell: (F1, F2, id1, id2). The pair
+// (id1, id2) names the border between two cells, so k_edge_hash() gives every border its own value
+// (select only some cracks, seal others) — breaks the "every border is a line" grid look.
+vec4 k_voronoi2(vec3 p, float jitter) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	float f1 = 8.0;
+	float f2 = 8.0;
+	float id1 = 0.0;
+	float id2 = 0.0;
+	for (int z = -1; z <= 1; z++) {
+		for (int y = -1; y <= 1; y++) {
+			for (int x = -1; x <= 1; x++) {
+				vec3 g = vec3(float(x), float(y), float(z));
+				vec3 h = k_hash33(i + g);
+				vec3 r = g + 0.5 + (h - 0.5) * jitter - f;
+				float d = dot(r, r);
+				if (d < f1) {
+					f2 = f1;
+					id2 = id1;
+					f1 = d;
+					id1 = h.z;
+				} else if (d < f2) {
+					f2 = d;
+					id2 = h.z;
+				}
+			}
+		}
+	}
+	return vec4(sqrt(f1), sqrt(f2), id1, id2);
+}
+
+// Stable 0..1 value of the border between two cells (symmetric in the pair).
+float k_edge_hash(float id1, float id2) {
+	return k_hash12(vec2(min(id1, id2), max(id1, id2)) * 113.7 + 1.3);
+}
+
 // Pin-point stars on a 3D grid (one cell lookup, no neighbours): returns brightness 0..1.
 // `p` in cell units; `density` = probability a cell holds a star; `radius` in cell units, never
 // thinner than ~0.8 of a pixel (`px` = one pixel in cell units) so they do not shimmer.
