@@ -55,12 +55,8 @@ func set_genesis(on: bool) -> void:
 	marker.visible = not on
 	seal.visible = on
 	label.theme_type_variation = &"SealText" if on else &"BadgeText"
-	sub.theme_type_variation = &"WordFaint" if on else &"DataDim"
+	sub.theme_type_variation = &"NoteFaint" if on else &"DataDim"
 	sub.text = ("·  " + SUBTEXT_GENESIS) if on else ("·  " + SUBTEXT)
-	if on:
-		sub.add_theme_font_override("font", UiTheme.font_sans(400, 1))
-	else:
-		sub.remove_theme_font_override("font")
 
 
 func _draw_seal() -> void:

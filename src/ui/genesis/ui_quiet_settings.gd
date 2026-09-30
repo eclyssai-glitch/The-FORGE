@@ -27,7 +27,7 @@ func _init() -> void:
 	name = "GenesisSettings"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_theme_constant_override("separation", 6)
-	toggle_button = UiGlyphButton.new(&"settings", "SettingsToggle", 6.0)
+	toggle_button = UiGlyphButton.new(&"settings", "SettingsToggle", 7.0)
 	toggle_button.toggle_mode = true
 	toggle_button.size_flags_horizontal = Control.SIZE_SHRINK_END
 	toggle_button.toggled.connect(set_open)
@@ -42,7 +42,7 @@ func _init() -> void:
 	var v := UiKit.vbox(10)
 	card.add_child(v)
 
-	v.add_child(UiKit.label("quality", &"WordFaint"))
+	v.add_child(UiKit.label("quality", &"NoteFaint"))
 	var qrow := UiKit.hbox(0)
 	qrow.name = "Quality"
 	v.add_child(qrow)
@@ -56,7 +56,7 @@ func _init() -> void:
 
 	var crow := UiKit.hbox(8)
 	v.add_child(crow)
-	var cl := UiKit.label("cinematic camera", &"WordFaint")
+	var cl := UiKit.label("cinematic camera", &"NoteFaint")
 	cl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	crow.add_child(cl)
@@ -73,7 +73,7 @@ func _init() -> void:
 	grid.add_theme_constant_override("v_separation", 4)
 	v.add_child(grid)
 	for vol: Array in VOLUMES:
-		var l := UiKit.label(String(vol[1]), &"WordFaint")
+		var l := UiKit.label(String(vol[1]), &"NoteFaint")
 		l.custom_minimum_size = Vector2(84, 0)
 		grid.add_child(l)
 		var s := UiHairlineSlider.new()
@@ -83,9 +83,8 @@ func _init() -> void:
 		grid.add_child(s)
 		sliders[vol[0]] = s
 
-	var keys := UiKit.label(KEYS, &"WordFaint")
+	var keys := UiKit.label(KEYS, &"NoteFaint")
 	keys.name = "Keys"
-	keys.add_theme_font_override("font", UiTheme.font_sans(400, 1))
 	v.add_child(keys)
 
 

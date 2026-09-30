@@ -188,12 +188,21 @@ func _draw() -> void:
 	var vp := get_viewport_rect().size
 	var observatory := Session.mode == SessionState.Mode.OBSERVATORY
 	var title_font := get_theme_font(&"font", &"Word")
-	var kind_font := get_theme_font(&"font", &"WordFaint")
+	var kind_font := get_theme_font(&"font", &"NoteFaint")
 	var fs := get_theme_font_size(&"font_size", &"Word")
 	var line_h := title_font.get_height(fs)
+	# Obstacles: every body on screen (its disc) and the open card.
+	var discs: Array[Rect2] = []
+	for id: StringName in _state:
+		if bool(_state[id]["seen"]):
+			discs.append(_disc(_state[id]))
+	var card_rect := Rect2()
+	if card and card.is_visible_in_tree():
+		card_rect = card.get_global_rect()
+		card_rect.position -= get_global_rect().position
 	var placed: Array[Rect2] = []
 	var ids: Array = _state.keys()
-	# Nearest to the bottom first: they keep their natural place, the others are nudged up.
+	# Nearest to the bottom first: they keep their natural place, the others move.
 	ids.sort_custom(func(a: StringName, b: StringName) -> bool:
 		return (_state[a]["pos"] as Vector2).y > (_state[b]["pos"] as Vector2).y)
 	for id: StringName in ids:
@@ -205,32 +214,20 @@ func _draw() -> void:
 		var title := String(info.get("title", String(id)))
 		var kind := kind_word(info) if observatory else ""
 		var glyph := UiGlyphs.kind_glyph(String(info.get("kind_name", ""))) if observatory else &""
-		var pos: Vector2 = st["pos"]
-		var side := 1.0 if pos.x >= vp.x * 0.5 else -1.0
-		var dir := Vector2(side * 0.7071, -0.7071)
-		var start := pos + dir * (float(st["r"]) + 5.0)
-		var knee := start + dir * Palette.UI_LEADER
 		var text_w := title_font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		if kind != "":
 			text_w = maxf(text_w, kind_font.get_string_size(kind, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
 		var glyph_w := (GLYPH_R * 2.0 + 8.0) if glyph != &"" else 0.0
 		var block := Vector2(glyph_w + text_w, line_h * (2.0 if kind != "" else 1.0) + (LINE_GAP if kind != "" else 0.0))
-		var rect := _label_rect(knee, side, block, line_h)
-		for _i in 4:
-			var hit := false
-			for r in placed:
-				if r.grow(3.0).intersects(rect):
-					hit = true
-					break
-			if not hit:
-				break
-			knee.y -= block.y + 4.0
-			rect = _label_rect(knee, side, block, line_h)
+		var lay := place_label(st["pos"], float(st["r"]), block, line_h, vp, placed, discs, _disc(st))
+		var rect: Rect2 = lay["rect"]
 		placed.append(rect)
-		var end := knee + Vector2(side * Palette.UI_LEADER_RUN, 0.0)
+		# Under the open card a label steps back (the card is the focus).
+		if card_rect.size != Vector2.ZERO and card_rect.grow(4.0).intersects(rect):
+			a *= 0.18
 		var thread := Palette.UI_THREAD
 		thread.a *= a
-		draw_polyline(PackedVector2Array([start, knee, end]), thread, 1.0, true)
+		draw_polyline(PackedVector2Array([lay["start"], lay["knee"], lay["end"]]), thread, 1.0, true)
 		var x := rect.position.x
 		var base := rect.position.y + title_font.get_ascent(fs)
 		if glyph != &"":
@@ -248,11 +245,48 @@ func _draw() -> void:
 	_draw_card_leader()
 
 
-## Text block rect for a leader ending at `knee` (+ the horizontal run) on `side`.
-func _label_rect(knee: Vector2, side: float, block: Vector2, line_h: float) -> Rect2:
-	var end_x := knee.x + side * (Palette.UI_LEADER_RUN + 6.0)
-	var x := end_x if side > 0.0 else end_x - block.x
-	return Rect2(Vector2(x, knee.y - line_h * 0.5), block)
+## Screen disc (as a rect) of a projected body state, with a small margin.
+static func _disc(st: Dictionary) -> Rect2:
+	var r := maxf(float(st["r"]), 3.0) + 4.0
+	return Rect2((st["pos"] as Vector2) - Vector2(r, r), Vector2(r, r) * 2.0)
+
+
+## Layout of one label for a body at `pos` (screen radius `r`): tries the outward side first (away
+## from the screen centre), then the other one, each at the natural height and nudged up/down, and
+## keeps the first place inside the screen margins that touches neither the labels already `placed`
+## nor the other bodies' `discs` (`own` is the body's own disc). Falls back to the natural place.
+## Returns {"start", "knee", "end": Vector2, "rect": Rect2, "side": float}.
+static func place_label(pos: Vector2, r: float, block: Vector2, line_h: float, vp: Vector2,
+		placed: Array[Rect2], discs: Array[Rect2], own: Rect2) -> Dictionary:
+	var outward := 1.0 if pos.x >= vp.x * 0.5 else -1.0
+	var step := block.y + 6.0
+	var first := {}
+	var screen := Rect2(Vector2.ONE * 8.0, vp - Vector2.ONE * 16.0)
+	for side: float in [outward, -outward]:
+		var dir := Vector2(side * 0.7071, -0.7071)
+		var start := pos + dir * (r + 5.0)
+		for k: float in [0.0, -1.0, 1.0, -2.0, 2.0]:
+			var knee := start + dir * Palette.UI_LEADER + Vector2(0.0, k * step)
+			var end_x := knee.x + side * Palette.UI_LEADER_RUN
+			var text_x := end_x + side * 6.0
+			var rect := Rect2(Vector2(text_x if side > 0.0 else text_x - block.x, knee.y - line_h * 0.5), block)
+			var lay := {"start": start, "knee": knee, "end": Vector2(end_x, knee.y), "rect": rect, "side": side}
+			if first.is_empty():
+				first = lay
+			if not screen.encloses(rect) or _hits(rect, placed, discs, own):
+				continue
+			return lay
+	return first
+
+
+static func _hits(rect: Rect2, placed: Array[Rect2], discs: Array[Rect2], own: Rect2) -> bool:
+	for o in placed:
+		if o.grow(3.0).intersects(rect):
+			return true
+	for d in discs:
+		if d != own and d.intersects(rect):
+			return true
+	return false
 
 
 func _text(font: Font, at: Vector2, text: String, fs: int, col: Color, a: float) -> void:

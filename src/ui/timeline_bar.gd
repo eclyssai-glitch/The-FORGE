@@ -38,21 +38,21 @@ func _ready() -> void:
 ## Duration and phase marks of the active scenario's timeline.
 func rebuild_marks() -> void:
 	duration = maxf(Simulation.duration(), 0.001)
-	marks = phase_marks(Simulation.timeline.events)
+	marks = phase_marks(Simulation.timeline.events, Simulation.scenario)
 	queue_redraw()
 
 
-## Phase-change points of `events` (sorted by time): replays them through a WorldState and records
-## each time the phase changes. Pure: used by the bar and by tests.
-static func phase_marks(events: Array[SimEvent]) -> Array[Dictionary]:
+## Phase-change points of `events` (sorted by time): replays them through a fresh state of
+## `scenario` and records each time the phase changes. Pure: used by the bar and by tests.
+static func phase_marks(events: Array[SimEvent], scenario: StringName = Scenario.ORIGIN_CHAMBER) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var w := WorldState.new()
-	var last := w.phase
+	var w := Scenario.new_state(scenario)
+	var last := w.phase_index()
 	for e in events:
 		w.apply(e)
-		if w.phase != last:
+		if w.phase_index() != last:
 			out.append({"time": e.time, "phase": w.phase_name()})
-			last = w.phase
+			last = w.phase_index()
 	return out
 
 

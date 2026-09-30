@@ -27,7 +27,7 @@ func _init() -> void:
 		var g: StringName = r[0]
 		sign.draw.connect(func() -> void: UiGlyphs.draw(sign, g, sign.size * 0.5, 4.5, Palette.UI_INK_SOFT))
 		h.add_child(sign)
-		h.add_child(UiKit.label(String(r[1]), &"WordSoft"))
-		h.add_child(UiKit.label("·", &"WordFaint"))
-		h.add_child(UiKit.label(String(r[2]), &"WordFaint"))
+		h.add_child(UiKit.label(String(r[1]), &"Note"))
+		h.add_child(UiKit.label("·", &"NoteFaint"))
+		h.add_child(UiKit.label(String(r[2]), &"NoteFaint"))
 		add_child(h)

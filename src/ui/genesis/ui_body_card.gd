@@ -47,7 +47,7 @@ func _init() -> void:
 	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	glyph.draw.connect(_draw_sign)
 	head.add_child(glyph)
-	kind_label = UiKit.label("", &"WordFaint")
+	kind_label = UiKit.label("", &"NoteFaint")
 	kind_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	kind_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(kind_label)
@@ -66,7 +66,7 @@ func _init() -> void:
 	v.add_child(summary_label)
 	var actions := UiKit.hbox(0)
 	v.add_child(actions)
-	focus_button = UiKit.button("FOCUS", &"WordButton")
+	focus_button = UiKit.button("FOCUS", &"WordLink")
 	focus_button.name = "Focus"
 	focus_button.pressed.connect(_on_focus)
 	actions.add_child(focus_button)
