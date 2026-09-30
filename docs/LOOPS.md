@@ -124,5 +124,5 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   relançadas a partir do contrato.
 - Estado: Fase A — game-engineer integrado (`e854114`, 217/217, smoke PASS nos dois cenários; ADR-014);
   art-director e sound-designer integrados. Fase B: game-engineer integrado (`9842659`, 263/263; smoke ORIGIN PASS 10/10);
-  procedural-modeler (Fase A) integrado; UI diegética (art-director), cena animada (animator) e refinamento das
+  procedural-modeler (Fase A) e UI diegética (art-director) integrados (299/299); cena animada (animator) e refinamento das
   esculturas (procedural-modeler) em andamento.

@@ -192,3 +192,9 @@ narrativo = f(`Simulation.genesis`, `Simulation.time`); ambiente via `MotionCloc
   `OrbitLine`, `PlanetSphere`, `AsteroidField`, `RelationThread`. Revisão do coordenador: silhueta de MIKU elegante
   (estátua alongada com vestido em sino) e mão esquerda (concha) boa; rosto de perto lê como manequim/alienígena
   (faixa na testa, vincos duros), braços finos demais, mão direita pouco expressiva → rodada de refinamento.
+- Fase B · art-director (UI) integrado: HUD por cenário (`src/ui/genesis/`), selo em anel, modos em três palavras,
+  transporte em arco que se revela, sussurros de evento, rótulos no espaço (contrato: raiz visual no grupo
+  `entity_<id>`, invisível até existir; metas `label_anchor` — obrigatória em `belt_memory`/`relations` — e
+  `label_radius`; bíblia §8), cartão flutuante, missão poética, volumes por bus. Kintsugi seletivo, magma em lago
+  de lava, crosta distante irregular, núcleo do céu com filamentos (verificado no style frame real `sf_01`; coração
+  ainda levemente cremoso — ajustar `core_intensity` contra a cena completa). 299/299; smoke ORIGIN PASS.
