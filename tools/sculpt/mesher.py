@@ -213,18 +213,22 @@ def _tri_quality(a, b, c):
 
 def decimate(V, F, target_faces: int, *, quantile: float = 0.35, min_dot: float = 0.2,
              min_quality: float = 0.03, max_valence: int = 12, length_weight: float = 0.02,
-             project=None):
+             project=None, importance=None):
     """Batched quadric-error edge collapse (Garland-Heckbert), fully vectorised.
 
     Each pass selects an independent set of cheapest edges (an edge is taken only when it is the
     cheapest edge in the 2-ring of both endpoints, which makes the touched stars disjoint), then
     rejects collapses that break the link condition, flip a face, create a sliver or raise valence
     too much. ``project(points) -> points`` optionally snaps new vertices back to the SDF surface.
+    ``importance(points) -> weights`` (>= 1) scales the error of each vertex: regions with a
+    higher weight keep proportionally more triangles (e.g. the face of a figure).
     """
     V = V.copy()
     F = F.copy()
     n = len(V)
     Q = _quadrics(V, F)
+    wv = np.ones(n) if importance is None else np.asarray(importance(V), dtype=np.float64)
+    Q *= wv[:, None]
     passes = 0
     stall = 0
     rejected = np.zeros(0, dtype=np.int64)  # edge keys rejected recently (skipped for a while)
@@ -237,7 +241,7 @@ def decimate(V, F, target_faces: int, *, quantile: float = 0.35, min_dot: float 
         Qe = Q[eu] + Q[ev]
         x, cost = _optimal(Qe, pu, pv)
         el2 = np.einsum("ij,ij->i", pv - pu, pv - pu)
-        cost = cost + length_weight * el2 * el2
+        cost = cost + length_weight * el2 * el2 * 0.5 * (wv[eu] + wv[ev])
         order = np.argsort(cost, kind="stable")
         rank = np.empty(len(order), dtype=np.int64)
         rank[order] = np.arange(len(order))
@@ -323,6 +327,7 @@ def decimate(V, F, target_faces: int, *, quantile: float = 0.35, min_dot: float 
         gu, gv = su[good], sv[good]
         V[gu] = sx[good]
         Q[gu] += Q[gv]
+        wv[gu] = np.maximum(wv[gu], wv[gv])
         remap = np.arange(n)
         remap[gv] = gu
         F = remap[F]
@@ -331,6 +336,48 @@ def decimate(V, F, target_faces: int, *, quantile: float = 0.35, min_dot: float 
     V, F = compact(V, F)
     log(f"decimate: {passes} passes -> {len(F)} faces")
     return V, F
+
+
+# --------------------------------------------------------------------------- local refinement
+
+class RadialWarp:
+    """Magnifies a ball of the model for marching cubes (finer effective grid there).
+
+    The grid lives in a warped space u; world = forward(u) = c + (u - c) * phi(r) / r with
+    phi'(r) = 1/m inside r0, blending smoothly (smoothstep) to 1 at r1, so ``forward`` never
+    expands distances: f(forward(u)) is still a distance *bound* in u-space and the narrow-band
+    culling stays conservative. Outside r1 the map is a pure radial shift by ``delta``.
+    Effective grid spacing: h / m inside r0, h beyond r1.
+    """
+
+    def __init__(self, centre, m: float, r0: float, r1: float):
+        self.c = np.asarray(centre, dtype=np.float64)
+        self.m, self.r0, self.r1 = float(m), float(r0), float(r1)
+        self.delta = self.r1 - self.phi(np.array([self.r1]))[0]
+
+    def phi(self, r):
+        r0, r1, a = self.r0, self.r1, 1.0 - 1.0 / self.m
+        w = r1 - r0
+        t = np.clip((r - r0) / w, 0.0, 1.0)
+        integ = np.where(r <= r0, 0.0, np.where(r >= r1, 0.5 * w + (r - r1), w * (t ** 3 - 0.5 * t ** 4)))
+        return r / self.m + a * integ
+
+    def forward(self, u):
+        q = u - self.c[None, :]
+        r = np.sqrt(np.einsum("ij,ij->i", q, q))
+        s = self.phi(r) / np.maximum(r, 1e-12)
+        s = np.where(r < 1e-9, 1.0 / self.m, s)
+        return self.c[None, :] + q * s[:, None]
+
+    def sdf(self, f):
+        def g(u):
+            return f(self.forward(u))
+        return g
+
+    def bounds(self, lo, hi):
+        """Box in u-space that maps onto (a superset of) the world box [lo, hi]."""
+        return np.asarray(lo, float) - self.delta, np.asarray(hi, float) + self.delta
+
 
 
 # --------------------------------------------------------------------------- surface attributes
@@ -393,10 +440,15 @@ def write_obj(path: str, V, N, C, F, header: str) -> int:
 
 
 def bake(f, lo, hi, h: float, target_faces: int, ao_steps, ao_strength: float = 1.0,
-         decimate_kw=None):
-    """Full pipeline for one sculpture. Returns dict with V, N, C, F and stats."""
+         decimate_kw=None, warp=None):
+    """Full pipeline for one sculpture. Returns dict with V, N, C, F and stats. ``warp`` (a
+    ``RadialWarp``) refines the marching-cubes grid locally."""
     t0 = time.time()
-    vol, origin, mask = sample_narrow_band(f, lo, hi, h)
+    if warp is not None:
+        lo, hi = warp.bounds(lo, hi)
+        vol, origin, mask = sample_narrow_band(warp.sdf(f), lo, hi, h)
+    else:
+        vol, origin, mask = sample_narrow_band(f, lo, hi, h)
     # every face of the grid box must be outside the shape (closed mesh)
     for axis in range(3):
         for side in (0, -1):
@@ -404,6 +456,8 @@ def bake(f, lo, hi, h: float, target_faces: int, ao_steps, ao_strength: float = 
             assert not face.any(), f"shape touches the grid bounds (axis {axis}, side {side})"
     V, F = marching_cubes(vol, origin, h, mask)
     del vol, mask
+    if warp is not None:
+        V = warp.forward(V)
     log(f"marching cubes: {len(V)} verts {len(F)} faces ({time.time() - t0:.1f}s)")
     V, F, dropped = keep_largest_component(V, F)
     if dropped:

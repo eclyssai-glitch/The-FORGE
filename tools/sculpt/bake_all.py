@@ -82,7 +82,9 @@ def main(argv=None):
         h = spec["h"] * (2.2 if args.quick else 1.0)
         faces = spec["faces"] // (3 if args.quick else 1)
         lo, hi = tight_bounds(f, *spec["search"], h=spec["h"] * 6, pad=spec["h"] * 12)
-        res = bake(f, lo, hi, h, faces, spec["ao"])
+        extra = miku.bake_spec() if spec["module"] == "miku" else {}
+        kw = {"importance": extra["importance"]} if "importance" in extra else None
+        res = bake(f, lo, hi, h, faces, spec["ao"], warp=extra.get("warp"), decimate_kw=kw)
         V, N, C, F = res["V"], res["N"], res["C"], res["F"]
         st = res["stats"]
         assert st["boundary_edges"] == 0 and st["nonmanifold_edges"] == 0, st

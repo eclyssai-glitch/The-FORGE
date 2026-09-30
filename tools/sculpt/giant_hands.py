@@ -34,20 +34,24 @@ POSE_LEFT = {
 }
 
 POSE_RIGHT = {
-    "arch": 0.22,
+    # the sculptor's gesture: the index leads, gently curved; middle, ring and little follow in a
+    # cascade of growing flexion and a slight fan; the thumb comes forward in opposition, under
+    # the index, as if pinching the clay
+    "arch": 0.26,
     "fingers": {
-        "index": (0.14, 0.05, (0.10, 0.20, 0.12)),
-        "middle": (0.02, 0.00, (0.26, 0.46, 0.26)),
-        "ring": (-0.09, -0.07, (0.32, 0.52, 0.28)),
-        "little": (-0.21, -0.16, (0.38, 0.58, 0.30)),
+        "index": (0.12, 0.06, (0.12, 0.2, 0.13)),
+        "middle": (0.01, 0.0, (0.3, 0.44, 0.28)),
+        "ring": (-0.1, -0.07, (0.46, 0.62, 0.36)),
+        "little": (-0.21, -0.15, (0.62, 0.76, 0.42)),
     },
     "thumb": {
-        "cmc": (0.80, 0.92, -0.32),
-        "dir": (0.52, 0.74, -0.58),
-        "dorsal": (0.75, -0.1, 0.65),
-        "flex": (0.30, 0.34),
+        "cmc": (0.80, 0.92, -0.34),
+        "dir": (0.3, 0.86, -0.42),
+        "dorsal": (0.9, -0.15, 0.4),
+        "flex": (0.34, 0.44),
     },
     "forearm_dir": (-0.10, -1.0, 0.30),
+    "forearm_len": 2.4,          # short: the wrist dissolves into the mist soon after
     "finger_k": 0.28,
     "thumb_k": 0.42,
 }
