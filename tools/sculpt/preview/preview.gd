@@ -1,6 +1,7 @@
 extends SceneTree
 ## Offline sculpt preview: loads an OBJ (v x y z r g b / vn / f a//a) and renders views to PNG.
-## args: --obj=PATH --out=DIR --views=JSON_PATH
+## args: --obj=PATH --out=DIR --views=JSON_PATH [--ao=0..1 (vertex AO amount, default 0.85)]
+##       [--shadows=0 (diagnostics: no shadow maps, to tell shading from shadow artefacts)]
 
 var _args := {}
 
@@ -109,7 +110,7 @@ void fragment() {
 			# hard light from the camera side, slightly above: exposes every crease
 			key_dir = (fwd + Vector3.DOWN * 0.8 - right * 0.25).normalized()
 			env.ambient_light_energy = 0.12
-			_set_light(lights[0], key_dir, Color(1.0, 0.96, 0.9), 1.5, true, 0.0)
+			_set_light(lights[0], key_dir, Color(1.0, 0.96, 0.9), 1.5, true, 1.0)
 			_set_light(lights[1], fwd, Color(1, 1, 1), 0.0, false, 0.0)
 			_set_light(lights[2], fwd, Color(1, 1, 1), 0.0, false, 0.0)
 		elif mode == "soft_side":
@@ -117,7 +118,7 @@ void fragment() {
 			fill_dir = (fwd * 0.8 - right * 0.6 + Vector3.DOWN * 0.1).normalized()
 			rim_dir = (-fwd * 1.0 - right * 0.4 + Vector3.DOWN * 0.3).normalized()
 			env.ambient_light_energy = 0.3
-			_set_light(lights[0], key_dir, Color(1.0, 0.93, 0.86), 1.25, true, 6.0)
+			_set_light(lights[0], key_dir, Color(1.0, 0.93, 0.86), 1.25, true, 3.0)
 			_set_light(lights[1], fill_dir, Color(0.78, 0.84, 1.0), 0.35, false, 0.0)
 			_set_light(lights[2], rim_dir, Color(0.7, 0.8, 1.0), 0.9, false, 0.0)
 		else:
@@ -125,7 +126,7 @@ void fragment() {
 			rim_dir = (-fwd * 1.0 - right * 0.6 + Vector3.DOWN * 0.2).normalized()
 			fill_dir = (fwd * 0.6 - right * 0.8).normalized()
 			env.ambient_light_energy = 0.25
-			_set_light(lights[0], key_dir, Color(1.0, 0.92, 0.82), 1.35, true, 1.5)
+			_set_light(lights[0], key_dir, Color(1.0, 0.92, 0.82), 1.35, true, 1.8)
 			_set_light(lights[1], rim_dir, Color(0.66, 0.78, 1.0), 1.3, false, 0.0)
 			_set_light(lights[2], fill_dir, Color(0.75, 0.8, 0.95), 0.3, false, 0.0)
 		for i in 6:
@@ -138,11 +139,17 @@ void fragment() {
 	quit(0)
 
 
-func _set_light(l: DirectionalLight3D, dir: Vector3, c: Color, e: float, shadow: bool, angle: float) -> void:
+## Shadows are PCF softened with shadow_blur (like the game's LightRig), never PCSS: a non-zero
+## light_angular_distance samples the penumbra with per-pixel rotated noise, and a single captured
+## frame (no TAA to average it) shows it as a regular dot/checker pattern in every penumbra (chin
+## on the neck, nose on the cheek, between the fingers) that is not in the mesh.
+func _set_light(l: DirectionalLight3D, dir: Vector3, c: Color, e: float, shadow: bool, blur: float) -> void:
 	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
 	l.look_at_from_position(Vector3.ZERO, dir, up)
 	l.light_color = c
 	l.light_energy = e
-	l.shadow_enabled = shadow and e > 0.0
-	l.light_angular_distance = angle
+	l.shadow_enabled = shadow and e > 0.0 and _args.get("shadows", "1") != "0"
+	l.light_angular_distance = 0.0
+	l.shadow_blur = blur
+	l.shadow_normal_bias = 2.0
 	l.visible = e > 0.0

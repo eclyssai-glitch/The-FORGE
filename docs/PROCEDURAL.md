@@ -368,6 +368,18 @@ forte, fill fraco. Regerar: `tools/sculpt/preview/render_previews.sh [MESH_DIR] 
 Godot descartável próprio em `tools/sculpt/preview/`, ignorado pelo projeto principal via
 `.gdignore`; câmeras em `views.py`).
 
+Sombras das previews = as do jogo (`LightRig`): **PCF** suavizado por `shadow_blur` (dura 1,0,
+estúdio 1,8, lateral suave 3,0), `shadow_normal_bias` 2,0, `soft_shadow_filter_quality` 3 e
+`light_angular_distance` **sempre 0**. Correção do Loop 4: as previews usavam PCSS (ângulo 6° na luz
+suave, 1,5° no estúdio); o PCSS amostra a penumbra com ruído rotacionado por pixel e, num quadro
+único sem TAA, esse ruído aparecia como pontilhado/quadriculado regular em toda penumbra (queixo
+sobre o pescoço, nariz sobre a bochecha, entre os dedos das mãos gigantes). Diagnóstico: o padrão
+continua com AO desligado, some com sombra desligada ou com PCF, e não depende de bias. A malha foi
+inspecionada na mesma região (pescoço/mandíbula e bochecha): qualidade de triângulo p1 0,39/0,49,
+normal do vértice × normal da face ≥ 0,79 (p0,1), AO sem ruído entre vizinhos. Malhas **não** mudaram.
+Resíduo conhecido, sem efeito visível (sub-pixel): lascas de marching cubes sem área — MIKU 26
+faces de área ~0 e 20 com normal de vértice oposta à face (barra/mãos), mãos 4–8 e 5–19.
+
 Inspeção (refino do Loop 4): a faixa/vinco da testa sumiu; testa lisa, olhos fechados lidos como
 amêndoas serenas, perfil com nariz fino, lábios e queixo delicado, calota com coque baixo sem capuz.
 Limites conhecidos: sob luz dura e close extremo a linha dos cílios mostra leve serrilhado (feição
