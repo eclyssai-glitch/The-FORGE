@@ -124,5 +124,6 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   relançadas a partir do contrato.
 - Estado: Fase A — game-engineer integrado (`e854114`, 217/217, smoke PASS nos dois cenários; ADR-014);
   art-director e sound-designer integrados. Fase B: game-engineer integrado (`9842659`, 263/263; smoke ORIGIN PASS 10/10);
-  procedural-modeler (Fase A + refinamento `a5da39a`) e UI diegética (art-director) integrados (299/299); cena animada (animator) e correção
-  de artefato no pescoço de MIKU (procedural-modeler) em andamento.
+  procedural-modeler (Fase A + refinamento `a5da39a`), UI diegética (art-director) e cena animada (animator) integrados
+  (330/331 — 1 teste desatualizado; smoke GENESIS PASS 10/10). Em andamento: correção de NaN, teste, revisão do art-critic,
+  artefato no pescoço de MIKU; depois rodada de correção artística.

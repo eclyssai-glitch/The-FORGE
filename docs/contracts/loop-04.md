@@ -198,3 +198,10 @@ narrativo = f(`Simulation.genesis`, `Simulation.time`); ambiente via `MotionCloc
   `label_radius`; bíblia §8), cartão flutuante, missão poética, volumes por bus. Kintsugi seletivo, magma em lago
   de lava, crosta distante irregular, núcleo do céu com filamentos (verificado no style frame real `sf_01`; coração
   ainda levemente cremoso — ajustar `core_intensity` contra a cena completa). 299/299; smoke ORIGIN PASS.
+- Fase B · animator integrado: 8 módulos GENESIS + `GenesisLayout`/`GenesisChoreography`/`GenesisShots`, 8 style
+  frames, smoke GENESIS PASS (10/10, âncoras hands/miku/planet). Pendências: (1) NaN em shaders (`pow` de base com
+  sinal em `miku_gown`, `miku_hair`, `relation_thread`, `ring_skill`; `nv` sem clamp no gown) → véu do vestido
+  desligado (`Miku.GOWN_VEIL`) — bloqueante para Windows; (2) `test_scenario_composition::test_smoke_audio_report`
+  ("GENESIS without anchors fails") desatualizado. Revisão do coordenador nos style frames integrados: salto real
+  (herói e berço fortes); corpo/vestido leem como plástico/látex brilhante; mão direita é silhueta preta;
+  cabelo "eletrizado"; tronco ainda manequim; UNIVERSE vazio; cinturão fraco.
