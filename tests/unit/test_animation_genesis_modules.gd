@@ -157,7 +157,7 @@ func test_miku_wakes() -> void:
 	assert_true(miku.seed_motes.visible, "only the ember on her brow")
 	assert_eq(miku.body.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "no self-shadow steps on MIKU")
 	var short := miku.hair_pivot.scale.x
-	await _seek(GenesisScript.T_AWAKEN + 2.5)
+	await _seek(GenesisScript.T_AWAKEN + 2.0)
 	assert_true(miku.body.visible)
 	assert_gt(miku.body.transparency, 0.05, "revealed by the seed's light, not popped in")
 	assert_gt(miku.seed_light.omni_range, Miku.SEED_LIGHT_RANGE + 1.0, "the seed's light blooms out")

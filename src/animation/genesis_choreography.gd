@@ -15,7 +15,7 @@ const AWAKEN_DUR := 5.0
 ## comes out of the dark after REVEAL_DELAY over REVEAL_DUR (never a dark humanoid silhouette).
 const SEED_DORMANT := 0.45
 const REVEAL_DELAY := 1.1
-const REVEAL_DUR := 2.4
+const REVEAL_DUR := 1.8
 ## The seed's own light blooms out of it while it reveals her (rise, fall in seconds).
 const SEED_BLOOM_RISE := 1.5
 const SEED_BLOOM_FALL := 5.5
