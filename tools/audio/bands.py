@@ -3,7 +3,9 @@
 Prints, for FILE:
   1. EBU R128 split at 300 Hz (ffmpeg ebur128 on a zero-phase 4th-order Butterworth split,
      |LP|^2 + |HP|^2 = 1): integrated loudness of the part below and above 300 Hz.
-  2. Unweighted band energy (dBFS RMS, both channels) per time window, bands
+  2. Max short-term loudness (ebur128 S, 3 s blocks) of each time window: blocks ending from
+     1 s after the window start to 1 s after its end (the window's sound, not the previous one).
+  3. Unweighted band energy (dBFS RMS, both channels) per time window, bands
      SUB 20-35 · LOW 35-80 · BODY 80-200 · WARM 110-220 · MID 200-2k · HIGH 2k-16k.
      WARM overlaps BODY on purpose: it is the harmonic weight a notebook speaker still plays.
 Windows default to the GENESIS big moments; `--windows a-b,c-d` overrides.
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -53,6 +56,18 @@ def split300(sr: int, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return lo, hi
 
 
+def ebur128_short_term(path: str) -> list[tuple[float, float]]:
+    """(t, S) per 100 ms frame from ffmpeg ebur128 (t = end of the 3 s block)."""
+    p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-v", "verbose", "-i", path,
+                        "-af", "ebur128=framelog=verbose", "-f", "null", "-"],
+                       capture_output=True, text=True, check=True)
+    out = []
+    for m in re.finditer(r"t:\s*([\d.]+).*?S:\s*(-?[\d.]+|-inf)", p.stderr):
+        if m.group(2) != "-inf":
+            out.append((float(m.group(1)), float(m.group(2))))
+    return out
+
+
 def ebur128_integrated(sr: int, x: np.ndarray) -> float:
     with tempfile.TemporaryDirectory() as d:
         tmp = os.path.join(d, "b.wav")
@@ -83,6 +98,7 @@ def analyse(path: str, windows) -> dict:
            "windows": []}
     dur = x.shape[0] / sr
     power = {name: band_power(sr, x, f0, f1) for name, f0, f1 in BANDS}
+    st = ebur128_short_term(path)
     for a, b, label in windows:
         if a >= dur:
             continue
@@ -90,6 +106,8 @@ def analyse(path: str, windows) -> dict:
         row = {"label": label, "from": a, "to": b}
         for name, _, _ in BANDS:
             row[name] = float(10 * np.log10(np.mean(power[name][s]) + 1e-20))
+        vals = [v for t, v in st if a + 1.0 <= t < min(b, dur) + 1.0]
+        row["S_max"] = max(vals) if vals else float("nan")
         out["windows"].append(row)
     return out
 
@@ -115,11 +133,11 @@ def main(argv: list[str]) -> int:
     print(f"{os.path.basename(path)}: I {r['I']:.1f} LUFS  < 300 Hz {r['I_below_300']:.1f} LUFS  "
           f"> 300 Hz {r['I_above_300']:.1f} LUFS  (below - above {r['I_below_300'] - r['I_above_300']:+.1f} LU)")
     names = [b[0] for b in BANDS]
-    print("| window | " + " | ".join(names) + " | BODY-MID | WARM-LOW |")
-    print("|---|" + "---:|" * (len(names) + 2))
+    print("| window | S max (LUFS) | " + " | ".join(names) + " | BODY-MID | WARM-LOW |")
+    print("|---|" + "---:|" * (len(names) + 3))
     for w in r["windows"]:
         cells = " | ".join(f"{w[n]:.1f}" for n in names)
-        print(f"| {w['label']} {w['from']:g}-{w['to']:g} s | {cells} | {w['BODY'] - w['MID']:+.1f} | "
+        print(f"| {w['label']} {w['from']:g}-{w['to']:g} s | {w['S_max']:.1f} | {cells} | {w['BODY'] - w['MID']:+.1f} | "
               f"{w['WARM'] - w['LOW']:+.1f} |")
     if js:
         with open(js, "w") as f:
