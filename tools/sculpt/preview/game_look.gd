@@ -176,6 +176,7 @@ func _run() -> void:
 		RenderingServer.force_draw()
 		await process_frame
 		var img := get_root().get_texture().get_image()
-		img.save_png(String(_args["out"]).path_join(String(v["name"]) + ".png"))
+		# JPEG: the nebula sky makes these proofs large as PNG
+		img.save_jpg(String(_args["out"]).path_join(String(v["name"]) + ".jpg"), 0.9)
 		print("saved ", v["name"])
 	quit(0)

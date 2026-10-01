@@ -1,9 +1,11 @@
-"""MIKU -- original sacred statue (SDF). Brancusi-like serenity, art-deco marble: ~9 heads tall,
-oval head bowed forward, long neck, closed eyes suggested by relief, no detailed mouth, discreet
-dignified torso, long arms opening forward and down, slender joined-finger hands, light
-contrapposto, and from the waist a long bell gown whose hem ends open with a soft irregular
-edge (it dissolves into dust in the shader/particles). No feet, no legs, no loose hair: only a
-smooth gathered hair cap that flows back into a short tapering knot where runtime ribbons start.
+"""MIKU -- original sacred statue (SDF), votive statuary (korai, art-deco marble), never a
+mannequin: oval head bowed forward, long neck, closed eyes as convex lid masses under a brow
+plane, lips as volumes; a sculpted hair MASS combed back in wavy locks into a coiled knot high
+on the back of the head, whose short tail is where the runtime ribbons of light take over;
+sloping shoulders with clavicles; a draped bodice (cowl swags, broad pleats, no modelled breasts)
+flowing without a waistband into a long bell gown whose hem ends open with a soft irregular edge
+(it dissolves into dust in the shader/particles); long arms opening forward and down, slender
+hands, light contrapposto. No feet, no legs.
 
 Mesh frame: +Y up, +Z front, origin = waist centre. Head top ~ +1.83, hem ~ -4.15 (6.0 tall).
 """
