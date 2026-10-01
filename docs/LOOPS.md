@@ -143,4 +143,11 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
 - Reprovação: parada longa; idle em loop; mão sem gesto causal; fio decorativo; planeta pronto; partícula gratuita;
   tween; erro = só cor/partícula; irritação genérica; câmera sem motivo; interação = botão; configuração = menu;
   movimento brusco/sem peso.
-- Estado: rodada 1 — implementação em paralelo (rig, interação/agente, personagem/mãos/fios, materiais).
+- Estado: rodada 1 — implementação em paralelo (rig, interação/agente, personagem/mãos/fios, materiais). Código de
+  rig/animação desta rodada = **PROTÓTIPO/SPIKE** (decisão do Owner): não consolidar matemática manual de ossos onde
+  o Godot tem equivalente nativo.
+- Gate antes da rodada 2 (decisão do Owner após auditoria de capacidades): sandbox local `/home/user/sandbox-loop5`
+  (branch local `sandbox/loop5-tooling` a partir de `b9b8672`, não enviado) com GodotPrompter parcial (3 skills, sem
+  hook) e Coding-Solo/godot-mcp fixado em `1209744` (PASS 6/6); fase 3 inspector de runtime só-dev; fase 4 pesquisa
+  da pilha nativa (SkeletonModifier3D/IK/SpringBone/AnimationTree). **Rodada 2 bloqueada até o Owner liberar o gate.**
+  mkdevkit/godot-mcp: candidato de segunda linha, não instalar.
