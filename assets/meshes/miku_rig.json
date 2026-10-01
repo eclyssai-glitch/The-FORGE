@@ -312,9 +312,9 @@
    "parent": 5,
    "side": 0,
    "tail": [
-    -0.023499,
-    1.715229,
-    0.258184
+    -0.034089,
+    1.740777,
+    0.188469
    ]
   },
   {
@@ -397,7 +397,7 @@
     0.343151,
     0.937235
    ],
-   "blend_width": 0.1,
+   "blend_width": 0.16,
    "deform": true,
    "head": [
     0.365143,
@@ -1005,7 +1005,7 @@
     0.326865,
     0.945024
    ],
-   "blend_width": 0.1,
+   "blend_width": 0.16,
    "deform": true,
    "head": [
     -0.432609,
@@ -1711,17 +1711,17 @@
  "source_sha256": "79ab78ab3b2a4cbcb6ef1a944471eaaaee3bfa20780f9659867d46b5e6fc3217",
  "stats": {
   "influences_max": 4,
-  "influences_mean": 1.512,
+  "influences_mean": 1.521,
   "orphans": 0,
   "rest_pose_max_error": 1.3322676295501878e-15,
-  "rigid_vertices_share": 0.5328,
+  "rigid_vertices_share": 0.5291,
   "weight_sum_max_error": 2.220446049250313e-16
  },
  "triangles": 117998,
  "vertices": 59001,
  "vertices_per_bone": {
   "chest": 0,
-  "clavicle.L": 1385,
+  "clavicle.L": 1383,
   "clavicle.R": 933,
   "forearm.L": 2378,
   "forearm.R": 1389,
@@ -1749,7 +1749,7 @@
   "middle.tip.L": 0,
   "middle.tip.R": 0,
   "neck": 3198,
-  "ribcage": 3482,
+  "ribcage": 3481,
   "ring.0.L": 147,
   "ring.0.R": 185,
   "ring.1.L": 73,
@@ -1760,14 +1760,14 @@
   "skirt.0": 7397,
   "skirt.1": 19000,
   "skirt.2": 27723,
-  "spine": 2531,
+  "spine": 2529,
   "thumb.0.L": 345,
   "thumb.0.R": 173,
   "thumb.1.L": 442,
   "thumb.1.R": 182,
   "thumb.tip.L": 0,
   "thumb.tip.R": 0,
-  "upper_arm.L": 2525,
-  "upper_arm.R": 1376
+  "upper_arm.L": 2822,
+  "upper_arm.R": 1614
  }
 }

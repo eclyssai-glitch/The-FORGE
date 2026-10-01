@@ -35,7 +35,7 @@ FINGERS_MIKU = ("thumb", "index", "middle", "ring", "little")
 # blend widths (mesh units): how far each bone's influence spreads beyond its own region
 WIDTH = {
     "hips": 0.20, "spine": 0.15, "ribcage": 0.14, "neck": 0.09, "head": 0.07,
-    "clavicle": 0.10, "upper_arm": 0.10, "forearm": 0.07, "hand": 0.035,
+    "clavicle": 0.10, "upper_arm": 0.16, "forearm": 0.07, "hand": 0.035,
     "finger0": 0.022, "finger1": 0.018, "thumb0": 0.03, "thumb1": 0.02,
     "skirt.0": 0.40, "skirt.1": 0.50, "skirt.2": 0.55,
 }
@@ -46,7 +46,7 @@ J_CHEST = (0.0, 0.46, -0.03)
 J_RIBCAGE = (0.0, 0.62, -0.03)       # centre of the chest volume (chest_volume scales about it)
 J_NECK = (0.0, 0.92, -0.055)
 CLAV_HEAD = (0.06, 0.895, -0.02)      # sternoclavicular joint (x mirrored per side)
-HEAD_TOP = (0.0, 0.47, 0.075)         # head frame, above the crown
+HEAD_TOP = (0.0, 0.47, 0.0)           # head frame, above the crown (on +Y)
 # skirt chain: heights on the gown axis (pelvis frame), hem
 J_HIPS_Y = -0.18
 SKIRT_Y = (-0.62, -1.75, -2.90)

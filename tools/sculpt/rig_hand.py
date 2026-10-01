@@ -44,7 +44,7 @@ def build_skeleton():
     sk.add("wrist", None, origin, wrist_b, tail=origin + wrist_b[:, 1] * 1.0, width=WIDTH["wrist"])
     sk.add("palm", "wrist", origin, wrist_b, tail=pt(mcp_mid), width=WIDTH["palm"])
     pc = np.asarray(anchors["palm_center"], dtype=np.float64)
-    sk.add("palm_center", "palm", pc, frame(-palmar, dr(mcp_mid)), tail=pc - palmar * 0.5, deform=False)
+    sk.add("palm_center", "palm", pc, frame(palmar, dr(mcp_mid)), tail=pc + palmar * 0.5, deform=False)
     for f in CHAINS:
         pts, frs, _radii, tip = JOINTS[f]
         parent = "palm"

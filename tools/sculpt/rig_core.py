@@ -178,6 +178,17 @@ def solve_weights(V, F, labels, widths, smooth_passes=2):
 
 # --------------------------------------------------------------------------- skinning (check)
 
+def rot_local(euler):
+    """3x3 rotation from (x, y, z) radians in Godot's default Euler order (YXZ: R = Ry Rx Rz),
+    i.e. what ``Quaternion.from_euler`` / RigData.pose_local build."""
+    x, y, z = euler
+    cx, sx, cy, sy, cz, sz = np.cos(x), np.sin(x), np.cos(y), np.sin(y), np.cos(z), np.sin(z)
+    Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+    Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+    return Ry @ Rx @ Rz
+
+
 def global_rest(sk):
     """(n, 4, 4) global rest matrices."""
     M = np.zeros((len(sk), 4, 4))

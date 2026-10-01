@@ -50,6 +50,7 @@ func _setup() -> void:
 	_light(Vector3(0.7, -0.6, -0.7), Color(1.0, 0.93, 0.85), 1.3, true)
 	_light(Vector3(-0.8, -0.2, 0.9), Color(0.66, 0.78, 1.0), 0.9, false)
 	_light(Vector3(-0.6, -0.1, -0.8), Color(0.75, 0.8, 0.95), 0.35, false)
+	_light(Vector3(0.2, 1.0, 0.3), Color(0.8, 0.82, 0.9), 0.45, false)   # from below (backs of hands)
 
 
 func _light(dir: Vector3, c: Color, e: float, shadow: bool) -> void:
@@ -193,6 +194,20 @@ func _miku_shots() -> void:
 	mi.mesh = clay_mesh
 	await _shoot("rig_miku_rest", [front, q34])
 
+	# hair: HairRibbons built in the hair_root bone frame (+Y = sculpted exit tangent), held by a
+	# BoneAttachment3D -- it must follow every head pose below
+	var hr_rest := sk.get_bone_global_rest(_b(sk, "hair_root"))
+	var dir_mesh := (hr_rest.basis.y + Vector3(-0.25, 0.22, -0.94) * 1.5).normalized()
+	var neb := HairRibbons.nebula(Vector3.ZERO, hr_rest.basis.inverse() * dir_mesh, 7101, 10, 3.0)
+	var hair := MeshInstance3D.new()
+	hair.mesh = HairRibbons.build(neb["curves"], 0.05, 0.2, 40, Vector3.BACK, true, neb["links"], neb["groups"])
+	var hm := StandardMaterial3D.new()
+	hm.albedo_color = Color(0.55, 0.75, 1.0)
+	hm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	hm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	hair.material_override = hm
+	MikuRig.attach(rig, "hair_root", hair)
+
 	# head turned + tilted, nod; then looking up and back
 	sk.reset_bone_poses()
 	_g(sk, "neck", Vector3.UP, 0.35)
@@ -329,7 +344,7 @@ func _hand_shots() -> void:
 		sk.reset_bone_poses()
 		var close := {"thumb": 0.0, "index": -0.08, "middle": 0.0, "ring": 0.06, "little": 0.14}
 		for f: String in HandRig.FINGERS:
-			HandRig.pose_finger(rig, f, 0.42, float(close[f]))
+			HandRig.pose_finger(rig, f, 0.25, float(close[f]))
 		_l(sk, "thumb.0", Vector3(0.2, 0.0, -0.2 * zs))
 		await _shoot("rig_hand_%s_cup" % tag, [pv, tv])
 		# wrist flexed (palm towards the forearm) with the fingers relaxed
