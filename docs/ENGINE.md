@@ -141,13 +141,15 @@ Configuração pura (RefCounted), só com cores de `Palette`; bíblia §4 (luz),
   `TRIM_RANGE` 0,75–1,35) — o mundo aproxima exponencialmente (`smooth_toward`, `TRIM_TAU` 0,9 s), nunca salta;
   `exposure_trim_target()`; volta a 1 na recomposição. Só a exposição muda; o dono continua sendo o
   `GenesisEnvironment`. O `CameraDirector` é filho do mundo (`get_parent().call(&"set_exposure_trim", k)`).
-- **Diagnóstico do "salto ~48–50 s"** (gravação real `--from=42`, câmera cinematográfica, HIGH; luma média
-  por quadro com `signalstats`): não há descontinuidade de ambiente no GENESIS — a curva é contínua. Entre
-  T+46,5 e T+50 a luma cai ~20 % (49 → 39 em 0–255) e volta a 47 em T+52: é o plano `cue_g_belt`
-  (yaw 0,75) que tira o núcleo quente da nebulosa do quadro, seguido do cruzamento para `cue_g_threads`
-  (yaw −0,62); numa sequência de 1 quadro/2 s isso lê como salto. Correção cabe ao desenho dos planos
-  (animator), que pode também pedir `set_exposure_trim(~1,15)` durante o plano do cinturão. Depois de T+53 a
-  luma sobe de forma contínua (46 → 69 até o fim do respiro): o clímax iluminando.
+- **Diagnóstico do "salto ~48–50 s"** (tomada inteira real `tools/record_genesis.sh --resolution=960x540
+  --hud=off`, câmera cinematográfica, HIGH, 1823 quadros; luma média por quadro com `signalstats`): **nenhum
+  pop** — a maior variação entre quadros consecutivos é 2,1/255, no fade de entrada. A luma fica ~70 de T+15 a
+  T+38, desce de forma contínua até 41 em T+49,5 e volta a 69 no fim do respiro. A descida é composição: os
+  planos `cue_g_orbits`/`cue_g_belt` (yaw 0,32 → 0,75) tiram o núcleo quente da nebulosa do quadro, e o
+  cruzamento para `cue_g_threads` (yaw −0,62) passa pelo céu índigo; numa sequência de 1 quadro/2 s
+  (48,2 → 41,3 entre T+47,5 e T+49,5) isso lê como salto. Correção cabe ao desenho dos planos (animator), que
+  pode também pedir `set_exposure_trim(~1,15–1,25)` no plano do cinturão. O ambiente GENESIS não tem nada
+  dependente do tempo além do `motion_time` do céu (4 Hz) e o rig só escreve `ambient_light_energy`.
 - **Tonemap** AgX, exposição 1,0 (1,05 no UNIVERSE). **Glow** contido: limiar HDR 1,0, `glow_bloom` 0,
   escala HDR 1,8, teto de luminância 8, níveis 2–5 (halo largo e macio só em emissão verdadeira: semente,
   kintsugi, magma, pulsos); ligado também no LOW.

@@ -176,7 +176,11 @@ Opções: `--hud=on|off`, `--resolution=WxH` (janela, tela Xvfb e vídeo; padrã
 
 Prova (r1): `--until=12 --resolution=960x540` → `genesis_960x540_hud-on_preview.mp4`, 12,27 s, 368 quadros,
 `h264 960x540 30/1` + `aac 48000 2`, I −20,7 LUFS, LRA 12,0 LU, pico −8,0 dBFS; quadros em 1/4/8/11,5 s
-inspecionados (MIKU despertando no plano cinematográfico, legendas de fase, HUD, selo DEMO).
+inspecionados (MIKU despertando no plano cinematográfico, legendas de fase, HUD, selo DEMO;
+`docs/evidence/loop-04/engine-r1/record_preview12_frames.jpg`). Tomada inteira `--resolution=960x540 --hud=off`:
+1179 s de gravação, `genesis_960x540_hud-off.mp4` 60,77 s, 1823 quadros, 26,2 MB, `aac 48000 2`, I −21,2 LUFS,
+LRA 8,1 LU, pico −6,1 dBFS; tour `done t=60.52 sim=T+56.00 status=COMPLETE`; quadros em 2/25/48/58 s em
+`record_full_frames.jpg` (só o selo DEMO; a maior variação de luma entre quadros é 2,1/255 — `docs/ENGINE.md`).
 
 ## Qualidade das capturas
 
