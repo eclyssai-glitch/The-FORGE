@@ -82,3 +82,19 @@ Regras: escritor único por área; interfaces existentes preservadas (âncoras J
 - [P1] Subgrave: HPF 30–35 Hz nos SFX, recuo de 80–200 Hz da ambiência durante mãos/semente/magma/estável (EQ
   dinâmica ou ducking por banda), peso em harmônicos de 110–220 Hz (lê em alto-falante de notebook). Clímax sonoro
   em 53 s alinhado ao novo clímax visual. Remix contra a gravação do jogo real quando existir.
+
+## Integração da rodada 1
+
+- sound-designer (`cea3000`): HPF 33 Hz nos SFX, raiz harmônica 110–220 Hz, ambiência em stems `floor`/`air`
+  (`AudioStreamSynchronized`) com recuo de −8 dB só no floor nos eventos grandes (`LOW_RECESS`), clímax em 53 s
+  como pico da mix; prova reprodutível `tools/audio/record_proof.sh` + `bands.py`.
+- art-director (`4672a05`): shaders NaN-safe + `test_style_shader_safety.gd`; porcelana fosca com Fresnel liso e
+  dissolução em grãos abaixo de `dissolve_top`; vestido só faces frontais; pedra-noite legível; planeta com
+  terminador/limbo/continentes e `world_style` para distantes; asteroides com rim; órbitas/fios em pixels constantes
+  com fade de perfil e perto dos corpos; nebulosa com vazios (sem "lápide"/coluna); UI radial com véu, missão
+  enxuta, cartão sem moldura, sombra no selo.
+  **Ganchos para a 2ª passada do animator:** `MaterialLibrary.set_hand_wrist(mat, wrist_center, forearm_end)` em
+  `auxiliary_hands.gd`; `MaterialLibrary.set_far_world_style(mat, i)` em `orbital_system._build_far`; religar o véu
+  (`GOWN_VEIL = true`, `GOWN_FADE = (-0.35, -5.4)`, `GOWN_STRETCH = 0.75`, `GOWN_FLARE = 0.3`) e a varredura do anel;
+  opcionais por órbita `tube_radius`/`body_gap`; `miku_body` dirigível (`dissolve_top/bottom`, `light_turn`,
+  `lip_intensity`). Ressalva: planeta herói ainda escuro sob o rig (key no planeta).
