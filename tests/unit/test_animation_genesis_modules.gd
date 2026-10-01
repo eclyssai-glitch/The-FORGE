@@ -100,7 +100,7 @@ func test_bodies_hidden_until_they_exist() -> void:
 	for id in [&"hand_left", &"hand_right", &"planet_forming", &"moon_0", &"moon_1", &"ring_skill",
 			&"belt_memory", &"relations"]:
 		assert_false(_group_root(id).is_visible_in_tree(), "%s hidden at 1 s" % id)
-	assert_true(_group_root(&"miku").is_visible_in_tree(), "MIKU is always there")
+	assert_true(_group_root(&"miku").is_visible_in_tree(), "MIKU is always there (her seed glows in the dark)")
 	var bodies := _bodies(_root, {})
 	assert_eq((bodies[&"planet_forming"] as StaticBody3D).collision_layer, 0, "no planet to pick yet")
 
@@ -152,11 +152,57 @@ func test_miku_wakes() -> void:
 	var miku: Miku = _n["Miku"]
 	await _seek(1.0)
 	assert_false(miku.halo.visible, "no halo asleep")
+	assert_false(miku.body.visible, "asleep the porcelain is in the dark (no silhouette)")
+	assert_false(miku.hair_pivot.visible, "no hair in the dark")
+	assert_true(miku.seed_motes.visible, "only the ember on her brow")
+	assert_eq(miku.body.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "no self-shadow steps on MIKU")
 	var short := miku.hair_pivot.scale.x
+	await _seek(GenesisScript.T_AWAKEN + 2.5)
+	assert_true(miku.body.visible)
+	assert_gt(miku.body.transparency, 0.05, "revealed by the seed's light, not popped in")
+	assert_gt(miku.seed_light.omni_range, Miku.SEED_LIGHT_RANGE + 1.0, "the seed's light blooms out")
 	await _seek(GenesisScript.T_AWAKEN + 12.0)
 	assert_true(miku.halo.visible)
+	assert_eq(miku.body.transparency, 0.0, "opaque once revealed")
 	assert_gt(miku.hair_pivot.scale.x, short, "the hair unfurls")
 	assert_true(miku.seed_motes.visible, "the seed on her brow")
+	var tilt_before := miku.figure.basis.y.normalized().z
+	await _seek(GenesisScript.DURATION)
+	await wait_process_frames(2)
+	assert_lt(miku.figure.basis.y.normalized().z, tilt_before - 0.03, "she raises her head at the climax")
+
+
+func test_hands_let_go_after_stable() -> void:
+	var hands: AuxiliaryHands = _n["AuxiliaryHands"]
+	await _seek(GenesisScript.T_STABLE)
+	var at_stable: Vector3 = (hands.pivots[&"hand_right"] as Node3D).position
+	var left_at_stable: Vector3 = (hands.pivots[&"hand_left"] as Node3D).position
+	await _seek(GenesisScript.DURATION)
+	assert_gt((hands.pivots[&"hand_right"] as Node3D).position.distance_to(GenesisLayout.PLANET_CENTER),
+		at_stable.distance_to(GenesisLayout.PLANET_CENTER) + 0.5, "the right hand withdraws from the world")
+	assert_gt((hands.pivots[&"hand_left"] as Node3D).position.distance_to(GenesisLayout.PLANET_CENTER),
+		left_at_stable.distance_to(GenesisLayout.PLANET_CENTER) + 0.5, "the left hand lowers away")
+	assert_lt(hands.veins_of(&"hand_right"), 0.12, "the kintsugi has cooled")
+
+
+func test_the_stable_wave_lights_the_threads() -> void:
+	var rt: RelationThreads = _n["RelationThreads"]
+	await _seek(GenesisScript.T_STABLE - 0.2)
+	var base := float(rt.threads[0].material_override.get_shader_parameter("intensity"))
+	await _seek(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HOP * 0.5)
+	assert_gt(float(rt.threads[0].material_override.get_shader_parameter("intensity")), base * 1.5,
+		"the pulse lights MIKU's thread as it runs")
+	assert_true(rt.pulses.visible)
+
+
+func test_universe_is_populated() -> void:
+	var orb: OrbitalSystem = _n["OrbitalSystem"]
+	await _seek(GenesisScript.DURATION)
+	assert_gte(GenesisLayout.BELT_ROCKS + OrbitalSystem.BELT_DUST, 3000, "thousands of belt instances")
+	assert_true(orb.belt_dust.is_visible_in_tree())
+	assert_eq(orb.belt_dust.transparency, 0.0, "formed belt: dust at full presence")
+	assert_not_null(orb.far_ring, "NAUVE-2 carries its own ring")
+	assert_not_null(orb.far_moon2_pivot, "KESTRE-4 a second moon")
 
 
 func test_orbital_bodies_appear_on_their_events() -> void:

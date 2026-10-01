@@ -18,7 +18,7 @@ const MESH_DIR := "res://assets/meshes/"
 
 # --- MIKU ---------------------------------------------------------------------------------------
 ## World position of the sculpture's origin (the waist centre) and its uniform scale.
-const MIKU_ORIGIN := Vector3(0.0, 6.9, -0.6)
+const MIKU_ORIGIN := Vector3(0.0, 8.4, -0.6)
 const MIKU_SCALE := 1.2
 ## Slight turn towards the hero camera's left: a three-quarter hint reads the figure as volume.
 const MIKU_YAW := 0.1
@@ -39,8 +39,8 @@ const PLANET_TILT := Vector3(0.32, 0.0, -0.22)
 ## down, fingers hovering over the planet, index slightly extended).
 const HAND_LEFT_POS := Vector3(-1.55, -2.8, 2.9)
 const HAND_LEFT_EULER := Vector3(0.3, 0.35, 0.22)
-const HAND_RIGHT_POS := Vector3(3.1, 3.25, 3.0)
-const HAND_RIGHT_EULER := Vector3(-0.18, -0.25, 0.14)
+const HAND_RIGHT_POS := Vector3(3.7, 3.0, 3.3)
+const HAND_RIGHT_EULER := Vector3(-0.18, -0.25, 0.22)
 ## Scale of both sculptures: wrist to middle fingertip ≈ 4.7 u, a hand ≈ 1.5× the final planet's
 ## diameter — monumental next to the world they hold, and still below MIKU in the hierarchy.
 const HAND_SCALE := 0.72
@@ -63,7 +63,7 @@ const RING_OUTER := 2.9
 ## Tilted steeply (front side high, back side low) so that the hero camera — outside the belt
 ## radius — never looks through rocks: the belt reads as a tilted ring that passes behind the new
 ## world and rises out of frame over the camera.
-const BELT_CENTER := Vector3(0.0, 6.6, -0.6)
+const BELT_CENTER := Vector3(0.0, 8.0, -0.6)
 const BELT_INNER := 16.0
 const BELT_OUTER := 19.0
 const BELT_THICKNESS := 0.9
@@ -75,15 +75,15 @@ const BELT_PERIOD := 900.0
 ## Their orbits lie beyond the hero camera (≈ 22 u from MIKU): from FORGE they are either behind
 ## her, far and small, or outside the frame — discreet; UNIVERSE sees the whole system.
 const FAR_ORBITS: Array[float] = [30.0, 42.0]
-const FAR_RADII: Array[float] = [1.3, 1.8]
+const FAR_RADII: Array[float] = [1.9, 2.5]
 const FAR_TILTS: Array[Vector3] = [Vector3(0.1, 0.0, -0.06), Vector3(-0.05, 0.0, 0.08)]
 const FAR_PERIODS: Array[float] = [900.0, 1500.0]
-const FAR_PHASES: Array[float] = [0.36, 0.58]
-const FAR_MOON_ORBITS: Array[float] = [2.6, 3.4]
-const FAR_MOON_RADII: Array[float] = [0.26, 0.32]
+const FAR_PHASES: Array[float] = [0.22, 0.58]
+const FAR_MOON_ORBITS: Array[float] = [3.6, 4.6]
+const FAR_MOON_RADII: Array[float] = [0.32, 0.4]
 const FAR_MOON_PERIODS: Array[float] = [48.0, 66.0]
 ## Centre of the distant orbits (a little below MIKU's heart).
-const FAR_CENTER := Vector3(0.0, 5.2, -0.6)
+const FAR_CENTER := Vector3(0.0, 6.6, -0.6)
 
 static var _anchor_cache: Dictionary = {}
 

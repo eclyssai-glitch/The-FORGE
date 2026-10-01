@@ -56,10 +56,10 @@ const VEINS_WORK := 0.42
 const VEINS_PRESS := 0.34
 ## After planet.stable the kintsugi cools down to VEINS_STABLE over VEINS_COOL_DUR.
 const VEINS_STABLE := 0.07
-const VEINS_COOL_DUR := 7.0
+const VEINS_COOL_DUR := 3.0
 ## Release after planet.stable: the hands let the world go, slowly (delay, duration in seconds).
-const RELEASE_DELAY := 0.6
-const RELEASE_DUR := 9.0
+const RELEASE_DELAY := 0.2
+const RELEASE_DUR := 2.8
 
 # --- Dust and planet -----------------------------------------------------------------------------------
 ## Dust converges between the hands from dust.gathered into the seed (s).
@@ -89,32 +89,34 @@ const BELT_FORM := 4.5
 ## Each rock of the belt swells over this share of BELT_FORM, starting at a stable per-rock offset.
 const BELT_ROCK_SWELL := 0.35
 ## Threads: woven one after the other (stagger), each spun over LINK_WEAVE seconds.
-const LINK_WEAVE := 2.2
-const LINK_STAGGER := 0.32
+const LINK_WEAVE := 1.8
+const LINK_STAGGER := 0.2
 
 # --- Climax (planet.stable) -------------------------------------------------------------------------
 ## The peak of light is reserved to planet.stable: it rises after CLIMAX_DELAY over CLIMAX_RISE,
-## holds CLIMAX_HOLD, and settles over CLIMAX_FALL to CLIMAX_REST (the formed world stays lit).
-const CLIMAX_DELAY := 0.3
-const CLIMAX_RISE := 2.2
-const CLIMAX_HOLD := 1.6
-const CLIMAX_FALL := 6.0
-const CLIMAX_REST := 0.35
+## holds CLIMAX_HOLD, and settles over CLIMAX_FALL to CLIMAX_REST. The session completes 3 s after
+## planet.stable and its last instant is held, so every climax beat resolves by then and the light
+## stays at its peak (REST 1): the held final frame is the formed world at its brightest.
+const CLIMAX_DELAY := 0.2
+const CLIMAX_RISE := 2.6
+const CLIMAX_HOLD := 0.0
+const CLIMAX_FALL := 0.0
+const CLIMAX_REST := 1.0
 ## MIKU raises her head (delay, duration) and her halo closes into a full circle (delay, duration).
-const HEAD_LIFT_DELAY := 0.8
-const HEAD_LIFT_DUR := 5.0
-const HALO_CLOSE_DELAY := 0.5
-const HALO_CLOSE_DUR := 4.5
+const HEAD_LIFT_DELAY := 0.3
+const HEAD_LIFT_DUR := 2.7
+const HALO_CLOSE_DELAY := 0.2
+const HALO_CLOSE_DUR := 2.8
 ## One pulse runs through every thread: it leaves MIKU after WAVE_DELAY and crosses one hop of the
 ## graph (GenesisScript.LINKS, breadth-first from MIKU) every WAVE_HOP seconds.
-const WAVE_DELAY := 0.5
-const WAVE_HOP := 1.6
+const WAVE_DELAY := 0.3
+const WAVE_HOP := 1.3
 
 # --- Light ----------------------------------------------------------------------------------------------
 ## Light levels asleep (before miku.awaken) and awake. Keys: back (warm contraluz), rim (ICE),
 ## key (PEARL ¾ side), fill (NEBULA), ambient (environment ambient energy). Asleep the scene is
 ## dark: only the seed glows (a dim backlight would cut her out as a dark silhouette).
-const LIGHT_ASLEEP := {"back": 0.3, "rim": 0.05, "key": 0.03, "fill": 0.02, "ambient": 0.1}
+const LIGHT_ASLEEP := {"back": 0.3, "rim": 0.05, "key": 0.03, "fill": 0.015, "ambient": 0.1}
 const LIGHT_AWAKE := {"back": 2.3, "rim": 1.25, "key": 1.05, "fill": 0.12, "ambient": 0.26}
 ## Added at the climax peak (the brightest moment of the session).
 const LIGHT_CLIMAX := {"back": 1.2, "rim": 0.75, "key": 0.5, "fill": 0.06, "ambient": 0.08}

@@ -29,16 +29,16 @@ const T_CUE := Palette.T_CRANE
 const T_USER := Palette.T_CINEMATIC * 1.35
 
 # --- Mode shots ---------------------------------------------------------------------------------
-const FORGE_TARGET := Vector3(0.0, 3.85, 1.0)
+const FORGE_TARGET := Vector3(0.0, 4.6, 1.0)
 const FORGE_YAW := 0.06
 const FORGE_PITCH := -0.06
 const FORGE_DISTANCE := 23.0
 const FORGE_FOV := 36.5
-const UNIVERSE_TARGET := Vector3(0.0, 3.5, -0.5)
-const UNIVERSE_YAW := 0.52
-const UNIVERSE_PITCH := 0.42
-const UNIVERSE_DISTANCE := 68.0
-const UNIVERSE_FOV := 44.0
+const UNIVERSE_TARGET := Vector3(0.0, 19.0, -4.0)
+const UNIVERSE_YAW := 0.2
+const UNIVERSE_PITCH := 0.05
+const UNIVERSE_DISTANCE := 80.0
+const UNIVERSE_FOV := 46.0
 const OBSERVATORY_TARGET := Vector3(0.0, 4.2, 1.2)
 const OBSERVATORY_YAW := -0.78
 const OBSERVATORY_PITCH := 0.55
@@ -69,18 +69,18 @@ const SWAY_PERIODS := Vector2(37.0, 53.0)
 ##  4. Rise at the moons: up and out over the ring and the belt to a high three-quarter view where
 ##     the threads leave her hair for every body.
 ##  5. Recede at planet.stable: the camera cranes back from the whole — the climax.
-const SEED_POSE := [Vector3(0.0, -0.05, 0.12), 0.12, 0.3, 3.4, 30.0]
+const SEED_POSE := [Vector3(0.0, -0.05, 0.12), -0.15, 0.3, 3.4, 30.0]
 const CRANE_DELAY := 0.3
 const CRANE_BACK := 4.7
-const PORTRAIT_POSE := [Vector3(0.0, 5.7, -0.4), 0.08, -0.02, 16.5, 36.0]
+const PORTRAIT_POSE := [Vector3(0.0, 7.1, -0.4), 0.08, -0.02, 16.5, 36.0]
 const HERO_DOLLY_DUR := 13.5
-const HERO_POSE := [Vector3(0.0, 3.85, 1.0), 0.0, -0.06, 23.5, 36.5]
+const HERO_POSE := [Vector3(0.0, 4.6, 1.0), 0.0, -0.06, 23.5, 36.5]
 const CRADLE_DUR := 13.0
-const CRADLE_POSE := [Vector3(0.3, 0.7, 2.6), 0.3, -0.06, 12.0, 38.0]
+const CRADLE_POSE := [Vector3(0.2, 0.8, 2.6), -0.45, -0.05, 12.5, 38.0]
 const RISE_DUR := 16.0
-const RISE_POSE := [Vector3(0.0, 4.6, 0.2), 0.4, 0.34, 34.0, 42.0]
-const RECEDE_DUR := 9.0
-const RECEDE_POSE := [Vector3(0.0, 4.8, 0.2), 0.16, 0.2, 42.0, 40.0]
+const RISE_POSE := [Vector3(0.0, 5.4, 0.2), 0.4, 0.32, 33.0, 42.0]
+const RECEDE_DUR := 3.0
+const RECEDE_POSE := [Vector3(0.0, 5.2, 0.6), 0.3, 0.26, 40.0, 42.0]
 
 # --- Focus --------------------------------------------------------------------------------------
 const FOCUS_FILL := 0.55
@@ -237,7 +237,7 @@ static func style_frame_poses() -> Array[Dictionary]:
 	out.append(_pose("sf_01_hero", 55.0, SessionState.Mode.FORGE,
 		rig_position(FORGE_TARGET, FORGE_YAW + 0.02, FORGE_PITCH, FORGE_DISTANCE - 1.0), FORGE_TARGET, FORGE_FOV))
 	out.append(_pose("sf_02_portrait", 9.0, SessionState.Mode.FORGE,
-		brow + Vector3(2.6, -1.7, 4.4), brow + Vector3(-0.3, 0.1, -0.6), 34.0))
+		brow + Vector3(1.9, -1.2, 3.3), brow + Vector3(-0.25, 0.05, -0.5), 34.0))
 	out.append(_pose("sf_03_cradle", 25.0, SessionState.Mode.FORGE,
 		planet + Vector3(-4.6, -0.9, 8.8), planet + Vector3(0.4, 0.9, 0.0), 40.0))
 	out.append(_pose("sf_04_world_detail", 47.5, SessionState.Mode.FORGE,
