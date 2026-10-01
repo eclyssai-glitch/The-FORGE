@@ -392,6 +392,46 @@ def project_to_surface(f, P, h: float, iters: int = 3):
     return P
 
 
+def _bad_faces(V, F, N, area_k: float = 2e-3, min_dot: float = 0.2):
+    """Slivers left by marching cubes / decimation: faces of ~zero area (relative to the mean
+    edge length) or whose winding normal disagrees with the SDF normals of their vertices."""
+    n = _face_normals(V, F)
+    a2 = np.linalg.norm(n, axis=1)
+    e = np.linalg.norm(V[F[:, 1]] - V[F[:, 0]], axis=1)
+    tiny = a2 < area_k * float(np.mean(e)) ** 2
+    nv = N[F[:, 0]] + N[F[:, 1]] + N[F[:, 2]]
+    nv /= np.maximum(np.linalg.norm(nv, axis=1), 1e-30)[:, None]
+    flip = np.einsum("ij,ij->i", n / np.maximum(a2, 1e-30)[:, None], nv) < min_dot
+    return tiny | flip
+
+
+def clean_slivers(f, V, F, h: float, iters: int = 6):
+    """Relaxes the vertices of sliver faces (see ``_bad_faces``) towards the centroid of their
+    1-ring and projects them back onto the SDF; only those vertices move (deterministic). Returns
+    (V, count before, count after)."""
+    e = np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]])
+    before = None
+    for _ in range(iters):
+        N = gradient(f, V, 0.35 * h)
+        bad = _bad_faces(V, F, N)
+        if before is None:
+            before = int(bad.sum())
+        if not bad.any():
+            break
+        idx = np.unique(F[bad].reshape(-1))
+        acc = np.zeros_like(V)
+        cnt = np.zeros(len(V))
+        np.add.at(acc, e[:, 0], V[e[:, 1]])
+        np.add.at(cnt, e[:, 0], 1.0)
+        np.add.at(acc, e[:, 1], V[e[:, 0]])
+        np.add.at(cnt, e[:, 1], 1.0)
+        V = V.copy()
+        V[idx] = acc[idx] / np.maximum(cnt[idx], 1.0)[:, None]
+        V[idx] = project_to_surface(f, V[idx], h, iters=3)
+    N = gradient(f, V, 0.35 * h)
+    return V, before or 0, int(_bad_faces(V, F, N).sum())
+
+
 def sdf_ambient_occlusion(f, P, N, steps, strength: float = 1.0, cone: float = 0.55):
     """Ambient occlusion from the SDF: at each scale h, how much of the free distance h along the
     normal (and 4 tilted directions forming a cone) is actually free. 1 = fully open."""
@@ -475,6 +515,8 @@ def bake(f, lo, hi, h: float, target_faces: int, ao_steps, ao_strength: float = 
     if len(F) > target_faces:
         V, F = decimate(V, F, target_faces, project=proj, **kw)
     V = project_to_surface(f, V, h, iters=3)
+    V, sl_before, sl_after = clean_slivers(f, V, F, h)
+    log(f"slivers (area ~0 or normal against winding): {sl_before} -> {sl_after}")
     N = gradient(f, V, 0.35 * h)
     # orientation check: gradient normals must agree with the winding (outward)
     fn = _face_normals(V, F)
@@ -487,6 +529,7 @@ def bake(f, lo, hi, h: float, target_faces: int, ao_steps, ao_strength: float = 
         "vertices": int(len(V)), "triangles": int(len(F)), "boundary_edges": boundary,
         "nonmanifold_edges": nonmanifold, "components": ncomp, "euler": chi,
         "winding_disagreements": int((agree <= 0).sum()),
+        "slivers_before": sl_before, "slivers": sl_after,
         "ao_min": float(ao.min()), "ao_mean": float(ao.mean()),
         "seconds": round(time.time() - t0, 1),
     }

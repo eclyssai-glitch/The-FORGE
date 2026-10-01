@@ -262,6 +262,95 @@ func test_hair_ribbons_uv_and_taper() -> void:
 	_assert_winding(carr, "crossed hair")
 
 
+func test_hair_nebula_is_one_mass_of_tufts_rising_in_s() -> void:
+	var root := Vector3(0, 1.6, -0.2)
+	var dir := Vector3(0, 0.55, -0.83)
+	var a := HairRibbons.nebula(root, dir, 41, 8, 10.0)
+	var b := HairRibbons.nebula(root, dir, 41, 8, 10.0)
+	var c := HairRibbons.nebula(root, dir, 42, 8, 10.0)
+	var curves: Array[PackedVector3Array] = a["curves"]
+	var groups: PackedInt32Array = a["groups"]
+	assert_eq(curves, b["curves"], "same seed -> same mass")
+	assert_ne(curves, c["curves"], "other seed -> other mass")
+	assert_eq(groups.size(), curves.size(), "one tuft index per strand")
+	assert_eq((a["links"] as PackedInt32Array).size(), 0, "no link strands unless asked")
+	var per_tuft := {}
+	for g in groups:
+		per_tuft[g] = int(per_tuft.get(g, 0)) + 1
+	assert_eq(per_tuft.size(), 8, "8 tufts")
+	for g: int in per_tuft:
+		assert_between(int(per_tuft[g]), 5, 10, "tuft %d has 5-10 strands" % g)
+	var shortest := INF
+	var longest := 0.0
+	for curve in curves:
+		assert_lt(curve[0].distance_to(root), 0.04, "single root")
+		var end := curve[curve.size() - 1]
+		assert_gt(end.y, root.y + 1.0, "strand rises")
+		assert_lt(end.z, root.z - 1.0, "strand flows back")
+		var l := 0.0
+		for k in range(1, curve.size()):
+			l += curve[k].distance_to(curve[k - 1])
+		shortest = minf(shortest, l)
+		longest = maxf(longest, l)
+	assert_gt(longest / shortest, 1.6, "varied lengths")
+	# tips open like filaments: strands of a tuft are close at the root, apart at the tip
+	var root_gap := 0.0
+	var tip_gap := 0.0
+	var pairs := 0
+	for i in curves.size():
+		for j in range(i + 1, curves.size()):
+			if groups[i] != groups[j]:
+				continue
+			root_gap += curves[i][1].distance_to(curves[j][1])
+			tip_gap += curves[i][curves[i].size() - 1].distance_to(curves[j][curves[j].size() - 1])
+			pairs += 1
+	assert_gt(tip_gap, root_gap * 3.0, "tufts open towards the tips")
+	# S: the elevation of the path turns up, then back down, then up again (>= 2 inflections)
+	var path := HairRibbons.s_path(root, dir.normalized(), 10.0, 24, 0.75, 0.42, 0.0)
+	var elev := PackedFloat32Array()
+	for k in range(1, path.size()):
+		var seg := (path[k] - path[k - 1]).normalized()
+		elev.append(asin(seg.y))
+	var turns := 0
+	for k in range(2, elev.size()):
+		if signf(elev[k] - elev[k - 1]) != signf(elev[k - 1] - elev[k - 2]):
+			turns += 1
+	assert_gte(turns, 2, "S-shaped heading")
+
+
+func test_hair_link_strands_end_at_their_points_and_are_marked() -> void:
+	var root := Vector3(0, 1.6, -0.2)
+	var dir := Vector3(0, 0.55, -0.83)
+	var ends := PackedVector3Array([Vector3(-1.2, 3.8, -1.6), Vector3(0.9, 4.6, -2.6)])
+	var m := HairRibbons.nebula(root, dir, 7, 6, 8.0, ends)
+	var curves: Array[PackedVector3Array] = m["curves"]
+	var links: PackedInt32Array = m["links"]
+	assert_eq(links.size(), 2, "one link strand per end point")
+	for i in links.size():
+		var curve := curves[links[i]]
+		assert_almost_eq(curve[curve.size() - 1], ends[i], Vector3.ONE * 1e-4, "link strand ends at its point")
+		assert_almost_eq(curve[0], root, Vector3.ONE * 1e-5, "link strand starts at the root")
+		assert_gt((curve[1] - curve[0]).normalized().dot(dir.normalized()), 0.6, "leaves with the mass")
+	var mesh := HairRibbons.build(curves, 0.08, 0.15, 24, Vector3.BACK, false, links, m["groups"])
+	var arr := mesh.surface_get_arrays(0)
+	var custom: PackedFloat32Array = arr[Mesh.ARRAY_CUSTOM0]
+	var colors: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+	assert_eq(custom.size(), colors.size() * 4, "CUSTOM0 RGBA per vertex")
+	assert_ne(mesh.surface_get_format(0) & Mesh.ARRAY_FORMAT_CUSTOM0, 0, "CUSTOM0 in the surface format")
+	var per_curve := 24 * 2
+	for c in curves.size():
+		var tip := (c + 1) * per_curve - 1
+		if links.has(c):
+			assert_eq(custom[4 * c * per_curve], 1.0, "link flag on link strand %d" % c)
+			assert_gte(colors[tip].a, HairRibbons.LINK_TIP_ALPHA - 1e-4, "link strand stays visible at its tip")
+		else:
+			assert_eq(custom[4 * c * per_curve], 0.0, "no link flag on strand %d" % c)
+			assert_almost_eq(colors[tip].a, 0.0, 1e-4, "ordinary strand fades out")
+		assert_between(custom[4 * c * per_curve + 2], 0.0, 1.0, "length share")
+	_assert_winding(arr, "nebula hair")
+	_assert_uv_range(arr[Mesh.ARRAY_TEX_UV], "nebula hair")
+
+
 func test_orbit_line_phase_uv() -> void:
 	var mesh := OrbitLine.build(4.0, 3.0, 0.05, 128)
 	var arrays := _surface(mesh)
