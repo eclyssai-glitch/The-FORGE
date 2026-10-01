@@ -12,6 +12,10 @@ extends RefCounted
 ## every uniform change). Colours come only from Palette.
 ## Ownership: exposure, fog and sky energy per mode are written here only. A GENESIS light rig
 ## that receives `environment` may modulate `ambient_light_energy` and nothing else.
+## No pops (Loop 4 r1): the world blends every per-mode setting over MODE_BLEND seconds (eased,
+## real time, like the camera's own mode transition) — blend_settings/blend_weight — and applies
+## an optional exposure trim asked by the camera (World.set_exposure_trim, clamped to TRIM_RANGE,
+## eased by smooth_toward with TRIM_TAU): exposure = mode exposure x trim, never a jump.
 ## Volumetric haze: directional lights fill the whole froxel volume evenly and turn it milky
 ## (verified with stand-in bodies: the night stone reads brown-grey). Rig directionals must use
 ## `light_volumetric_fog_energy` ≤ DIRECTIONAL_FOG_ENERGY; local lights (the planet's GOLD glow)
@@ -52,6 +56,11 @@ const MODES := {
 	},
 }
 const SKY_UNIFORMS: Array[String] = ["sky_energy", "star_intensity", "nebula_intensity"]
+## Seconds of the blend between two modes' settings: the camera's mode transition.
+const MODE_BLEND := GenesisShots.T_USER
+## Exposure trim limits (x the mode exposure) and its smoothing time constant (seconds).
+const TRIM_RANGE := Vector2(0.75, 1.35)
+const TRIM_TAU := 0.9
 const _META_FOG_BEGIN := &"korium_genesis_fog_begin"
 
 
@@ -153,16 +162,58 @@ static func mode_settings(mode: int) -> Dictionary:
 	return MODES.get(mode, MODES[SessionState.Mode.FORGE])
 
 
+## Applies a mode's settings at once (composition, snaps). The world blends mode changes.
 static func apply_mode(env: Environment, sky_material: ShaderMaterial, mode: int) -> void:
-	var s := mode_settings(mode)
+	apply_settings(env, sky_material, mode_settings(mode))
+
+
+## Applies per-mode settings `s` (MODES layout, possibly blended); `tonemap_exposure` is
+## multiplied by `trim` (clamped to TRIM_RANGE).
+static func apply_settings(env: Environment, sky_material: ShaderMaterial, s: Dictionary, trim: float = 1.0) -> void:
 	for key: String in s:
 		if SKY_UNIFORMS.has(key):
 			if sky_material:
 				sky_material.set_shader_parameter(key, s[key])
+		elif key == "tonemap_exposure":
+			env.tonemap_exposure = float(s[key]) * clamp_trim(trim)
 		elif key in env:
 			env.set(key, s[key])
 	env.set_meta(_META_FOG_BEGIN, float(s["fog_depth_begin"]))
 	_update_depth_fog(env)
+
+
+## Settings between `a` (k = 0) and `b` (k = 1), key by key (numbers lerp; others switch at 0.5).
+static func blend_settings(a: Dictionary, b: Dictionary, k: float) -> Dictionary:
+	var out := {}
+	var w := clampf(k, 0.0, 1.0)
+	for key: String in b:
+		if not a.has(key):
+			out[key] = b[key]
+		elif typeof(a[key]) in [TYPE_FLOAT, TYPE_INT] and typeof(b[key]) in [TYPE_FLOAT, TYPE_INT]:
+			out[key] = lerpf(float(a[key]), float(b[key]), w)
+		else:
+			out[key] = b[key] if w >= 0.5 else a[key]
+	return out
+
+
+## Eased weight (smoothstep: zero slope at both ends) of a blend at progress u in 0..1.
+static func blend_weight(u: float) -> float:
+	return smoothstep(0.0, 1.0, u)
+
+
+static func clamp_trim(trim: float) -> float:
+	return clampf(trim, TRIM_RANGE.x, TRIM_RANGE.y)
+
+
+## One frame of the exposure trim easing towards `target` (exponential, time constant `tau`);
+## lands exactly on the target once within 1e-4.
+static func smooth_toward(current: float, target: float, delta: float, tau: float = TRIM_TAU) -> float:
+	if tau <= 0.0:
+		return target
+	if delta <= 0.0:
+		return current
+	var v := lerpf(current, target, 1.0 - exp(-delta / tau))
+	return target if absf(v - target) < 1e-4 else v
 
 
 ## True when the sky's `motion_time` should move under this profile (static in LOW).
