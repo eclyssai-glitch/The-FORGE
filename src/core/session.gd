@@ -13,6 +13,17 @@ signal cinematic_changed(enabled: bool)
 signal focus_requested(id: StringName)
 ## The HUD must show/hide itself (`toggle_hud` action, H). The 3D world ignores it.
 signal hud_visibility_changed(visible: bool)
+## A pick body of entity `id` was clicked (Picker). Emitted on EVERY click — also when `id` is
+## already selected — so a second click on MIKU calls her again. Followed by select(id).
+signal entity_clicked(id: StringName)
+## LIVING call line (Loop 5): the thin line where the user speaks to MIKU opens/closes (Enter /
+## Esc / submit). The UI (or the placeholder of src/world/living_call_line.gd) shows it.
+signal call_line_changed(open: bool)
+## Text sent from the call line (the line closes first). The interaction system routes it.
+signal call_submitted(text: String)
+## Outcome of an interaction (InteractionRouter report: kind, route, status, plan, path, values,
+## reason...), for diegetic feedback in the UI. Never contains anything sent anywhere.
+signal interaction_reported(report: Dictionary)
 
 enum Mode { UNIVERSE, FORGE, OBSERVATORY }
 
@@ -27,6 +38,10 @@ var hovered: StringName = &""
 var cinematic: bool = true
 ## When false the HUD hides itself (the DEMO badge policy is the UI's; see docs/ARCHITECTURE.md).
 var hud_visible: bool = true
+## True while the LIVING call line is open.
+var call_line_open: bool = false
+## Longest text the call line accepts (longer submissions are cut).
+const CALL_MAX_CHARS := 200
 
 
 func set_mode(m: Mode) -> void:
@@ -72,6 +87,41 @@ func set_hud_visible(v: bool) -> void:
 
 func toggle_hud() -> void:
 	set_hud_visible(not hud_visible)
+
+
+## A click on entity `id` (Picker): entity_clicked(id) always, then select(id).
+func click(id: StringName) -> void:
+	entity_clicked.emit(id)
+	select(id)
+
+
+func open_call_line() -> void:
+	if call_line_open:
+		return
+	call_line_open = true
+	call_line_changed.emit(true)
+
+
+func close_call_line() -> void:
+	if not call_line_open:
+		return
+	call_line_open = false
+	call_line_changed.emit(false)
+
+
+## Closes the call line and sends `text` (trimmed, at most CALL_MAX_CHARS). Empty text only closes.
+## Returns true when something was sent.
+func submit_call(text: String) -> bool:
+	close_call_line()
+	var t := text.strip_edges().left(CALL_MAX_CHARS)
+	if t == "":
+		return false
+	call_submitted.emit(t)
+	return true
+
+
+func report_interaction(report: Dictionary) -> void:
+	interaction_reported.emit(report)
 
 
 func mode_name() -> String:

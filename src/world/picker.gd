@@ -2,7 +2,8 @@ class_name Picker
 extends Node
 ## Mouse picking of 3D entities. Casts a ray from the active camera
 ## (`get_viewport().get_camera_3d()`) against collision layer 2 ("pickable") and forwards the
-## hit's `entity_id` meta to `Session.select` (left click) or `Session.hover` (mouse motion).
+## hit's `entity_id` meta to `Session.click` (left click on an entity: `entity_clicked` on every
+## click, then `select`), `Session.select(&"")` (click on empty space) or `Session.hover` (motion).
 ## A left press whose accumulated travel (every movement between press and release, not just
 ## the net displacement) reaches InputTuning.DRAG_THRESHOLD_PX is a camera orbit drag, not a
 ## click. Clicking empty space clears the selection (the `deselect` action is handled by
@@ -82,7 +83,11 @@ func _physics_process(_delta: float) -> void:
 			Session.hover(&"")
 	if _pending_click:
 		_pending_click = false
-		Session.select(pick_at(_click_pos))
+		var id := pick_at(_click_pos)
+		if id != &"":
+			Session.click(id)  # entity_clicked (every click) + select
+		else:
+			Session.select(&"")
 	if _pending_hover:
 		_pending_hover = false
 		# No hover changes while dragging the camera.

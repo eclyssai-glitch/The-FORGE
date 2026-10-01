@@ -36,14 +36,40 @@ const GENESIS_OBJECTIVES: Array[Dictionary] = [
 ]
 
 
+const LIVING_ID := &"mission.living"
+const LIVING_TITLE := "MIKU — A LIVING CHARACTER"
+
+const LIVING_OBJECTIVES: Array[Dictionary] = [
+	{"id": &"life", "title": "Be alive before any work", "done_on": SimEvent.LIVING_MILESTONE, "min_count": 1},
+	{"id": &"puppet", "title": "Command one hand, then two, then many", "done_on": SimEvent.LIVING_HANDS, "min_count": LivingScript.HAND_CUE_COUNT},
+	{"id": &"order", "title": "Take the work order", "done_on": SimEvent.LIVING_WORK_ORDER, "min_count": 1},
+	{"id": &"build", "title": "Build the world in stages", "done_on": SimEvent.LIVING_WORK_STEP, "min_count": LivingScript.STEP_COUNT},
+	{"id": &"failure", "title": "Fail, and fail again", "done_on": SimEvent.LIVING_WORK_FAILED, "min_count": LivingScript.FAIL_COUNT},
+	{"id": &"dismantle", "title": "Tear down what went wrong", "done_on": SimEvent.LIVING_WORK_DISMANTLED, "min_count": 1},
+	{"id": &"recover", "title": "Recover", "done_on": SimEvent.LIVING_WORK_RECOVERED, "min_count": 1},
+	{"id": &"whole", "title": "Make the world whole", "done_on": SimEvent.LIVING_WORLD_COMPLETE, "min_count": 1},
+	{"id": &"user", "title": "Open the user tests (attention, target, configuration)", "done_on": SimEvent.LIVING_MILESTONE, "min_count": LivingScript.MILESTONE_COUNT},
+]
+
+
 ## Objective list of a scenario (Scenario.ORIGIN_CHAMBER when unknown).
 static func objectives_for(scenario: StringName) -> Array[Dictionary]:
-	return GENESIS_OBJECTIVES if scenario == Scenario.GENESIS else ORIGIN_CHAMBER_OBJECTIVES
+	match scenario:
+		Scenario.GENESIS:
+			return GENESIS_OBJECTIVES
+		Scenario.LIVING:
+			return LIVING_OBJECTIVES
+	return ORIGIN_CHAMBER_OBJECTIVES
 
 
 ## Mission title of a scenario (Scenario.ORIGIN_CHAMBER when unknown).
 static func title_for(scenario: StringName) -> String:
-	return GENESIS_TITLE if scenario == Scenario.GENESIS else ORIGIN_CHAMBER_TITLE
+	match scenario:
+		Scenario.GENESIS:
+			return GENESIS_TITLE
+		Scenario.LIVING:
+			return LIVING_TITLE
+	return ORIGIN_CHAMBER_TITLE
 
 
 ## Returns the scenario's objectives with "count" and "done" fields derived from emitted events.

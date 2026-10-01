@@ -10,10 +10,11 @@ extends Node3D
 ## so the world always runs with whatever is present. A module that declares a property
 ## `environment` receives the world's Environment before add_child. Without a CameraDirector a
 ## fixed fallback Camera3D (current) frames each mode.
-## Environment: ORIGIN = EnvironmentProfile (+ Universe sky); GENESIS = GenesisEnvironment
-## (nebula sky, AgX, contained glow, light fog). Quality: MaterialLibrary.apply_quality and the
+## Environment: ORIGIN = EnvironmentProfile (+ Universe sky); GENESIS and LIVING = GenesisEnvironment
+## (nebula sky, AgX, contained glow, light fog — LIVING reuses the dark, contemplative GENESIS sky).
+## Quality: MaterialLibrary.apply_quality and the
 ## scenario's apply_quality on Quality.profile_changed (and at start). Mode: the scenario's fog/sky
-## settings on Session.mode_changed (and at start). GENESIS, every frame:
+## settings on Session.mode_changed (and at start). GENESIS and LIVING, every frame:
 ## MaterialLibrary.set_motion_time(MotionClock.now()); the sky's own `motion_time` is stepped at
 ## GenesisEnvironment.SKY_MOTION_HZ (static in LOW).
 ## Audio: the AudioDirector (group `audio_director`) is composed in every scenario; every Node3D
@@ -22,6 +23,8 @@ extends Node3D
 ## (SceneTree.node_added, checked at the end of the frame so metas set in _ready count).
 ## Module check: `missing_modules()` lists every module expected for the composed scenario that
 ## did not load; the smoke test fails on any (report line `modules=N/M`).
+## LIVING (Loop 5): the character is real-time state (ADR-015), so `Simulation.world_rebuilt`
+## (reset) RECOMPOSES the scene (fresh mind, hands, worlds); seek does not exist there.
 
 ## [node name, script path] in composition order. Every module has a no-argument constructor.
 const ORIGIN_MODULES: Array = [
@@ -45,9 +48,22 @@ const GENESIS_MODULES: Array = [
 	["Stardust", "res://src/fx/genesis/stardust.gd"],
 	["FormationGlow", "res://src/fx/genesis/formation_glow.gd"],
 ]
+## LIVING scene modules (Loop 5; fixed paths — docs/contracts/loop-05.md): the animator's character
+## runtime, hand pool, intent threads, work worlds (at least 2–3 selectable), causal particles and
+## light rig, then the interaction system (game-engineer; last, so it finds the `Miku` node).
+const LIVING_MODULES: Array = [
+	["LivingLightRig", "res://src/entities/living/living_light_rig.gd"],
+	["Miku", "res://src/miku/miku.gd"],
+	["HandPool", "res://src/entities/living/hand_pool.gd"],
+	["IntentThreads", "res://src/entities/living/intent_threads.gd"],
+	["WorkWorld", "res://src/entities/living/work_world.gd"],
+	["CausalParticles", "res://src/fx/living/causal_particles.gd"],
+	["LivingInteraction", "res://src/world/living_interaction.gd"],
+]
 const MODULES_BY_SCENARIO: Dictionary = {
 	Scenario.ORIGIN_CHAMBER: ORIGIN_MODULES,
 	Scenario.GENESIS: GENESIS_MODULES,
+	Scenario.LIVING: LIVING_MODULES,
 }
 ## Legacy name: the ORIGIN CHAMBER modules.
 const MODULES: Array = ORIGIN_MODULES
@@ -74,6 +90,12 @@ const FALLBACK_SHOTS_GENESIS := {
 	SessionState.Mode.UNIVERSE: [Vector3(0.0, 26.0, 44.0), Vector3(0.0, 2.0, 0.0)],
 	SessionState.Mode.FORGE: [Vector3(0.0, 0.4, 17.0), Vector3(0.0, 4.0, 1.5)],
 	SessionState.Mode.OBSERVATORY: [Vector3(-13.0, 10.0, 16.0), Vector3(0.0, 3.0, 2.0)],
+}
+## LIVING fallback framing (MIKU near the origin, worlds at LivingScript.WORLDS anchors).
+const FALLBACK_SHOTS_LIVING := {
+	SessionState.Mode.UNIVERSE: [Vector3(0.0, 9.0, 22.0), Vector3(0.0, 2.0, 0.0)],
+	SessionState.Mode.FORGE: [Vector3(0.0, 2.6, 14.0), Vector3(0.0, 2.2, 1.0)],
+	SessionState.Mode.OBSERVATORY: [Vector3(-9.0, 6.0, 13.0), Vector3(0.0, 2.0, 1.0)],
 }
 
 ## Missing-module warnings already printed (once per path per run).
@@ -111,6 +133,8 @@ var _env_elapsed := 0.0
 ## Exposure trim shown now and its target (World.set_exposure_trim; 1 = the mode's exposure).
 var exposure_trim := 1.0
 var _trim_target := 1.0
+## Set by a scenario change to LIVING: the world_rebuilt that follows it must not compose again.
+var _skip_rebuild := false
 
 
 func _ready() -> void:
@@ -147,6 +171,7 @@ func _ready() -> void:
 	Quality.profile_changed.connect(_on_quality_changed)
 	Session.mode_changed.connect(_on_mode_changed)
 	Simulation.scenario_changed.connect(_on_scenario_changed)
+	Simulation.world_rebuilt.connect(_on_world_rebuilt)
 	get_tree().node_added.connect(_on_node_added)
 	_apply_quality_and_mode()
 	register_audio_anchors()
@@ -158,7 +183,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	if scenario != Scenario.GENESIS:
+	if not uses_nebula_environment():
 		return
 	_step_environment(delta)
 	var t := MotionClock.now()
@@ -189,7 +214,7 @@ func environment_blending() -> bool:
 
 ## Ends any GENESIS environment blend and trim easing at once (automation snaps, composition).
 func snap_environment() -> void:
-	if scenario != Scenario.GENESIS or environment == null:
+	if not uses_nebula_environment() or environment == null:
 		return
 	if not _env_to.is_empty():
 		_env_current = _env_to.duplicate()
@@ -216,6 +241,12 @@ func _step_environment(delta: float) -> void:
 		dirty = true
 	if dirty:
 		GenesisEnvironment.apply_settings(environment, genesis_sky, _env_current, exposure_trim)
+
+
+## True when the composed scenario uses the GENESIS environment (nebula sky, mode blends, trim,
+## motion time): GENESIS and LIVING.
+func uses_nebula_environment() -> bool:
+	return scenario == Scenario.GENESIS or scenario == Scenario.LIVING
 
 
 ## Modules [name, path] of a scenario (ORIGIN CHAMBER for an unknown id).
@@ -334,7 +365,7 @@ func silence_audio() -> int:
 func _compose_scenario(id: StringName) -> void:
 	_clear_scenario()
 	scenario = id if Scenario.is_valid(id) else Scenario.DEFAULT
-	if scenario == Scenario.GENESIS:
+	if uses_nebula_environment():
 		if genesis_sky == null:
 			genesis_sky = GenesisEnvironment.make_sky_material()
 		environment = GenesisEnvironment.make_environment(genesis_sky)
@@ -396,10 +427,27 @@ func _apply_quality_and_mode() -> void:
 func _on_scenario_changed(id: StringName) -> void:
 	if id == scenario:
 		return
+	_skip_rebuild = id == Scenario.LIVING
 	# Entities of the previous scenario no longer exist.
 	Session.select(&"")
 	Session.hover(&"")
 	_compose_scenario(id)
+	_apply_quality_and_mode()
+	register_audio_anchors()
+
+
+## LIVING: reset = recompose (fresh character, hands and worlds). Other scenarios rebuild their
+## visuals from the state and ignore this.
+func _on_world_rebuilt() -> void:
+	if _skip_rebuild:
+		_skip_rebuild = false
+		return
+	if scenario != Scenario.LIVING or Simulation.scenario != Scenario.LIVING:
+		return
+	Session.select(&"")
+	Session.hover(&"")
+	Session.close_call_line()
+	_compose_scenario(Scenario.LIVING)
 	_apply_quality_and_mode()
 	register_audio_anchors()
 
@@ -413,7 +461,7 @@ func _on_node_added(node: Node) -> void:
 
 func _on_quality_changed(profile: Dictionary) -> void:
 	MaterialLibrary.apply_quality(profile)
-	if scenario == Scenario.GENESIS:
+	if uses_nebula_environment():
 		GenesisEnvironment.apply_quality(environment, genesis_sky, profile)
 		_sky_motion_enabled = GenesisEnvironment.sky_motion_enabled(profile)
 	else:
@@ -421,14 +469,18 @@ func _on_quality_changed(profile: Dictionary) -> void:
 
 
 func _on_mode_changed(mode: SessionState.Mode) -> void:
-	if scenario == Scenario.GENESIS:
+	if uses_nebula_environment():
 		_blend_environment_to(GenesisEnvironment.mode_settings(mode))
 	else:
 		EnvironmentProfile.apply_mode_fog(environment, mode)
 	if universe:
 		universe.apply_mode(mode)
 	if fallback_camera:
-		var shots: Dictionary = FALLBACK_SHOTS_GENESIS if scenario == Scenario.GENESIS else FALLBACK_SHOTS
+		var shots: Dictionary = FALLBACK_SHOTS
+		if scenario == Scenario.GENESIS:
+			shots = FALLBACK_SHOTS_GENESIS
+		elif scenario == Scenario.LIVING:
+			shots = FALLBACK_SHOTS_LIVING
 		var shot: Array = shots.get(mode, shots[SessionState.Mode.FORGE])
 		fallback_camera.position = shot[0]
 		fallback_camera.look_at(shot[1])
