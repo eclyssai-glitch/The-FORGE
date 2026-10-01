@@ -4,8 +4,11 @@
 #   tools/capture_evidence.sh docs/evidence/loop-02 [--quality=<low|medium|high|ultra|auto>]
 #                                                   [--capture-only=<prefix>]
 #                                                   [--resolution=WxH] [--timeout=<s>]
-#                                                   [--scenario=<origin_chamber|genesis>]
+#                                                   [--scenario=<origin_chamber|genesis|living>]
 # --scenario=<id>: play that scenario (passed to the game) and expect its capture list.
+# LIVING (CAPTURES_LIVING) has no seek: the scenario plays in real time from T+0 (140 s of
+# simulation; slower under software rendering) with the user tests injected as real input, so
+# its default time limit is 2400 s.
 # Style frames (GENESIS, 1920x1080, HUD hidden) have their own script: tools/style_frames.sh.
 # Quality: HIGH unless --quality= is given (evidence judges the target profile — a desktop with a
 # discrete GPU; AUTO would pick LOW under Xvfb + llvmpipe); --quality=auto keeps the detection.
@@ -30,8 +33,9 @@ game_args=()
 for a in "$@"; do
   case "$a" in
     --scenario=genesis) list="CAPTURES_GENESIS"; game_args+=("$a") ;;
+    --scenario=living) list="CAPTURES_LIVING"; [ -n "${timeout_set:-}" ] || timeout_s="${CAPTURE_TIMEOUT:-2400}"; game_args+=("$a") ;;
     --scenario=*) game_args+=("$a") ;;
-    --timeout=*) timeout_s="${a#--timeout=}" ;;
+    --timeout=*) timeout_s="${a#--timeout=}"; timeout_set=1 ;;
     --resolution=*) resolution="${a#--resolution=}" ;;
     --capture-only=*) only="${a#--capture-only=}"; game_args+=("$a") ;;
     --quality=*) quality="${a#--quality=}" ;;
