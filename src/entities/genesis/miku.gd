@@ -79,6 +79,20 @@ const SEED_GLOW_SIZE := 0.17
 const SEED_CORE_HDR := 1.5
 const SEED_LIGHT_RANGE := 0.9
 const SEED_LIGHT_ENERGY := 0.04
+## The light that reveals her: at the awakening the seed's light blooms this far (units) and this
+## bright (GenesisChoreography.seed_bloom), then settles back to the small brow light.
+const SEED_BLOOM_RANGE := 3.4
+const SEED_BLOOM_ENERGY := 0.7
+## Asleep, the ember on her brow breathes (share of its brightness, period in seconds).
+const EMBER_BREATH := 0.22
+const EMBER_PERIOD := Palette.T_BREATH
+## At planet.stable she raises her head: the figure tilts back around the waist (rad) and rises a
+## little (units).
+const HEAD_LIFT_ANGLE := 0.075
+const HEAD_LIFT_RISE := 0.12
+## The halo's arcs close at planet.stable (arc spans of halo_arc: from the material's own to these).
+const HALO_CLOSED_SPAN := 1.0
+const HALO_CLOSED_INNER := 0.8
 ## Selection smoothing (1/s) and levels.
 const SELECT_RATE := 6.0
 
@@ -102,8 +116,16 @@ var _halo_mat: ShaderMaterial
 var _hair_mats: Array[ShaderMaterial] = []
 var _select := 0.0
 var _figure_base := Transform3D.IDENTITY
-## Last narrative values written (awaken, hair reveal, hair intensity, gown, halo, seed).
-var _written := PackedFloat32Array([-1, -1, -1, -1, -1, -1])
+## Last narrative values written (awaken, hair reveal, hair intensity, gown, halo, seed, presence,
+## seed bloom, head lift, halo close).
+var _written := PackedFloat32Array([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+## Seed brightness (narrative) and whether she is still asleep (the ember breathes, ambient).
+var _seed := 0.0
+var _bloom := 0.0
+var _asleep := 1.0
+var _lift := 0.0
+## Halo arc spans of the material (restored as the open state).
+var _halo_span := Vector2(0.68, 0.4)
 
 
 func _ready() -> void:
@@ -123,6 +145,9 @@ func _ready() -> void:
 	body.mesh = load(MESH_PATH) as Mesh
 	_body_mat = MaterialLibrary.miku_body().duplicate() as ShaderMaterial
 	body.material_override = _body_mat
+	# No self-shadow: the key's shadow map stair-stepped across the torso and gown (critic r1).
+	# Her baked AO + SSAO shape the porcelain; the key still lights her.
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	figure.add_child(body)
 
 	gown = MeshInstance3D.new()
@@ -139,6 +164,10 @@ func _ready() -> void:
 	_build_hair()
 	_build_halo()
 	_build_seed()
+	for k in 2:
+		var v: Variant = _halo_mat.get_shader_parameter(["arc_span", "inner_span"][k])
+		if v is float:
+			_halo_span[k] = v
 
 	heart = Node3D.new()
 	heart.name = "Heart"
@@ -173,6 +202,21 @@ func _update_narrative() -> void:
 	var gp := GenesisChoreography.gown_presence(g, t)
 	var ha := GenesisChoreography.halo(g, t)
 	var sd := GenesisChoreography.seed_light(g, t)
+	var pr := GenesisChoreography.body_presence(g, t)
+	var bloom := GenesisChoreography.seed_bloom(g, t)
+	_lift = GenesisChoreography.head_lift(g, t)
+	var hc := GenesisChoreography.halo_close(g, t)
+	_asleep = 1.0 - GenesisChoreography.awaken(g, t)
+	if not is_equal_approx(pr, _written[6]):
+		_written[6] = pr
+		# Out of the dark: hidden before the awakening (only the seed glows), then revealed by the
+		# seed's light. Transparency only while fading (opaque pipeline otherwise).
+		body.visible = pr > 0.001
+		body.transparency = 1.0 - pr if pr < 0.999 else 0.0
+	if not is_equal_approx(hc, _written[9]):
+		_written[9] = hc
+		_halo_mat.set_shader_parameter("arc_span", lerpf(_halo_span.x, HALO_CLOSED_SPAN, hc))
+		_halo_mat.set_shader_parameter("inner_span", lerpf(_halo_span.y, HALO_CLOSED_INNER, hc))
 	if not is_equal_approx(a, _written[0]):
 		_written[0] = a
 		_body_mat.set_shader_parameter("awaken", a)
@@ -183,6 +227,7 @@ func _update_narrative() -> void:
 		# front stays off (reveal = 1): that front raises a negative base to a power (NaN on
 		# llvmpipe and several drivers) — reported to the art-director.
 		hair_pivot.scale = Vector3.ONE * reveal
+		hair_pivot.visible = hi > 0.002
 		for i in _hair_mats.size():
 			_hair_mats[i].set_shader_parameter("reveal", 1.0)
 			_hair_mats[i].set_shader_parameter("intensity", hi * float(HAIR_LAYERS[i][10]) if i < HAIR_LAYERS.size() else hi * 0.7)
@@ -193,9 +238,11 @@ func _update_narrative() -> void:
 		_written[4] = ha
 		_halo_mat.set_shader_parameter("strength", ha)
 		halo.visible = ha > 0.002
-	if not is_equal_approx(sd, _written[5]):
-		_written[5] = sd
-		_write_seed(sd)
+	_seed = sd
+	_bloom = bloom
+	if not is_equal_approx(bloom, _written[7]):
+		_written[7] = bloom
+		_write_seed_light()
 
 
 func _update_ambient(delta: float) -> void:
@@ -206,9 +253,16 @@ func _update_ambient(delta: float) -> void:
 	for mat in _hair_mats:
 		mat.set_shader_parameter("motion_time", m)
 	_gown_mat.set_shader_parameter("motion_time", m)
-	# Suspended: the whole figure floats on a slow breath.
-	var lift := FLOAT_AMPLITUDE * sin(TAU * m / FLOAT_PERIOD + 0.7)
-	figure.transform = Transform3D(_figure_base.basis, _figure_base.origin + Vector3(0.0, lift, 0.0))
+	# The seed: asleep, the ember breathes (ambient); awake it holds its narrative brightness.
+	var s := _seed * (1.0 + EMBER_BREATH * _asleep * sin(TAU * m / EMBER_PERIOD))
+	if not is_equal_approx(s, _written[5]):
+		_written[5] = s
+		_write_seed(s)
+	# Suspended: the whole figure floats on a slow breath; at planet.stable she raises her head
+	# (the figure tilts back around the waist and rises a little).
+	var lift := FLOAT_AMPLITUDE * sin(TAU * m / FLOAT_PERIOD + 0.7) + HEAD_LIFT_RISE * _lift
+	var basis := _figure_base.basis * Basis(Vector3.RIGHT, -HEAD_LIFT_ANGLE * _lift) if _lift > 0.0 else _figure_base.basis
+	figure.transform = Transform3D(basis, _figure_base.origin + Vector3(0.0, lift, 0.0))
 	# Hair: each layer sways around the crown with its own period (nebula filaments in a slow wind).
 	for i in hair_layers.size():
 		var sway := float(HAIR_LAYERS[i][11]) if i < HAIR_LAYERS.size() else 0.02
@@ -313,8 +367,14 @@ func _write_seed(s: float) -> void:
 	seed_motes.set_mote(1, Vector3.ZERO, SEED_GLOW_SIZE * (0.8 + 0.2 * minf(s, 1.5)), Color(1, 1, 1, 0.18 * clampf(s, 0.0, 1.5)))
 	seed_motes.commit()
 	seed_motes.visible = s > 0.002
-	seed_light.light_energy = SEED_LIGHT_ENERGY * s
-	seed_light.visible = s > 0.002
+	_write_seed_light()
+
+
+## The brow light: small with the seed, wide and bright while it blooms (the light that reveals her).
+func _write_seed_light() -> void:
+	seed_light.light_energy = SEED_LIGHT_ENERGY * maxf(_written[5], 0.0) + SEED_BLOOM_ENERGY * _bloom
+	seed_light.omni_range = SEED_LIGHT_RANGE + SEED_BLOOM_RANGE * _bloom
+	seed_light.visible = seed_light.light_energy > 0.002
 
 
 func _pick_body(bounds: AABB) -> StaticBody3D:

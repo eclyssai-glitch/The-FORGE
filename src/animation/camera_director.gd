@@ -29,7 +29,9 @@ extends Node3D
 ## Seek/reset keep a user framing that is not under a cue (the story cue always snaps).
 ##
 ## GENESIS (Simulation.scenario == Scenario.GENESIS): shots, cues, limits and focus come from
-## GenesisShots (pure); cue changes crane over GenesisShots.T_CUE (Palette.T_CRANE), user-driven
+## GenesisShots (pure); its cues are stations of one continuous path (GenesisShots.cue_path), so a
+## cue change needs no blend; returning to the cues after user control cranes over
+## GenesisShots.T_CUE (Palette.T_CRANE), user-driven
 ## changes (mode, focus, reset) over GenesisShots.T_USER; every GENESIS entity can be focused from
 ## any mode. A scenario change snaps to the new scenario's shot. `style_frame_poses()` gives the
 ## GENESIS style frames to the automation (StyleFrames).
@@ -196,7 +198,10 @@ func _process(delta: float) -> void:
 	elif id != _shot_id:
 		var story := _is_cue(id) and _is_cue(_shot_id)
 		_shot_id = id
-		_begin_transition(story)
+		# GENESIS cues are stations of one continuous path: no blend between them (a running blend
+		# into the path, e.g. after a mode change, keeps running towards the live goal).
+		if not (story and _genesis() and GenesisShots.CONTINUOUS_CUES):
+			_begin_transition(story)
 	if not _user:
 		CameraShots.blend(_from, _goal, _blend, _rig)
 	_apply()

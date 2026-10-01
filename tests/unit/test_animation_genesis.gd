@@ -36,7 +36,15 @@ func test_values_rest_before_their_events() -> void:
 	for t in [0.0, 10.0, 50.0]:
 		assert_eq(GenesisChoreography.awaken(g, t), 0.0)
 		assert_eq(GenesisChoreography.halo(g, t), 0.0)
-		assert_eq(GenesisChoreography.seed_light(g, t), 0.0)
+		assert_eq(GenesisChoreography.seed_light(g, t), GenesisChoreography.SEED_DORMANT,
+			"asleep only the ember on her brow glows")
+		assert_eq(GenesisChoreography.body_presence(g, t), 0.0, "in the dark: no body, no silhouette")
+		assert_eq(GenesisChoreography.seed_bloom(g, t), 0.0)
+		assert_eq(GenesisChoreography.climax(g, t), 0.0)
+		assert_eq(GenesisChoreography.hands_release(g, t), 0.0)
+		assert_eq(GenesisChoreography.head_lift(g, t), 0.0)
+		assert_eq(GenesisChoreography.halo_close(g, t), 0.0)
+		assert_eq(GenesisChoreography.stable_wave(g, t, 2), -1.0)
 		assert_eq(GenesisChoreography.hands_visible(g, t), 0.0)
 		assert_eq(GenesisChoreography.planet_radius(g, t), 0.0)
 		assert_eq(GenesisChoreography.planet_heat(g, t), 0.0)
@@ -69,7 +77,15 @@ func test_values_settle_after_the_session() -> void:
 		assert_almost_eq(GenesisChoreography.link(g, t, i), 1.0, 1e-4, "thread %d woven" % i)
 	assert_eq(GenesisChoreography.dust_visible(g, t), 0.0, "the dust fed the seed")
 	assert_almost_eq(GenesisChoreography.veins(g, t, false), GenesisChoreography.VEINS_STABLE, 0.02,
-		"the kintsugi rests after the work")
+		"the kintsugi has cooled after the work")
+	# Every climax beat resolves before the session completes (its last instant is held).
+	assert_almost_eq(GenesisChoreography.body_presence(g, t), 1.0, 1e-4)
+	assert_almost_eq(GenesisChoreography.climax(g, t), GenesisChoreography.CLIMAX_REST, 1e-3)
+	assert_almost_eq(GenesisChoreography.hands_release(g, t), 1.0, 1e-3, "the hands have let go")
+	assert_almost_eq(GenesisChoreography.head_lift(g, t), 1.0, 1e-3, "she has raised her head")
+	assert_almost_eq(GenesisChoreography.halo_close(g, t), 1.0, 1e-3, "the halo is a full circle")
+	assert_eq(GenesisChoreography.stable_wave(g, t + 0.01, GenesisChoreography.wave_hops()), -1.0,
+		"the single pulse has crossed the graph")
 
 
 func test_everything_is_continuous() -> void:
@@ -83,6 +99,9 @@ func test_everything_is_continuous() -> void:
 		"heat": GenesisChoreography.planet_heat, "crust": GenesisChoreography.planet_crust,
 		"sky": GenesisChoreography.planet_atmosphere, "disc": GenesisChoreography.accretion_disc,
 		"ring": GenesisChoreography.ring, "belt": GenesisChoreography.belt,
+		"presence": GenesisChoreography.body_presence, "bloom": GenesisChoreography.seed_bloom,
+		"climax": GenesisChoreography.climax, "release": GenesisChoreography.hands_release,
+		"lift": GenesisChoreography.head_lift, "halo_close": GenesisChoreography.halo_close,
 	}
 	for k: String in fns:
 		assert_lt(_max_jump(fns[k]), 0.05, "%s has no jump between 0.02 s samples" % k)
@@ -145,8 +164,21 @@ func test_light_grows_with_the_awakening() -> void:
 	var awake := GenesisChoreography.light_levels(_full(), 12.0, {})
 	for k in ["back", "rim", "key", "ambient"]:
 		assert_gt(float(awake[k]), float(asleep[k]), "%s grows" % k)
-	assert_gt(float(asleep["back"]), float(asleep["key"]), "backlight first: the figure is a silhouette asleep")
 	assert_eq(float(asleep["planet"]), 0.0)
+	# The opening is dark (only the seed): every asleep level is a small share of the awake one.
+	for k in ["back", "rim", "key", "fill"]:
+		assert_lt(float(asleep[k]), 0.15 * float(GenesisChoreography.LIGHT_AWAKE[k]), "%s dark asleep" % k)
+	# The front lights lead the awakening (the revealed body is lit, never cut out by the backlight).
+	var g := _full()
+	var early := GenesisChoreography.light_levels(g, GenesisScript.T_AWAKEN + 1.8, {})
+	var share := func(lv: Dictionary, k: String) -> float:
+		return (float(lv[k]) - float(GenesisChoreography.LIGHT_ASLEEP[k])) / (float(GenesisChoreography.LIGHT_AWAKE[k]) - float(GenesisChoreography.LIGHT_ASLEEP[k]))
+	assert_gt(share.call(early, "key"), share.call(early, "back") + 0.2, "key and rim before the backlight")
+	assert_gt(share.call(early, "rim"), share.call(early, "back") + 0.2)
+	assert_gt(GenesisChoreography.seed_bloom(g, GenesisScript.T_AWAKEN + GenesisChoreography.SEED_BLOOM_RISE), 0.99,
+		"the seed's light blooms first")
+	assert_lt(GenesisChoreography.body_presence(g, GenesisScript.T_AWAKEN + GenesisChoreography.SEED_BLOOM_RISE), 0.25,
+		"…and then reveals her")
 	var forming := GenesisChoreography.light_levels(_full(), GenesisScript.LAYER_TIMES[0] + 3.0, {})
 	assert_gt(float(forming["planet"]), 1.0, "the molten world lights the palms")
 	assert_lte(GenesisEnvironment.DIRECTIONAL_FOG_ENERGY, 0.05)
@@ -197,9 +229,113 @@ func test_cue_pose_is_a_function_of_time() -> void:
 	GenesisShots.cue(g, 30.0, 12.0, b)
 	assert_true(a.approx_equals(b), "same (state, time, clock) -> same pose")
 	GenesisShots.cue(g, 30.5, 12.0, b)
-	assert_lt(absf(a.yaw - b.yaw), 0.01, "slow dolly")
+	assert_lt(absf(a.yaw - b.yaw), 0.04, "slow move")
 	GenesisShots.cue(g, 30.0, 12.5, b)
 	assert_lt(absf(a.yaw - b.yaw), 0.005, "the ambient sway is tiny")
+
+
+func test_camera_path_is_one_continuous_move() -> void:
+	# The cues are stations of one path: no jump anywhere, also where the cue id changes.
+	var prev := CameraShots.Shot.new()
+	var cur := CameraShots.Shot.new()
+	GenesisShots.cue_path(_state_at(0.0), 0.0, prev)
+	var t := STEP
+	var worst := 0.0
+	while t <= GenesisScript.DURATION:
+		GenesisShots.cue_path(_state_at(t), t, cur)
+		worst = maxf(worst, cur.position().distance_to(prev.position()))
+		assert_lt(absf(cur.fov - prev.fov), 0.05, "fov continuous at %.2f" % t)
+		prev.copy_from(cur)
+		t += STEP
+	assert_lt(worst, 0.12, "the camera never jumps (largest step per 0.02 s)")
+	# It opens close on the seed in the dark and recedes at the climax.
+	var open := GenesisShots.cue_path(_state_at(1.0), 1.0, CameraShots.Shot.new())
+	assert_lt(open.distance, 5.0, "close on the seed")
+	assert_lt(open.target.distance_to(GenesisLayout.miku_point("forehead")), 0.3)
+	var at_stable := GenesisShots.cue_path(_full(), GenesisScript.T_STABLE, CameraShots.Shot.new())
+	var held := GenesisShots.cue_path(_full(), GenesisScript.DURATION, CameraShots.Shot.new())
+	assert_gt(held.distance, at_stable.distance + 3.0, "the camera cranes back at the climax")
+
+
+func test_framings_never_cut_miku_at_the_waist() -> void:
+	# Key stations of the path: MIKU's waist is either well inside the frame or the frame stays below
+	# her hem / above her chest — never the waist on the frame edge.
+	var waist := GenesisLayout.MIKU_ORIGIN
+	var s := CameraShots.Shot.new()
+	for t in [8.0, 21.5, 35.0, 53.0, GenesisScript.DURATION]:
+		GenesisShots.cue_path(_full(), t, s)
+		var y := _project(s, waist).y
+		assert_true(y > 0.12 and y < 0.88 or y < -0.15 or y > 1.15, "waist clear of the frame edge at %.1f s (y=%.2f)" % [t, y])
+
+
+func test_climax_is_the_peak_of_light() -> void:
+	var g := _full()
+	var best := -1.0
+	var best_t := 0.0
+	var t := 0.0
+	var lv := {}
+	while t <= GenesisScript.DURATION:
+		var total := GenesisChoreography.light_total(GenesisChoreography.light_levels(g, t, lv))
+		if total > best + 1e-6:
+			best = total
+			best_t = t
+		t += 0.05
+	assert_gte(best_t, GenesisScript.T_STABLE, "no brighter moment before planet.stable (peak at %.2f s)" % best_t)
+	var mantle := GenesisChoreography.light_total(GenesisChoreography.light_levels(g, GenesisScript.LAYER_TIMES[0] + 3.0, lv))
+	assert_gt(best, mantle * 1.25, "the climax clearly outshines the molten mantle")
+
+
+func test_hands_let_go_and_the_kintsugi_cools() -> void:
+	var g := _full()
+	var st := GenesisScript.T_STABLE
+	assert_eq(GenesisChoreography.hands_release(g, st), 0.0)
+	var prev := 0.0
+	var t := st
+	while t <= GenesisScript.DURATION:
+		var r := GenesisChoreography.hands_release(g, t)
+		assert_true(r >= prev - 1e-6, "the release never goes back")
+		prev = r
+		t += 0.05
+	assert_lt(GenesisChoreography.veins(g, GenesisScript.DURATION, true), GenesisChoreography.veins(g, st, true) * 0.5,
+		"the kintsugi cools down")
+
+
+func test_a_single_pulse_runs_through_every_thread() -> void:
+	var hops := GenesisChoreography.wave_hops()
+	assert_eq(hops, 2, "MIKU's threads, then the ones leaving the bodies she reached")
+	for i in [0, 4, 5, 6]:
+		assert_eq(GenesisChoreography.link_hop(i), 0, "link %d leaves MIKU" % i)
+	for i in [1, 2, 3, 7]:
+		assert_eq(GenesisChoreography.link_hop(i), 1, "link %d leaves a body MIKU reached" % i)
+	var g := _full()
+	for i in GenesisScript.LINKS.size():
+		var seen := 0
+		var was_on := false
+		var t := GenesisScript.T_STABLE
+		while t <= GenesisScript.DURATION:
+			var on := GenesisChoreography.wave_on_link(GenesisChoreography.stable_wave(g, t, hops), GenesisChoreography.link_hop(i)) >= 0.0
+			if on and not was_on:
+				seen += 1
+			was_on = on
+			t += 0.02
+		assert_eq(seen, 1, "the pulse crosses link %d exactly once" % i)
+		var done := GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HOP * GenesisChoreography.link_hop(i)
+		assert_gte(done, GenesisChoreography.link_done_at(g, i), "link %d is woven when the pulse reaches it" % i)
+	assert_lte(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HOP * hops,
+		GenesisScript.DURATION, "the wave ends before the session completes")
+
+
+func test_threads_end_on_the_limb() -> void:
+	for i in GenesisScript.LINKS.size():
+		for source in [true, false]:
+			var id: StringName = GenesisScript.LINKS[i][0 if source else 1]
+			var r := RelationThreads.body_radius(id)
+			if r <= 0.0:
+				continue
+			var c := RelationThreads.body_point(i, id, 3.0)
+			assert_almost_eq(RelationThreads.endpoint(i, source, 3.0).distance_to(c), r * RelationThreads.LIMB_CLEARANCE, 1e-3,
+				"link %d ends on the surface of %s, not at its centre" % [i, id])
+	assert_lt(RelationThreads.width_of(1), RelationThreads.width_of(0), "planet -> moon threads are the finest")
 
 
 func test_limits() -> void:

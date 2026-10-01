@@ -26,10 +26,20 @@ const GLINT_SIZE := 0.9
 const GLINT_RISE := 0.35
 const GLINT_FALL := 2.2
 const GLINT_ALPHA := 0.4
+## Climax (planet.stable): the formed world's sky lights up — a wide soft aura behind the planet
+## (its disc hides the centre, so it reads as light around the limb) and a thin brighter rim
+## (sizes as a share of the final radius; alphas at the peak of GenesisChoreography.climax).
+const AURA_SIZE := 4.6
+const AURA_ALPHA := 0.3
+const AURA_RIM_SIZE := 2.5
+const AURA_RIM_ALPHA := 0.42
+const AURA_RIM_HDR := 1.25
 
 var sparks: MoteCloud
 var flare: MoteCloud
 var glints: MoteCloud
+var aura: MoteCloud
+var _aura_written := -1.0
 
 var _dirs := PackedVector3Array()
 var _speeds := PackedFloat32Array()
@@ -62,6 +72,13 @@ func _ready() -> void:
 	glints.setup(GenesisScript.LINKS.size(), Palette.GOLD.lerp(Palette.PEARL, 0.4), GLINT_SIZE, Vector2(1.0, 3.0), false)
 	glints.visible = false
 	add_child(glints)
+
+	aura = MoteCloud.new()
+	aura.name = "StableAura"
+	aura.setup(2, Palette.ICE.lerp(Palette.PEARL, 0.55), 1.0, Vector2(1.0, 3.0), false)
+	aura.position = GenesisLayout.PLANET_CENTER
+	aura.visible = false
+	add_child(aura)
 	Simulation.world_rebuilt.connect(_on_rebuilt)
 	_update()
 
@@ -72,6 +89,7 @@ func _process(_delta: float) -> void:
 
 func _on_rebuilt() -> void:
 	_written = Vector3(-9, -9, -9)
+	_aura_written = -1.0
 	_update()
 
 
@@ -105,6 +123,25 @@ func _update() -> void:
 	_update_sparks(g, t, m)
 	_update_flare(g, t)
 	_update_glints(g, t, m)
+	_update_aura(g, t)
+
+
+## The world's sky lights up at the climax (pure function of the simulation time).
+func _update_aura(g: GenesisState, t: float) -> void:
+	var c := GenesisChoreography.climax(g, t)
+	aura.visible = c > 0.002
+	if not aura.visible or is_equal_approx(c, _aura_written):
+		return
+	_aura_written = c
+	var r := GenesisLayout.PLANET_RADIUS
+	aura.set_mote(0, Vector3.ZERO, r * AURA_SIZE * (0.85 + 0.15 * c), Color(1, 1, 1, AURA_ALPHA * c))
+	aura.set_mote(1, Vector3.ZERO, r * AURA_RIM_SIZE, Color(AURA_RIM_HDR, AURA_RIM_HDR, AURA_RIM_HDR, AURA_RIM_ALPHA * c))
+	aura.commit()
+
+
+## Climax aura level last written (tests/debug).
+func aura_level() -> float:
+	return maxf(_aura_written, 0.0)
 
 
 func _update_sparks(g: GenesisState, t: float, m: float) -> void:

@@ -32,9 +32,30 @@ const FAR_HEAT := 0.08
 const MOON_GLOW := Vector2(0.35, 0.7)
 ## Belt rock sizes (min, max, bias) and seed.
 const BELT_SEED := 9107
-const ROCK_SCALE := Vector3(0.04, 0.24, 3.2)
+const ROCK_SCALE := Vector3(0.03, 0.22, 3.6)
 ## Share of the belt rocks drawn per quality (floor), rocks are geometry, not particles.
 const BELT_MIN_SHARE := 0.45
+## Belt dust: thousands of fine grains between the rocks (one MultiMesh of motes, written once,
+## turning with the rocks), a few of them GOLD glints of memory. Count, size, share of glints,
+## glint HDR, alpha, thickness share of the belt.
+const BELT_DUST := 3200
+const BELT_DUST_SIZE := 0.13
+const BELT_GLINT_SHARE := 0.05
+const BELT_GLINT_HDR := 1.6
+const BELT_DUST_ALPHA := 0.45
+const BELT_DUST_THICKNESS := 0.6
+## Grains closer to the lens than x are hidden, fully visible from y (no bokeh discs over the camera).
+const BELT_DUST_NEAR_FADE := Vector2(6.0, 14.0)
+## The older worlds carry their own bodies: NAUVE-2 a thin ring (inner, outer as a share of its
+## radius, tilt), KESTRE-4 a second moon (orbit share of the first, radius, period s, tilt).
+const FAR_RING := Vector2(1.45, 2.3)
+const FAR_RING_TILT := Vector3(0.42, 0.0, 0.3)
+const FAR_RING_SEED := 5.7
+const FAR_RING_INTENSITY := 0.32
+const FAR_MOON2_ORBIT := 1.7
+const FAR_MOON2_RADIUS := 0.22
+const FAR_MOON2_PERIOD := 97.0
+const FAR_MOON2_TILT := Vector3(-0.35, 0.0, -0.2)
 const SELECT_RATE := 6.0
 const MOON_KEYS: Array[String] = ["moon0", "moon1"]
 const GLOW_KEYS: Array[String] = ["moon0glow", "moon1glow"]
@@ -45,6 +66,9 @@ var moon_orbits: Array[MeshInstance3D] = []
 var ring: MeshInstance3D
 var belt: Node3D
 var belt_rocks: MultiMeshInstance3D
+var belt_dust: MoteCloud
+var far_ring: MeshInstance3D
+var far_moon2_pivot: Node3D
 var far_planets: Array[Node3D] = []
 var far_pivots: Array[Node3D] = []
 var far_moon_pivots: Array[Node3D] = []
@@ -183,6 +207,31 @@ func _build_belt() -> void:
 	belt.add_child(belt_rocks)
 	_belt_body = _band_body(&"belt_memory", mid, GenesisLayout.BELT_OUTER - GenesisLayout.BELT_INNER)
 	belt.add_child(_belt_body)
+	# Fine dust between the rocks (static positions, turns with them; fades in with the belt).
+	belt_dust = MoteCloud.new()
+	belt_dust.name = "Dust"
+	belt_dust.setup(BELT_DUST, Palette.LILAC.lerp(Palette.PEARL, 0.45), BELT_DUST_SIZE, BELT_DUST_NEAR_FADE, true,
+		belt_rocks.custom_aabb)
+	belt_dust.min_visible = 600
+	belt_rocks.add_child(belt_dust)
+	var col := Color(1, 1, 1, 1)
+	var bi := GenesisLayout.BELT_INNER
+	var bw := GenesisLayout.BELT_OUTER - bi
+	for i in BELT_DUST:
+		var hr := Motion.hash01(i * 53 + 1)
+		var ha := Motion.hash01(i * 59 + 2)
+		var hy := Motion.hash01(i * 61 + 3) + Motion.hash01(i * 67 + 4) - 1.0
+		var hs := Motion.hash01(i * 71 + 5)
+		# Denser towards the middle of the band (sum of two uniforms), a wisp beyond its edges.
+		var r := bi - 0.4 + (bw + 0.8) * (0.5 + 0.5 * (hr + Motion.hash01(i * 73 + 6) - 1.0))
+		var a := TAU * ha
+		var glint := Motion.hash01(i * 79 + 7) < BELT_GLINT_SHARE
+		var k := BELT_GLINT_HDR if glint else 1.0
+		col = Color(k, k * (0.92 if glint else 1.0), k * (0.75 if glint else 1.0),
+			BELT_DUST_ALPHA * (0.35 + 0.65 * hs) * (1.4 if glint else 1.0))
+		belt_dust.set_mote(i, Vector3(sin(a) * r, hy * GenesisLayout.BELT_THICKNESS * BELT_DUST_THICKNESS, cos(a) * r),
+			(0.45 if glint else 0.5 + 0.8 * hs), col)
+	belt_dust.commit()
 
 
 func _build_far() -> void:
@@ -248,6 +297,49 @@ func _build_far() -> void:
 		moon.material_override = mmat
 		mpivot.add_child(moon)
 		_far_moon_mats.append(mmat)
+		if i == 0:
+			# NAUVE-2: its own thin ring (an older world with its own skills).
+			var rframe := Node3D.new()
+			rframe.name = "RingFrame"
+			rframe.rotation = FAR_RING_TILT
+			world.add_child(rframe)
+			far_ring = MeshInstance3D.new()
+			far_ring.name = "Ring"
+			var plane := PlaneMesh.new()
+			plane.size = Vector2.ONE * fr * FAR_RING.y * 2.0
+			far_ring.mesh = plane
+			var rmat := MaterialLibrary.ring_skill().duplicate() as ShaderMaterial
+			rmat.set_shader_parameter("inner", FAR_RING.x / FAR_RING.y)
+			rmat.set_shader_parameter("outer", 1.0)
+			rmat.set_shader_parameter("seed", FAR_RING_SEED)
+			rmat.set_shader_parameter("formation", 1.0)
+			rmat.set_shader_parameter("intensity", FAR_RING_INTENSITY)
+			far_ring.material_override = rmat
+			far_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			rframe.add_child(far_ring)
+		else:
+			# KESTRE-4: a second, closer moon on its own inclined orbit.
+			var m2frame := Node3D.new()
+			m2frame.name = "MoonOrbit2"
+			m2frame.rotation = FAR_MOON2_TILT
+			world.add_child(m2frame)
+			var r2 := fr * FAR_MOON2_ORBIT
+			var m2line := _orbit_line(m2frame, r2, FAR_MOON_ORBIT_TUBE, FAR_ORBIT_INTENSITY * 0.6)
+			m2line.name = "OrbitLine2"
+			far_moon2_pivot = Node3D.new()
+			far_moon2_pivot.name = "Pivot"
+			m2frame.add_child(far_moon2_pivot)
+			var moon2 := MeshInstance3D.new()
+			moon2.name = "Moon2"
+			moon2.mesh = moon.mesh
+			moon2.scale = Vector3.ONE * FAR_MOON2_RADIUS
+			moon2.position = Vector3(0.0, 0.0, r2)
+			var m2mat := MaterialLibrary.moon_doc().duplicate() as ShaderMaterial
+			m2mat.set_shader_parameter("seed", FAR_MOON_SEEDS[i] * 0.5 + 0.2)
+			m2mat.set_shader_parameter("formation", 1.0)
+			m2mat.set_shader_parameter("glow", 0.25)
+			moon2.material_override = m2mat
+			far_moon2_pivot.add_child(moon2)
 
 
 func _orbit_line(parent: Node3D, r: float, tube: float, intensity: float) -> MeshInstance3D:
@@ -348,6 +440,10 @@ func _update(delta: float) -> void:
 		_far_orbit_mats[i * 2 + 1].set_shader_parameter("head", mph)
 		_far_mats[i].set_shader_parameter("motion_time", m)
 		_highlight(GenesisScript.far_planet_entity(i), _far_mats[i], delta)
+	if far_moon2_pivot:
+		far_moon2_pivot.rotation.y = TAU * fposmod(m / FAR_MOON2_PERIOD + 0.55, 1.0)
+	if far_ring:
+		far_ring.rotation.y = TAU * fposmod(m / RING_TURN, 1.0)
 
 
 func _write_belt(g: GenesisState, t: float, bf: float) -> void:
@@ -356,6 +452,7 @@ func _write_belt(g: GenesisState, t: float, bf: float) -> void:
 	var exists := bf > 0.0
 	belt.visible = exists
 	_belt_body.collision_layer = 2 if bf > 0.5 else 0
+	belt_dust.transparency = 1.0 - Motion.eased(bf) if bf < 0.999 else 0.0
 	_belt_mat.set_shader_parameter("memory", Motion.eased(clampf((bf - 0.4) / 0.6, 0.0, 1.0)))
 	# Rocks swell in one by one; once fully formed (and already written so) nothing is rewritten.
 	if bf >= 1.0 and was >= 1.0:

@@ -31,15 +31,22 @@ const PLANET_RANGE := 7.5
 const PLANET_ATTENUATION := 1.6
 const PLANET_FOG := 0.6
 const PLANET_SPECULAR := 0.35
+## Climax (planet.stable): the world's sky light (colour) reaches farther (units at the peak).
+const PLANET_SKY_COLOR := Palette.PEARL
+const PLANET_SKY_ICE := 0.45
+const PLANET_CLIMAX_REACH := 5.0
 ## Directional haze energy (<= GenesisEnvironment.DIRECTIONAL_FOG_ENERGY).
 const DIRECTIONAL_FOG := 0.04
-## Key shadow (the only caster): reach covers MIKU, the hands and the planet from every hero
-## shot; soft blur and normal bias keep the sculptures free of acne.
+## Key shadow (the only caster): reach covers the hands and the planet from every hero shot; soft
+## blur and normal bias keep the sculptures free of acne. MIKU casts no shadow (Miku: the key's
+## self-shadow drew stair-stepped bands across her torso and gown — her baked AO and the SSAO shape
+## her instead), so the key's shadows only seat the hands and the world in each other.
 const KEY_SHADOW_MAX_DISTANCE := 60.0
 const KEY_SHADOW_MAX_DISTANCE_2_SPLITS := 36.0
-const KEY_SHADOW_BLUR := 1.6
-const KEY_SHADOW_BLUR_2_SPLITS := 2.2
-const KEY_SHADOW_NORMAL_BIAS := 1.4
+const KEY_SHADOW_BLUR := 2.2
+const KEY_SHADOW_BLUR_2_SPLITS := 2.8
+const KEY_SHADOW_NORMAL_BIAS := 2.0
+const KEY_SHADOW_BIAS := 0.06
 
 var environment: Environment
 
@@ -98,7 +105,10 @@ func _update() -> void:
 	fill.light_energy = _levels["fill"]
 	var pe := float(_levels["planet"])
 	planet_glow.light_energy = pe
-	planet_glow.light_color = PLANET_COLOR.lerp(PLANET_HOT_COLOR, 0.35 * heat)
+	# At the climax the formed world lights the scene with its own sky (cool pearl), not with magma.
+	var sky_share := GenesisChoreography.PLANET_LIGHT_CLIMAX * float(_levels["climax"]) / maxf(pe, 1e-3)
+	planet_glow.light_color = PLANET_COLOR.lerp(PLANET_HOT_COLOR, 0.35 * heat).lerp(PLANET_SKY_COLOR.lerp(Palette.ICE, PLANET_SKY_ICE), clampf(sky_share, 0.0, 1.0))
+	planet_glow.omni_range = PLANET_RANGE + PLANET_CLIMAX_REACH * float(_levels["climax"])
 	planet_glow.visible = pe > 0.002
 	if environment == null:
 		return
@@ -137,3 +147,6 @@ func _on_quality(profile: Dictionary) -> void:
 	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DISTANCE_2_SPLITS if splits == 2 else KEY_SHADOW_MAX_DISTANCE
 	key.shadow_blur = KEY_SHADOW_BLUR_2_SPLITS if splits == 2 else KEY_SHADOW_BLUR
 	key.shadow_normal_bias = KEY_SHADOW_NORMAL_BIAS
+	key.shadow_bias = KEY_SHADOW_BIAS
+	# Blend the cascades: a hard split boundary reads as a step across the stone.
+	key.directional_shadow_blend_splits = true
