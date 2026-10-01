@@ -10,11 +10,23 @@ extends RefCounted
 # --- MIKU ------------------------------------------------------------------------------------------
 ## Awakening: porcelain inner light, gown, key/rim lights (s from miku.awaken).
 const AWAKEN_DUR := 5.0
+## Opening: in the dark only the gold seed on her brow glows (a dormant ember, SEED_DORMANT of the
+## awake seed). At miku.awaken the seed blooms first and its light reveals the porcelain: the body
+## comes out of the dark after REVEAL_DELAY over REVEAL_DUR (never a dark humanoid silhouette).
+const SEED_DORMANT := 0.45
+const REVEAL_DELAY := 0.5
+const REVEAL_DUR := 4.2
+## The seed's own light blooms out of it while it reveals her (rise, fall in seconds).
+const SEED_BLOOM_RISE := 1.5
+const SEED_BLOOM_FALL := 5.5
+## Front lights lead (the revealed body is lit, never cut out); the warm backlight follows later.
+const FRONT_LIGHT_DUR := 3.8
+const BACK_LIGHT_DELAY := 2.2
 ## Hair spun out from the root (s from miku.awaken), from HAIR_ASLEEP of its length.
 const HAIR_GROW_DUR := 8.0
 const HAIR_ASLEEP := 0.14
-## Hair / gown brightness asleep and awake.
-const HAIR_INTENSITY := Vector2(0.28, 0.8)
+## Hair / gown brightness asleep and awake (asleep: dark, only the seed).
+const HAIR_INTENSITY := Vector2(0.0, 0.8)
 const GOWN_PRESENCE := Vector2(0.2, 1.0)
 ## Halo appears after the seed lights (delay, swell in seconds from miku.awaken).
 const HALO_DELAY := 1.2
@@ -42,7 +54,12 @@ const SCULPT_FALL := 2.6
 const VEINS_SUMMONED := 0.16
 const VEINS_WORK := 0.42
 const VEINS_PRESS := 0.34
-const VEINS_STABLE := 0.3
+## After planet.stable the kintsugi cools down to VEINS_STABLE over VEINS_COOL_DUR.
+const VEINS_STABLE := 0.07
+const VEINS_COOL_DUR := 7.0
+## Release after planet.stable: the hands let the world go, slowly (delay, duration in seconds).
+const RELEASE_DELAY := 0.6
+const RELEASE_DUR := 9.0
 
 # --- Dust and planet -----------------------------------------------------------------------------------
 ## Dust converges between the hands from dust.gathered into the seed (s).
@@ -75,15 +92,40 @@ const BELT_ROCK_SWELL := 0.35
 const LINK_WEAVE := 2.2
 const LINK_STAGGER := 0.32
 
+# --- Climax (planet.stable) -------------------------------------------------------------------------
+## The peak of light is reserved to planet.stable: it rises after CLIMAX_DELAY over CLIMAX_RISE,
+## holds CLIMAX_HOLD, and settles over CLIMAX_FALL to CLIMAX_REST (the formed world stays lit).
+const CLIMAX_DELAY := 0.3
+const CLIMAX_RISE := 2.2
+const CLIMAX_HOLD := 1.6
+const CLIMAX_FALL := 6.0
+const CLIMAX_REST := 0.35
+## MIKU raises her head (delay, duration) and her halo closes into a full circle (delay, duration).
+const HEAD_LIFT_DELAY := 0.8
+const HEAD_LIFT_DUR := 5.0
+const HALO_CLOSE_DELAY := 0.5
+const HALO_CLOSE_DUR := 4.5
+## One pulse runs through every thread: it leaves MIKU after WAVE_DELAY and crosses one hop of the
+## graph (GenesisScript.LINKS, breadth-first from MIKU) every WAVE_HOP seconds.
+const WAVE_DELAY := 0.5
+const WAVE_HOP := 1.6
+
 # --- Light ----------------------------------------------------------------------------------------------
 ## Light levels asleep (before miku.awaken) and awake. Keys: back (warm contraluz), rim (ICE),
-## key (PEARL ¾ side), fill (NEBULA), ambient (environment ambient energy).
-const LIGHT_ASLEEP := {"back": 1.1, "rim": 0.25, "key": 0.12, "fill": 0.04, "ambient": 0.16}
+## key (PEARL ¾ side), fill (NEBULA), ambient (environment ambient energy). Asleep the scene is
+## dark: only the seed glows (a dim backlight would cut her out as a dark silhouette).
+const LIGHT_ASLEEP := {"back": 0.3, "rim": 0.05, "key": 0.03, "fill": 0.02, "ambient": 0.1}
 const LIGHT_AWAKE := {"back": 2.3, "rim": 1.25, "key": 1.05, "fill": 0.12, "ambient": 0.26}
+## Added at the climax peak (the brightest moment of the session).
+const LIGHT_CLIMAX := {"back": 1.2, "rim": 0.75, "key": 0.5, "fill": 0.06, "ambient": 0.08}
 ## Planet glow (omni at the planet): energy at full heat and formation; a formed world keeps
 ## PLANET_LIGHT_REST of it (its sky and the last embers still light the palms).
 const PLANET_LIGHT := 2.6
 const PLANET_LIGHT_REST := 0.3
+## At the climax the formed world shines with its own sky (PEARL/ICE light, rig) — above the mantle.
+const PLANET_LIGHT_CLIMAX := 3.4
+## Weights of the "total light" proxy used to check that the climax is the peak (tests/debug).
+const LIGHT_WEIGHTS := {"back": 1.0, "rim": 1.0, "key": 1.0, "fill": 1.0, "ambient": 2.0, "planet": 0.6}
 
 
 # --- MIKU ------------------------------------------------------------------------------------------
@@ -111,18 +153,46 @@ static func halo(g: GenesisState, t: float) -> float:
 	return Motion.smooth(g.awaken_at + HALO_DELAY, t, HALO_DUR)
 
 
-## Brightness of the seed on MIKU's brow: 0 asleep, 1 awake, up to 1 + SEED_SURGE while she
-## creates (seeded, each layer, each moon, ring, belt, links).
+## Brightness of the seed on MIKU's brow: a dormant ember (SEED_DORMANT) in the dark, 1 awake, up to
+## 1 + SEED_SURGE while she creates (seeded, each layer, each moon, ring, belt, links).
 static func seed_light(g: GenesisState, t: float) -> float:
-	var s := Motion.smooth(g.awaken_at, t, SEED_DUR)
+	var s := lerpf(SEED_DORMANT, 1.0, Motion.smooth(g.awaken_at, t, SEED_DUR))
 	# No allocation per frame: every creation time is visited in place.
 	var surge := maxf(maxf(_bump(g.seeded_at, t, 0.8, SEED_SURGE_DUR), _bump(g.ring_at, t, 0.8, SEED_SURGE_DUR)),
 		maxf(_bump(g.belt_at, t, 0.8, SEED_SURGE_DUR), _bump(g.links_at, t, 0.8, SEED_SURGE_DUR)))
+	surge = maxf(surge, _bump(g.stable_at, t, CLIMAX_DELAY + CLIMAX_RISE, SEED_SURGE_DUR * 2.0))
 	for at in g.planet_layer_times:
 		surge = maxf(surge, _bump(at, t, 0.8, SEED_SURGE_DUR))
 	for at in g.moon_times:
 		surge = maxf(surge, _bump(at, t, 0.8, SEED_SURGE_DUR))
 	return s * (1.0 + SEED_SURGE * surge)
+
+
+## Presence of the porcelain body 0..1: hidden in the dark before miku.awaken (only the seed), then
+## revealed by the seed's light (REVEAL_DELAY, REVEAL_DUR).
+static func body_presence(g: GenesisState, t: float) -> float:
+	if g.awaken_at < 0.0:
+		return 0.0
+	return Motion.smooth(g.awaken_at + REVEAL_DELAY, t, REVEAL_DUR)
+
+
+## Bloom 0..1 of the seed's own light at the awakening (the light that reveals her), then it settles.
+static func seed_bloom(g: GenesisState, t: float) -> float:
+	return _bump(g.awaken_at, t, SEED_BLOOM_RISE, SEED_BLOOM_FALL)
+
+
+## MIKU raises her head at planet.stable 0..1.
+static func head_lift(g: GenesisState, t: float) -> float:
+	if g.stable_at < 0.0:
+		return 0.0
+	return Motion.smooth(g.stable_at + HEAD_LIFT_DELAY, t, HEAD_LIFT_DUR)
+
+
+## The halo's arc closes into a full circle at planet.stable 0..1.
+static func halo_close(g: GenesisState, t: float) -> float:
+	if g.stable_at < 0.0:
+		return 0.0
+	return Motion.smooth(g.stable_at + HALO_CLOSE_DELAY, t, HALO_CLOSE_DUR)
 
 
 ## Times of every act of creation that has happened (seeded, layers, moons, ring, belt, links).
@@ -180,8 +250,15 @@ static func veins(g: GenesisState, t: float, right: bool) -> float:
 	var work := hands_work(g, t)
 	var press := sculpt_press(g, t) * (1.0 if right else 0.6)
 	var working := VEINS_WORK * work + VEINS_PRESS * press
-	var rest := VEINS_STABLE * Motion.smooth(g.stable_at, t, STABLE_DUR)
-	return clampf(maxf(v + working, rest), 0.0, 1.0)
+	var cool := Motion.smooth(g.stable_at, t, VEINS_COOL_DUR) if g.stable_at >= 0.0 else 0.0
+	return clampf(lerpf(v + working, VEINS_STABLE, cool), 0.0, 1.0)
+
+
+## Release of the hands after planet.stable 0..1: they withdraw slowly, palms opening (letting go).
+static func hands_release(g: GenesisState, t: float) -> float:
+	if g.stable_at < 0.0:
+		return 0.0
+	return Motion.smooth(g.stable_at + RELEASE_DELAY, t, RELEASE_DUR)
 
 
 # --- Dust and planet -----------------------------------------------------------------------------------
@@ -287,16 +364,90 @@ static func link_done_at(g: GenesisState, i: int) -> float:
 	return g.links_at + i * LINK_STAGGER + LINK_WEAVE if g.links_at >= 0.0 else -1.0
 
 
+# --- Climax -------------------------------------------------------------------------------------------
+
+## Climax envelope 0..1 after planet.stable: rises to 1 (the peak of light of the session), holds,
+## settles to CLIMAX_REST. 0 before the event.
+static func climax(g: GenesisState, t: float) -> float:
+	if g.stable_at < 0.0:
+		return 0.0
+	var s := g.stable_at + CLIMAX_DELAY
+	var up := Motion.smooth(s, t, CLIMAX_RISE)
+	var down := Motion.smooth(s + CLIMAX_RISE + CLIMAX_HOLD, t, CLIMAX_FALL)
+	return up * (1.0 - (1.0 - CLIMAX_REST) * down)
+
+
+## Hop of link `i` in the graph: breadth-first depth of its source from MIKU (0 for MIKU's own
+## threads). The stable wave crosses hop h during [h, h + 1] of stable_wave(). Called at build time.
+static func link_hop(i: int) -> int:
+	var depth := {&"miku": 0}
+	var changed := true
+	while changed:
+		changed = false
+		for l: Array in GenesisScript.LINKS:
+			var a: StringName = l[0]
+			var b: StringName = l[1]
+			if depth.has(a) and (not depth.has(b) or int(depth[b]) > int(depth[a]) + 1):
+				depth[b] = int(depth[a]) + 1
+				changed = true
+	var src: StringName = GenesisScript.LINKS[i][0]
+	return int(depth.get(src, 0))
+
+
+## Number of hops of the stable wave (deepest link hop + 1).
+static func wave_hops() -> int:
+	var n := 0
+	for i in GenesisScript.LINKS.size():
+		n = maxi(n, link_hop(i) + 1)
+	return n
+
+
+## Position of the single stable pulse in hops (0 = leaving MIKU, `hops` = arrived everywhere);
+## -1 before planet.stable + WAVE_DELAY and after the wave ended.
+static func stable_wave(g: GenesisState, t: float, hops: int) -> float:
+	if g.stable_at < 0.0:
+		return -1.0
+	var x := t - (g.stable_at + WAVE_DELAY)
+	if x < 0.0 or x > WAVE_HOP * hops:
+		return -1.0
+	return x / WAVE_HOP
+
+
+## Pulse position 0..1 of the stable wave `wave` on a link of hop `hop`; -1 when not on it.
+static func wave_on_link(wave: float, hop: int) -> float:
+	if wave < 0.0:
+		return -1.0
+	var p := wave - float(hop)
+	if p < 0.0 or p > 1.0:
+		return -1.0
+	return Motion.eased(p, Tween.TRANS_SINE, Tween.EASE_IN_OUT)
+
+
 # --- Light ----------------------------------------------------------------------------------------------
 
-## Light levels of the rig at (g, t) into `out` (keys of LIGHT_AWAKE + "planet"): asleep -> awake
-## with the awakening, the planet glow with heat and formation.
+## Light levels of the rig at (g, t) into `out` (keys of LIGHT_AWAKE + "planet" + "climax").
+## The front lights (key, rim, fill, ambient) lead the awakening so the revealed body is lit; the
+## warm backlight follows BACK_LIGHT_DELAY later. The climax adds LIGHT_CLIMAX and the world's own
+## sky light (`planet` = molten glow + PLANET_LIGHT_CLIMAX × climax; `climax` = the envelope).
 static func light_levels(g: GenesisState, t: float, out: Dictionary) -> Dictionary:
-	var a := awaken(g, t)
+	var front := Motion.smooth(g.awaken_at, t, FRONT_LIGHT_DUR)
+	var back := Motion.smooth(g.awaken_at + BACK_LIGHT_DELAY, t, AWAKEN_DUR) if g.awaken_at >= 0.0 else 0.0
+	var c := climax(g, t)
 	for k: String in LIGHT_AWAKE:
-		out[k] = lerpf(float(LIGHT_ASLEEP[k]), float(LIGHT_AWAKE[k]), a)
-	out["planet"] = PLANET_LIGHT * maxf(planet_heat(g, t), PLANET_LIGHT_REST * planet_crust(g, t)) * planet_formation(g, t)
+		var a := back if k == "back" else front
+		out[k] = lerpf(float(LIGHT_ASLEEP[k]), float(LIGHT_AWAKE[k]), a) + float(LIGHT_CLIMAX[k]) * c
+	var molten := PLANET_LIGHT * maxf(planet_heat(g, t), PLANET_LIGHT_REST * planet_crust(g, t)) * planet_formation(g, t)
+	out["planet"] = molten + PLANET_LIGHT_CLIMAX * c
+	out["climax"] = c
 	return out
+
+
+## Weighted sum of a light_levels() dictionary (tests: the climax is the peak of the session).
+static func light_total(levels: Dictionary) -> float:
+	var s := 0.0
+	for k: String in LIGHT_WEIGHTS:
+		s += float(LIGHT_WEIGHTS[k]) * float(levels.get(k, 0.0))
+	return s
 
 
 # --- helpers --------------------------------------------------------------------------------------------

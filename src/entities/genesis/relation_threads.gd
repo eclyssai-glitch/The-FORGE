@@ -21,10 +21,22 @@ extends Node3D
 ## on the MIKU -> planet thread), picked through capsules along the MIKU -> planet thread.
 
 const ENTITY := &"relations"
-## Thread ribbon width, segments, arc height (share of the chord).
-const WIDTH := 0.06
+## Thread ribbon width (MIKU's threads; body -> body threads are WIDTH_BODY, planet -> moon
+## threads WIDTH_MOON: fine filaments, never rods), segments, arc height (share of the chord).
+const WIDTH := 0.05
+const WIDTH_BODY := 0.034
+const WIDTH_MOON := 0.022
 const SEGMENTS := 40
 const ARC := 0.16
+## Threads end on the surface of the bodies they tie (the limb that faces the other end), never at
+## their centre: radius × LIMB_CLEARANCE from the centre (a hair outside the surface).
+const LIMB_CLEARANCE := 1.03
+## Stable wave (GenesisChoreography.stable_wave): the single pulse is larger and brighter than the
+## ambient ones and lights each thread while it runs through it.
+const WAVE_CORE := 0.14
+const WAVE_HALO := 0.7
+const WAVE_HDR := 2.4
+const WAVE_GLOW := 1.4
 ## Rebuild a moving thread when one end moved farther than this (units); a growing thread when its
 ## weave advanced more than WEAVE_STEP.
 const REBUILD_STEP := 0.06
@@ -70,6 +82,9 @@ var _ends_b := PackedVector3Array()
 var _built_w := PackedFloat32Array()
 var _pivot_of: Array[Node3D] = []
 var _periods := PackedFloat32Array()
+var _hops := PackedInt32Array()
+var _wave_hops := 1
+var _intensity_written := PackedFloat32Array()
 var _pick_body: StaticBody3D
 var _shown := -1
 
@@ -85,8 +100,13 @@ func _ready() -> void:
 	_built_w.fill(-1.0)
 	_periods.resize(n)
 	_pivot_of.resize(n)
+	_hops.resize(n)
+	_intensity_written.resize(n)
+	_intensity_written.fill(-1.0)
+	_wave_hops = GenesisChoreography.wave_hops()
 	var m := MotionClock.now()
 	for i in n:
+		_hops[i] = GenesisChoreography.link_hop(i)
 		_periods[i] = lerpf(PULSE_PERIODS.x, PULSE_PERIODS.y, Motion.hash01(i * 17 + 4))
 		var mat := MaterialLibrary.relation_thread().duplicate() as ShaderMaterial
 		mat.set_shader_parameter("color_to", target_color(GenesisScript.LINKS[i][1]))
@@ -118,8 +138,9 @@ func _ready() -> void:
 			frame.add_child(pivot)
 			pivot.add_child(mi)
 			_pivot_of[i] = pivot
-			_ends_a[i] = Vector3.ZERO
-			_ends_b[i] = Vector3(0.0, 0.0, GenesisLayout.MOON_ORBITS[mi_idx])
+			# From the world's limb to the moon's limb (along the pivot's +Z, towards the moon).
+			_ends_a[i] = Vector3(0.0, 0.0, GenesisLayout.PLANET_RADIUS * LIMB_CLEARANCE)
+			_ends_b[i] = Vector3(0.0, 0.0, GenesisLayout.MOON_ORBITS[mi_idx] - GenesisLayout.MOON_RADII[mi_idx] * LIMB_CLEARANCE)
 		else:
 			add_child(mi)
 			_kinds[i] = 2 if moving(a) or moving(b) else 0
@@ -170,9 +191,47 @@ static func target_color(id: StringName) -> Color:
 	return Palette.ICE
 
 
-## World point where link `i` starts (`source`) or ends, at ambient time `m`.
+## World point where link `i` starts (`source`) or ends, at ambient time `m`: on the limb of a
+## round body (planet, moons, distant worlds) facing the other end; MIKU's end is inside her hair,
+## the ring's and the belt's on their circle.
 static func endpoint(i: int, source: bool, m: float) -> Vector3:
 	var id: StringName = GenesisScript.LINKS[i][0 if source else 1]
+	var c := body_point(i, id, m)
+	var r := body_radius(id)
+	if r <= 0.0:
+		return c
+	var other: StringName = GenesisScript.LINKS[i][1 if source else 0]
+	var d := body_point(i, other, m) - c
+	return c + d.normalized() * r * LIMB_CLEARANCE if d.length() > 1e-4 else c
+
+
+## Radius of a round body a thread ends on (0 for MIKU, the ring and the belt).
+static func body_radius(id: StringName) -> float:
+	match id:
+		&"planet_forming":
+			return GenesisLayout.PLANET_RADIUS
+		&"moon_0":
+			return GenesisLayout.MOON_RADII[0]
+		&"moon_1":
+			return GenesisLayout.MOON_RADII[1]
+		&"planet_far_0":
+			return GenesisLayout.FAR_RADII[0]
+		&"planet_far_1":
+			return GenesisLayout.FAR_RADII[1]
+	return 0.0
+
+
+## Ribbon width of link `i`.
+static func width_of(i: int) -> float:
+	var a: StringName = GenesisScript.LINKS[i][0]
+	var b: StringName = GenesisScript.LINKS[i][1]
+	if b == &"moon_0" or b == &"moon_1":
+		return WIDTH_MOON
+	return WIDTH if a == &"miku" else WIDTH_BODY
+
+
+## Centre of body `id` as seen by link `i` (MIKU: the hair source of that link).
+static func body_point(i: int, id: StringName, m: float) -> Vector3:
 	match id:
 		&"miku":
 			var root := GenesisLayout.anchor("miku_body", "hair_root", Vector3(-0.08, 1.73, -0.11))
@@ -238,10 +297,10 @@ func _build(i: int, w: float) -> void:
 	var up := _bulge(i) if _kinds[i] != 1 else Vector3.UP
 	var h := a.distance_to(b) * ARC
 	if w >= 0.999:
-		threads[i].mesh = RelationThread.build_crossed(a, b, h, WIDTH, SEGMENTS, up)
+		threads[i].mesh = RelationThread.build_crossed(a, b, h, width_of(i), SEGMENTS, up)
 		return
 	var p := partial_arc(a, b, h, up, w)
-	threads[i].mesh = RelationThread.build_crossed(a, p[0], p[1], WIDTH, maxi(6, int(SEGMENTS * w)), p[2])
+	threads[i].mesh = RelationThread.build_crossed(a, p[0], p[1], width_of(i), maxi(6, int(SEGMENTS * w)), p[2])
 
 
 func _update() -> void:
@@ -250,6 +309,7 @@ func _update() -> void:
 	var m := MotionClock.now()
 	var any := false
 	var pulsing := false
+	var wave := GenesisChoreography.stable_wave(g, t, _wave_hops)
 	for i in threads.size():
 		var w := GenesisChoreography.link(g, t, i)
 		var mi := threads[i]
@@ -275,8 +335,14 @@ func _update() -> void:
 				moved = true
 		if moved or _built_w[i] < 0.0 or absf(w - _built_w[i]) > WEAVE_STEP or (w >= 0.999 and _built_w[i] < 0.999):
 			_build(i, w)
-		# Pulse: a pair of motes riding the full arc.
-		var p := pulse_at(i, w, m, _periods[i])
+		# The single stable wave takes over the thread while it runs through it (the whole graph
+		# answers the world that holds); otherwise the ambient pulse, a pair of motes on the arc.
+		var wp := GenesisChoreography.wave_on_link(wave, _hops[i]) if w >= 0.999 else -1.0
+		var lit := INTENSITY * (1.0 + WAVE_GLOW * sin(PI * clampf(wave - _hops[i], 0.0, 1.0))) if wp >= 0.0 else INTENSITY
+		if not is_equal_approx(lit, _intensity_written[i]):
+			_intensity_written[i] = lit
+			_mats[i].set_shader_parameter("intensity", lit)
+		var p := wp if wp >= 0.0 else pulse_at(i, w, m, _periods[i])
 		if p < 0.0:
 			pulses.hide_mote(i * 2)
 			pulses.hide_mote(i * 2 + 1)
@@ -287,8 +353,13 @@ func _update() -> void:
 		if _kinds[i] == 1:
 			pos = to_local(_pivot_of[i].global_transform * pos)
 		var env := sin(PI * p)
-		pulses.set_mote(i * 2, pos, PULSE_CORE, Color(PULSE_HDR, PULSE_HDR, PULSE_HDR, env))
-		pulses.set_mote(i * 2 + 1, pos, PULSE_HALO, Color(1, 1, 1, 0.22 * env))
+		var core := WAVE_CORE if wp >= 0.0 else PULSE_CORE
+		var halo := WAVE_HALO if wp >= 0.0 else PULSE_HALO
+		var hdr := WAVE_HDR if wp >= 0.0 else PULSE_HDR
+		# The wave's pulse stays bright end to end (it hands over to the next hop).
+		var a := maxf(env, 0.55) if wp >= 0.0 else env
+		pulses.set_mote(i * 2, pos, core, Color(hdr, hdr, hdr, a))
+		pulses.set_mote(i * 2 + 1, pos, halo, Color(1, 1, 1, 0.22 * a))
 	pulses.visible = pulsing
 	if pulsing:
 		pulses.commit()

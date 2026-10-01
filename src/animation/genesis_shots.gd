@@ -48,18 +48,39 @@ const OBSERVATORY_FOV := 40.0
 # --- Cinematic cues (FORGE) ---------------------------------------------------------------------
 const CUE_PORTRAIT := &"cue_g_portrait"
 const CUE_HERO := &"cue_g_hero"
+const CUE_CRADLE := &"cue_g_cradle"
 const CUE_ORBITS := &"cue_g_orbits"
 const CUE_BELT := &"cue_g_belt"
 const CUE_THREADS := &"cue_g_threads"
 const CUE_STABLE := &"cue_g_stable"
+## The cues are stations of ONE continuous camera path (cue_path): consecutive cues need no blend
+## (the CameraDirector only blends into the path from a mode/user framing).
+const CONTINUOUS_CUES := true
 ## Ambient sway of every cue (rad; periods s).
 const SWAY_YAW := 0.018
 const SWAY_PITCH := 0.008
 const SWAY_PERIODS := Vector2(37.0, 53.0)
-## Slow dolly while the world forms (rad per sim second) and the final push-in (units per s).
-const HERO_DOLLY := 0.0055
-const STABLE_PUSH := 0.12
-const STABLE_PUSH_MAX := 2.0
+## The path: a close on the seed in the dark, then four designed moves, each eased in and out over
+## its own duration from its event (s). Poses: [target, yaw, pitch, distance, fov].
+##  1. Crane back at the awakening: from the seed (close, a little above, looking down into the dark
+##     below the warm core) back and down to MIKU whole, as the seed's light reveals her.
+##  2. Dolly back while the hands rise and the dust gathers: the world appears below her (hero).
+##  3. Low dolly in to the cradle at the mantle: hands, the molten world, the hem pouring dust.
+##  4. Rise at the moons: up and out over the ring and the belt to a high three-quarter view where
+##     the threads leave her hair for every body.
+##  5. Recede at planet.stable: the camera cranes back from the whole — the climax.
+const SEED_POSE := [Vector3(0.0, -0.05, 0.12), 0.12, 0.3, 3.4, 30.0]
+const CRANE_DELAY := 0.3
+const CRANE_BACK := 4.7
+const PORTRAIT_POSE := [Vector3(0.0, 5.7, -0.4), 0.08, -0.02, 16.5, 36.0]
+const HERO_DOLLY_DUR := 13.5
+const HERO_POSE := [Vector3(0.0, 3.85, 1.0), 0.0, -0.06, 23.5, 36.5]
+const CRADLE_DUR := 13.0
+const CRADLE_POSE := [Vector3(0.3, 0.7, 2.6), 0.3, -0.06, 12.0, 38.0]
+const RISE_DUR := 16.0
+const RISE_POSE := [Vector3(0.0, 4.6, 0.2), 0.4, 0.34, 34.0, 42.0]
+const RECEDE_DUR := 9.0
+const RECEDE_POSE := [Vector3(0.0, 4.8, 0.2), 0.16, 0.2, 42.0, 40.0]
 
 # --- Focus --------------------------------------------------------------------------------------
 const FOCUS_FILL := 0.55
@@ -87,45 +108,56 @@ static func cue_id(g: GenesisState) -> StringName:
 		return CUE_BELT
 	if g.moon_at(0) >= 0.0:
 		return CUE_ORBITS
+	if g.layer_at(0) >= 0.0:
+		return CUE_CRADLE
 	if g.hands_at >= 0.0:
 		return CUE_HERO
 	return CUE_PORTRAIT
 
 
 ## Writes the cue shot for (g, t) into `out` (ambient sway from `m`, MotionClock seconds) and
-## returns its id.
+## returns its id. The pose is cue_path (continuous across cues) + a tiny ambient sway.
 static func cue(g: GenesisState, t: float, m: float, out: CameraShots.Shot) -> StringName:
 	var id := cue_id(g)
-	match id:
-		CUE_PORTRAIT:
-			# Close on MIKU, slowly craning down and back as she wakes (her face, halo, seed).
-			var k := Motion.eased(clampf(t / 8.0, 0.0, 1.0))
-			out.setup(Vector3(0.0, lerpf(7.9, 6.6, k), -0.3), lerpf(0.16, 0.1, k), lerpf(-0.03, -0.08, k),
-				lerpf(9.0, 14.0, k), 36.0)
-		CUE_HERO:
-			# The hero composition, with a slow dolly to the side while the world forms.
-			var s := maxf(t - g.hands_at, 0.0)
-			out.setup(FORGE_TARGET, FORGE_YAW - 0.1 + HERO_DOLLY * s, FORGE_PITCH, FORGE_DISTANCE + 0.5, FORGE_FOV)
-		CUE_ORBITS:
-			# Higher and wider: the moons and the ring around the new world.
-			var s := maxf(t - g.moon_at(0), 0.0)
-			out.setup(Vector3(0.0, 3.0, 1.6), 0.32 + HERO_DOLLY * s, 0.14, 24.0, 38.0)
-		CUE_BELT:
-			# Out beside the belt: its rocks drift through the foreground, MIKU beyond them.
-			var s := maxf(t - g.belt_at, 0.0)
-			out.setup(Vector3(0.0, 5.0, -0.4), 0.75 + 0.006 * s, 0.16, 27.0, 40.0)
-		CUE_THREADS:
-			# Three-quarter, raised: the threads leave the hair for every body.
-			var s := maxf(t - g.links_at, 0.0)
-			out.setup(Vector3(0.0, 3.6, 0.5), -0.62 + 0.004 * s, 0.28, 30.0, 40.0)
-		_:
-			# The world holds: back to the hero composition, a slow push-in.
-			var s := maxf(t - g.stable_at, 0.0)
-			out.setup(FORGE_TARGET, FORGE_YAW + 0.02, FORGE_PITCH, FORGE_DISTANCE - minf(STABLE_PUSH * s, STABLE_PUSH_MAX),
-				FORGE_FOV)
+	cue_path(g, t, out)
 	out.yaw += SWAY_YAW * sin(TAU * m / SWAY_PERIODS.x)
 	out.pitch += SWAY_PITCH * sin(TAU * m / SWAY_PERIODS.y + 1.3)
 	return id
+
+
+## The cinematic camera path at (g, t) into `out`: the seed close, then each move eases from the
+## pose it finds to its own pose over its duration from its event. Continuous in time (each move
+## starts from the pose the previous one reached) and a pure function of the story.
+static func cue_path(g: GenesisState, t: float, out: CameraShots.Shot) -> CameraShots.Shot:
+	var brow := GenesisLayout.miku_point("forehead", Vector3(0.0, 1.52, 0.42))
+	out.setup(brow + (SEED_POSE[0] as Vector3), SEED_POSE[1], SEED_POSE[2], SEED_POSE[3], SEED_POSE[4])
+	if g.awaken_at < 0.0:
+		return out
+	_move(out, PORTRAIT_POSE, Motion.smooth(g.awaken_at + CRANE_DELAY, t, CRANE_BACK))
+	if g.hands_at < 0.0:
+		return out
+	_move(out, HERO_POSE, Motion.smooth(g.hands_at, t, HERO_DOLLY_DUR))
+	if g.layer_at(0) < 0.0:
+		return out
+	_move(out, CRADLE_POSE, Motion.smooth(g.layer_at(0), t, CRADLE_DUR))
+	if g.moon_at(0) < 0.0:
+		return out
+	_move(out, RISE_POSE, Motion.smooth(g.moon_at(0), t, RISE_DUR))
+	if g.stable_at < 0.0:
+		return out
+	_move(out, RECEDE_POSE, Motion.smooth(g.stable_at, t, RECEDE_DUR))
+	return out
+
+
+## Moves `out` towards `pose` ([target, yaw, pitch, distance, fov]) by `k` (in place, no allocation).
+static func _move(out: CameraShots.Shot, pose: Array, k: float) -> void:
+	if k <= 0.0:
+		return
+	out.target = out.target.lerp(pose[0], k)
+	out.yaw = lerpf(out.yaw, pose[1], k)
+	out.pitch = lerpf(out.pitch, pose[2], k)
+	out.distance = lerpf(out.distance, pose[3], k)
+	out.fov = lerpf(out.fov, pose[4], k)
 
 
 const MODE_IDS: Array[StringName] = [&"g_mode_0", &"g_mode_1", &"g_mode_2"]
