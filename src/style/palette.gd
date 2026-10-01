@@ -125,6 +125,9 @@ const TRACKING_WHISPER := 7
 const T_WHISPER_IN := 1.4
 const T_WHISPER_HOLD := 3.0
 const T_WHISPER_OUT := 2.4
+## A newer whisper first dissolves the one showing (this long from full ink), then rises: one line
+## at a time, never two words over each other.
+const T_WHISPER_HANDOFF := 0.6
 ## Transport arc: reveal when the pointer nears the bottom edge (or on pause), conceal after a linger.
 const T_REVEAL := 0.8
 const T_CONCEAL := 1.6
