@@ -11,8 +11,21 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabl
 uniform vec3 color : source_color;
 // Near fade in view-space metres: x = fully hidden, y = fully visible.
 uniform vec2 near_fade = vec2(3.5, 8.0);
+// Visible disc radius (share of the quad's half-size) and share of instances drawn, both applied
+// only from instance `keep_from` on: the first few motes of a cloud (seed, flares, glints) never
+// shrink or drop out. MaterialLibrary.mote() tightens them for the GOLD family (fewer, smaller).
+uniform float disc_radius : hint_range(0.1, 1.0) = 1.0;
+uniform float keep_share : hint_range(0.0, 1.0) = 1.0;
+uniform int keep_from = 8;
+
+varying flat float v_drop;
+varying flat float v_disc;
 
 void vertex() {
+	bool tuned = INSTANCE_ID >= keep_from;
+	float h = fract(sin(float(INSTANCE_ID) * 12.9898) * 43758.5453);
+	v_drop = (tuned && h > keep_share) ? 1.0 : 0.0;
+	v_disc = tuned ? clamp(disc_radius, 0.1, 1.0) : 1.0;
 	// Billboard (particles): face the camera, keep the particle's spin (INSTANCE_CUSTOM.x) and scale.
 	mat4 mat_world = mat4(normalize(INV_VIEW_MATRIX[0]), normalize(INV_VIEW_MATRIX[1]),
 			normalize(INV_VIEW_MATRIX[2]), MODEL_MATRIX[3]);
@@ -31,7 +44,10 @@ void vertex() {
 
 void fragment() {
 	// 1 - smoothstep(lo, hi) instead of smoothstep(hi, lo): reversed edges are undefined in GLSL.
-	float disc = 1.0 - smoothstep(0.15, 0.5, length(UV - 0.5));
+	if (v_drop > 0.5) {
+		discard;
+	}
+	float disc = 1.0 - smoothstep(0.15 * v_disc, 0.5 * v_disc, length(UV - 0.5));
 	float near = smoothstep(near_fade.x, max(near_fade.y, near_fade.x + 1e-3), -VERTEX.z);
 	ALBEDO = color * COLOR.rgb;
 	ALPHA = COLOR.a * disc * near;

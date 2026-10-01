@@ -13,11 +13,12 @@ extends RefCounted
 ## GENESIS (UI v2, src/ui/genesis): pearl ink over the night, no boxes, never GOLD.
 ##   Label:  Whisper (thin, widely spaced capitals) · Word / WordSoft / WordFaint (spaced capitals at
 ##           three ink levels) · Note / NoteFaint (11 px lowercase, never tracked) · Verse (12 px
-##           prose, soft) · CardTitle · Clock (mono) · SealText
+##           prose, soft) · CardTitle · Clock (mono) · SealText · SealNote (NoteFaint + soft night
+##           shadow: the seal's subtitle stays legible over the bright nebula)
 ##   Button: WordButton (flat word: faint -> soft on hover -> ink when pressed) · WordLink (same, no
 ##           side padding: aligns with text) · ModeWord (pearl; the owner fades it with
 ##           self_modulate) · GlyphButton (no text: the glyph is drawn)
-##   PanelContainer: Card (night veil + one pearl hairline on the left) · Seal (bare)
+##   PanelContainer: Card (feathered night veil, no frame: ink + the leader thread) · Seal (bare)
 
 static var _theme: Theme
 ## Cache of fonts and shared styleboxes.
@@ -213,7 +214,12 @@ static func _build_genesis(t: Theme) -> void:
 	_label(t, "CardTitle", font_sans(480, Palette.TRACKING_WORD), Palette.SIZE_TITLE, Palette.UI_INK)
 	_label(t, "Clock", font_mono_spaced(false, 1), Palette.SIZE_SMALL, Palette.UI_INK_SOFT)
 	_label(t, "SealText", font_mono_spaced(true, 2), Palette.SIZE_SMALL, Palette.UI_INK_SOFT)
-	for v in ["Whisper", "Word", "WordSoft", "WordFaint", "Note", "NoteFaint", "Verse", "CardTitle", "Clock", "SealText"]:
+	_label(t, "SealNote", font_sans(400, 0), Palette.SIZE_SMALL, Palette.UI_INK_FAINT)
+	t.set_color("font_shadow_color", "SealNote", Palette.UI_SHADE)
+	t.set_constant("shadow_offset_x", "SealNote", 0)
+	t.set_constant("shadow_offset_y", "SealNote", 1)
+	t.set_constant("shadow_outline_size", "SealNote", 4)
+	for v in ["Whisper", "Word", "WordSoft", "WordFaint", "Note", "NoteFaint", "Verse", "CardTitle", "Clock", "SealText", "SealNote"]:
 		t.set_color("font_shadow_color", v, Palette.UI_SHADE)
 		t.set_constant("shadow_offset_x", v, 0)
 		t.set_constant("shadow_offset_y", v, 1)
@@ -251,7 +257,12 @@ static func _build_genesis(t: Theme) -> void:
 		t.set_stylebox(st, "GlyphButton", empty())
 
 	t.set_type_variation("Card", "PanelContainer")
-	t.set_stylebox("panel", "Card", box(Palette.UI_VEIL, Palette.UI_THREAD, Vector4i(1, 0, 0, 0), 16, 12))
+	var card := box(Palette.UI_VEIL, Palette.CLEAR, Vector4i.ZERO, 16, 12)
+	card.set_corner_radius_all(14)
+	card.shadow_color = Palette.UI_VEIL
+	card.shadow_size = 18
+	card.anti_aliasing = true
+	t.set_stylebox("panel", "Card", card)
 	t.set_type_variation("Seal", "PanelContainer")
 	t.set_stylebox("panel", "Seal", empty(0, 2))
 

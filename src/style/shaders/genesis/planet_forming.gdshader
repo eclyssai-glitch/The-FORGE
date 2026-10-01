@@ -5,12 +5,17 @@
 //   heat       — incandescent magma: dark cooled melt crossed by bright flowing gold rivers.
 //   crust      — dark stone plates (Voronoi cells) settle one by one over the melt; the cracks
 //                between plates keep the magma glow, fading with `heat`.
-//   atmosphere — haze on the limb + a thin ice -> dusk-rose fresnel rim.
+//   atmosphere — scattering: a lit ICE limb on the day side, a DUSK_ROSE band along the
+//                terminator (custom light()), a soft haze over the disc. The formed world is the
+//                most beautiful body in frame: legible continents (land vs basins), cooled cracks.
+// `world_style` (x = ICE latitude bands, y = rose dust) turns a formed world into a distinct
+// family (the distant worlds); (0, 0) = the forming planet's own look.
+// Every grazing term is anti-aliased (fwidth of the fresnel): no stair-stepped outline.
 // Patterns use the object-space direction (sphere of any radius, no UVs needed). `motion_time`
 // (MotionClock) drives the magma flow — never TIME. Opaque; accretion uses discard.
 // Cost: one 3x3x3 Voronoi + a few fbm (`detail` octaves for the magma; LOW uses 3).
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_opaque, cull_back;
 
 #include "res://src/style/shaders/genesis/noise.gdshaderinc"
 
@@ -27,10 +32,19 @@ uniform vec3 crust_light_color : source_color;
 uniform vec3 atmo_inner_color : source_color;
 uniform vec3 atmo_outer_color : source_color;
 uniform vec3 accretion_color : source_color;
+// Formed land (continents) and the colours of the distant-world families.
+uniform vec3 land_color : source_color;
+uniform vec3 band_color : source_color;
+uniform vec3 dust_color : source_color;
 
 uniform float magma_intensity = 1.6;
 uniform float crack_glow = 1.6;
 uniform float atmo_intensity = 1.0;
+// Lit-limb scattering and the terminator band (shares of the light that reaches them).
+uniform float scatter_amount = 0.55;
+uniform float terminator_amount = 0.9;
+// x = ICE latitude bands, y = rose dust (0..1 each); see header.
+uniform vec2 world_style = vec2(0.0);
 uniform float flow_speed = 0.02;
 uniform float motion_time = 0.0;
 // Pattern scales (per unit direction).
@@ -47,6 +61,8 @@ uniform int detail : hint_range(1, 5) = 4;
 uniform float select : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 v_dir;
+// Written in fragment(), read in light(): silhouette damping and the atmosphere share.
+varying float v_edge;
 
 void vertex() {
 	v_dir = k_safe_normalize(VERTEX, vec3(0.0, 1.0, 0.0));
@@ -98,29 +114,67 @@ void fragment() {
 	float settled = smoothstep(v.z - 0.04, v.z + 0.04, crust * 1.08 - 0.04);
 	float covered = settled * (1.0 - crack);
 	float crust_tex = k_fbm(d * 11.0 + 3.0, 2);
-	float continent = smoothstep(0.35, 0.65, k_fbm(d * 1.6 + 31.0, 3));
-	vec3 crust_albedo = mix(crust_color, crust_light_color,
-			clamp(crust_tex * 0.45 + (v.z - 0.5) * 0.35 + continent * 0.55, 0.0, 1.0));
+	// Continents: broad land masses (lighter, warm) against dark basins; plate tones on top.
+	float land = smoothstep(0.42, 0.58, k_fbm(d * 1.4 + 31.0, 4));
+	vec3 basin_albedo = mix(crust_color, crust_light_color, clamp(crust_tex * 0.5 + (v.z - 0.5) * 0.25, 0.0, 1.0));
+	vec3 land_albedo = mix(crust_light_color, land_color, clamp(0.35 + crust_tex * 0.5 + (v.z - 0.5) * 0.3, 0.0, 1.0));
+	vec3 crust_albedo = mix(basin_albedo, land_albedo, land);
+	// Distant-world families: ICE latitude bands / rose dust replace the plates (no cracks).
+	float style_b = clamp(world_style.x, 0.0, 1.0);
+	float style_d = clamp(world_style.y, 0.0, 1.0);
+	float lat = v_dir.y * 5.5 + (k_fbm(d * 2.2 + 7.0, 3) - 0.5) * 1.6;
+	float bands = 0.5 + 0.5 * sin(lat * 3.14159 + sin(lat * 1.7) * 0.8);
+	vec3 banded = mix(crust_color, band_color, smoothstep(0.2, 0.9, bands) * 0.85 + crust_tex * 0.15);
+	vec3 dusty = mix(crust_light_color, dust_color, smoothstep(0.3, 0.75, k_fbm(d * 3.0 + 17.0, 3)) * 0.8 + 0.1);
+	crust_albedo = mix(crust_albedo, banded, style_b);
+	crust_albedo = mix(crust_albedo, dusty, style_d);
+	crack *= 1.0 - max(style_b, style_d);
+	covered = settled * (1.0 - crack);
 
 	float nv = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	float f = 1.0 - nv;
+	float f_aa = 1.0 - smoothstep(0.1, 0.4, fwidth(f));
+	v_edge = f_aa;
 
 	ALBEDO = mix(magma_deep_color * 0.2, crust_albedo, covered);
 	ROUGHNESS = mix(0.6, 0.85, covered);
 	SPECULAR = 0.3;
 	METALLIC = 0.0;
 
-	vec3 e = magma * magma_lum * magma_intensity * heat * (1.0 - covered);
-	// Cracks between settled plates: the melt shows through, dimming as the planet cools.
-	float crack_heat = 0.05 + 0.95 * heat * heat;
+	// Under a settled crust the open floor cools with the heat (a formed world is not a cracked marble).
+	vec3 e = magma * magma_lum * magma_intensity * heat * (1.0 - covered) * mix(1.0, clamp(heat * 1.5, 0.0, 1.0), crust);
+	// Cracks between settled plates: the melt shows through, cooling (and closing) with the heat.
+	float crack_heat = 0.006 + 0.994 * heat * heat * heat;
 	e += mix(magma_mid_color, magma_hot_color, heat) * crack * settled * crack_glow * crack_heat;
 
-	// Atmosphere: haze over the limb + a bright thin rim (ice at the edge, rose deeper in).
+	// Atmosphere: a soft haze over the disc toward the limb (the lit limb is scattered in light()).
+	float haze = smoothstep(0.35, 1.0, f);
+	ALBEDO = mix(ALBEDO, atmo_inner_color * 0.35, atmosphere * haze * haze * haze * 0.4);
 	vec3 atmo = mix(atmo_outer_color, atmo_inner_color, smoothstep(0.55, 0.95, f));
-	ALBEDO = mix(ALBEDO, atmo_inner_color * 0.3, atmosphere * pow(max(f, 0.0), 2.2) * 0.7);
-	e += atmo * (pow(max(f, 0.0), 3.5) * 0.7 + pow(max(f, 0.0), 9.0) * 1.3) * atmosphere * atmo_intensity;
+	e += atmo * haze * haze * haze * f_aa * 0.22 * atmosphere * atmo_intensity;
 
 	e += accretion_color * lip * 2.0;
-	e += atmo_inner_color * pow(max(f, 0.0), 3.0) * select * 0.6;
+	e += atmo_inner_color * pow(max(f, 0.0), 3.0) * f_aa * select * 0.6;
 	EMISSION = e;
+}
+
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	float direct = clamp(ndl, 0.0, 1.0);
+	vec3 lit = LIGHT_COLOR * ATTENUATION / 3.14159265;
+	DIFFUSE_LIGHT += lit * ALBEDO * direct;
+	float air = clamp(atmosphere, 0.0, 1.0);
+	// Terminator: a DUSK_ROSE band on both sides of the day/night line (light through the air).
+	float band = (1.0 - smoothstep(0.0, 0.35, abs(ndl + 0.05)));
+	DIFFUSE_LIGHT += lit * atmo_outer_color * band * terminator_amount * 0.35 * air;
+	// Scattering: the limb glows ICE on the day side, fading round into the night.
+	float f = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+	float limb = smoothstep(0.55, 1.0, f);
+	float day = smoothstep(-0.35, 0.6, ndl);
+	SPECULAR_LIGHT += lit * mix(atmo_outer_color, atmo_inner_color, day) * limb * limb * day
+			* v_edge * scatter_amount * air;
+	// A faint broad sheen on the basins (no mirror highlights).
+	vec3 hv = k_safe_normalize(LIGHT + VIEW, NORMAL);
+	float ndh = clamp(dot(NORMAL, hv), 0.0, 1.0);
+	SPECULAR_LIGHT += lit * pow(max(ndh, 0.0), 24.0) * 0.12 * direct * v_edge;
 }

@@ -4,9 +4,11 @@ extends PanelContainer
 ## symbolic kind, the name, the derived status (Scenario.entity_status over Simulation.state), one
 ## sentence, and two quiet actions — FOCUS (Session.focus) and close (Session.select(&"")).
 ## Placement follows the body on screen (UiSpaceLabels.screen_anchor): beside its edge, on the side
-## with room, eased towards the target so a drifting camera never makes it jitter; without a body on
+## with room, eased towards the target so a drifting camera never makes it jitter, nudged up or down
+## off the other bodies on screen (no body is ever drawn through its text); without a body on
 ## screen it rests at the right, a little above the middle. Visibility is driven by the owner through
-## `visibility_wanted` (so mode fades and H stay consistent). Night veil + one pearl hairline.
+## `visibility_wanted` (so mode fades and H stay consistent). No frame: a feathered night veil, the
+## ink, and the leader thread from the body (UiSpaceLabels).
 
 signal visibility_wanted(on: bool)
 
@@ -109,7 +111,7 @@ func _draw_sign() -> void:
 
 ## Where the card wants to be (top-left, px) for a viewport of `vp` and an anchor {"pos", "r"} ({}
 ## when the body is not on screen).
-func target_position(vp: Vector2, anchor: Dictionary) -> Vector2:
+func target_position(vp: Vector2, anchor: Dictionary, avoid: Array[Rect2] = []) -> Vector2:
 	var s := Vector2(WIDTH, maxf(size.y, get_combined_minimum_size().y))
 	var edge := float(Palette.UI_EDGE)
 	var p: Vector2
@@ -121,7 +123,20 @@ func target_position(vp: Vector2, anchor: Dictionary) -> Vector2:
 		var right := c.x + off + s.x <= vp.x - edge or c.x < vp.x * 0.5
 		p = Vector2(c.x + off if right else c.x - off - s.x, c.y - s.y * 0.5)
 	p.x = clampf(p.x, edge, vp.x - edge - s.x)
-	p.y = clampf(p.y, TOP_BAND, maxf(TOP_BAND, vp.y - float(Palette.UI_REVEAL_ZONE) - s.y))
+	var lo := TOP_BAND
+	var hi := maxf(TOP_BAND, vp.y - float(Palette.UI_REVEAL_ZONE) - s.y)
+	p.y = clampf(p.y, lo, hi)
+	# Off the other bodies: the nearest vertical offset whose rect touches none of `avoid`.
+	if not avoid.is_empty():
+		for k: float in [0.0, -1.0, 1.0, -2.0, 2.0, -3.0, 3.0, -4.0, 4.0]:
+			var q := Vector2(p.x, clampf(p.y + k * 40.0, lo, hi))
+			var hit := false
+			for d in avoid:
+				if Rect2(q, s).grow(6.0).intersects(d):
+					hit = true
+					break
+			if not hit:
+				return q
 	return p
 
 
@@ -130,7 +145,16 @@ func _process(delta: float) -> void:
 		_placed = false
 		return
 	var anchor := labels.screen_anchor(_id) if labels else {}
-	var target := target_position(get_viewport_rect().size, anchor)
+	var avoid: Array[Rect2] = []
+	if labels:
+		var own := Rect2()
+		if not anchor.is_empty():
+			var r := maxf(float(anchor["r"]), 3.0) + 4.0
+			own = Rect2((anchor["pos"] as Vector2) - Vector2(r, r), Vector2(r, r) * 2.0)
+		for d in labels.body_discs():
+			if not d.is_equal_approx(own):
+				avoid.append(d)
+	var target := target_position(get_viewport_rect().size, anchor, avoid)
 	if not _placed:
 		position = target
 		_placed = true

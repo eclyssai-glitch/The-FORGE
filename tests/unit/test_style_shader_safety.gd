@@ -6,7 +6,8 @@ extends GutTest
 ## an explicit, justified exception list.
 ##
 ## Rules:
-##   pow(b, e)        b is `max(..)`, `clamp(..)`, `abs(..)` or a positive literal; e a positive literal.
+##   pow(b, e)        b is `max(..)`, `clamp(..)`, `abs(..)` or a positive literal; e a positive literal
+##                    or `max(x, c)` with a positive literal floor c.
 ##                    (Signed Gaussians are written `d * d`, never `pow(d, 2.0)`.)
 ##   sqrt/log/log2/inversesqrt(x)   x is `max(..)`, `clamp(..)` or `abs(..)`.
 ##   asin/acos(x)     x is `clamp(..)`.
@@ -117,6 +118,15 @@ func _is_positive_literal(s: String) -> bool:
 	return _num.search(s.strip_edges()) != null and float(s) > 0.0
 
 
+## True for `max(x, c)` with a positive literal floor `c` (a pow exponent that is never <= 0).
+func _is_floored(s: String) -> bool:
+	s = s.strip_edges()
+	if not (s.begins_with("max(") and _close(s, 3) == s.length()):
+		return false
+	var inner := _args(s, 3)
+	return inner.size() == 2 and _is_positive_literal(inner[1])
+
+
 ## True when the whole expression is a single max()/clamp()/abs() call.
 func _is_guarded(s: String) -> bool:
 	s = s.strip_edges()
@@ -137,7 +147,7 @@ func check_source(file: String, src: String) -> PackedStringArray:
 		var a: PackedStringArray = c["args"]
 		if a.size() != 2 or not (_is_guarded(a[0]) or _is_positive_literal(a[0])):
 			bad.append("%s:%d pow base not clamped: pow(%s)" % [file, c["line"], ", ".join(a)])
-		elif not _is_positive_literal(a[1]):
+		elif not (_is_positive_literal(a[1]) or _is_floored(a[1])):
 			bad.append("%s:%d pow exponent not a positive literal: pow(%s)" % [file, c["line"], ", ".join(a)])
 
 	for fn: String in ["sqrt", "log", "log2", "inversesqrt"]:
@@ -230,6 +240,7 @@ func test_checker_flags_known_hazards() -> void:
 		"fresnel": "float v = pow(1.0 - nv, 1.6);",
 		"ridge": "float r = pow(k_ridge(q), 7.0);",
 		"exponent": "float r = pow(max(x, 0.0), k);",
+		"exponent floored at zero": "float r = pow(max(x, 0.0), max(k, 0.0));",
 		"sqrt": "float d = sqrt(f1);",
 		"acos": "float a = acos(dot(a, b));",
 		"normalize": "vec3 d = normalize(VERTEX);",
@@ -250,6 +261,7 @@ func test_checker_accepts_guarded_forms() -> void:
 		"float v = pow(max(1.0 - nv, 0.0), 1.6);",
 		"float v = pow(clamp(x, 0.0, 1.0), 3.0);",
 		"float d = sqrt(max(f1, 0.0));",
+		"float s = pow(max(ndh, 0.0), max(shin, 1.0));",
 		"float a = acos(clamp(c, -1.0, 1.0));",
 		"float s = 1.0 - smoothstep(0.15, 0.5, x);",
 		"float k = behind / max(trail, 1e-3);",

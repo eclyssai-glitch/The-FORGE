@@ -10,7 +10,8 @@ extends Control
 ## OBSERVATORY — every body, with its sign (UiGlyphs) and its symbolic kind under the name
 ## (subagent · documentation · skills · memory …): the vault read as astronomy. The selected body's
 ## label yields to its floating card (`card_id`), and the leader then runs to the card instead.
-## Labels fade in/out with a sine over Palette.T_LABEL. Overlapping labels are nudged upwards.
+## Labels fade in/out with a sine over Palette.T_LABEL. Placement is radial (away from the frame
+## centre, around the bodies, never on them) and each name sits on a feathered night veil.
 ##
 ## Optional metadata on the entity root (set by the 3D modules; see docs/VISUAL_DIRECTION.md §8):
 ##   label_anchor: Vector3 (local offset) or Node3D — the point the label points at (default: origin)
@@ -46,11 +47,16 @@ var camera_override: Camera3D
 ## id -> {"p": fade 0..1, "on": wanted, "seen": anchor projected, "pos": Vector2, "r": float (px)}
 var _state: Dictionary = {}
 var _drawn_any := false
+## Feathered veil drawn under each name (colour set per label with its fade).
+var _veil := StyleBoxFlat.new()
 
 
 func _init() -> void:
 	name = "SpaceLabels"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_veil.set_corner_radius_all(14)
+	_veil.shadow_size = 16
+	_veil.anti_aliasing = true
 
 
 func _ready() -> void:
@@ -225,6 +231,12 @@ func _draw() -> void:
 		# Under the open card a label steps back (the card is the focus).
 		if card_rect.size != Vector2.ZERO and card_rect.grow(4.0).intersects(rect):
 			a *= 0.18
+		# A soft night veil under the name (legible over the bright nebula and the hair; no frame).
+		var veil := Palette.UI_SHADE
+		veil.a *= a
+		_veil.bg_color = veil
+		_veil.shadow_color = veil
+		draw_style_box(_veil, rect.grow_individual(8.0, 3.0, 8.0, 3.0))
 		var thread := Palette.UI_THREAD
 		thread.a *= a
 		draw_polyline(PackedVector2Array([lay["start"], lay["knee"], lay["end"]]), thread, 1.0, true)
@@ -251,22 +263,28 @@ static func _disc(st: Dictionary) -> Rect2:
 	return Rect2((st["pos"] as Vector2) - Vector2(r, r), Vector2(r, r) * 2.0)
 
 
-## Layout of one label for a body at `pos` (screen radius `r`): tries the outward side first (away
-## from the screen centre), then the other one, each at the natural height and nudged up/down, and
-## keeps the first place inside the screen margins that touches neither the labels already `placed`
-## nor the other bodies' `discs` (`own` is the body's own disc). Falls back to the natural place.
+## Layout of one label for a body at `pos` (screen radius `r`): radial — the leader leaves the body
+## along the direction from the frame centre to the body (labels fan out around the composition
+## instead of piling up on one side), then runs horizontally to the name. Tries that direction, then
+## directions turned by 30°, 60°, 90°, 135° either way and finally inward, each at two leader lengths,
+## and keeps the first place inside the screen margins that touches neither the labels already
+## `placed` nor the other bodies' `discs` (`own` is the body's own disc). Falls back to the first try.
 ## Returns {"start", "knee", "end": Vector2, "rect": Rect2, "side": float}.
 static func place_label(pos: Vector2, r: float, block: Vector2, line_h: float, vp: Vector2,
 		placed: Array[Rect2], discs: Array[Rect2], own: Rect2) -> Dictionary:
-	var outward := 1.0 if pos.x >= vp.x * 0.5 else -1.0
-	var step := block.y + 6.0
+	var radial := pos - vp * 0.5
+	var base := radial.normalized() if radial.length() > 24.0 else Vector2(0.7071, -0.7071)
 	var first := {}
 	var screen := Rect2(Vector2.ONE * 8.0, vp - Vector2.ONE * 16.0)
-	for side: float in [outward, -outward]:
-		var dir := Vector2(side * 0.7071, -0.7071)
+	for turn: float in [0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 135.0, -135.0, 180.0]:
+		var dir := base.rotated(deg_to_rad(turn))
+		# Never a vertical leader: the name always sits to one side of its knee.
+		var side := 1.0 if dir.x >= 0.0 else -1.0
+		if absf(dir.x) < 0.35:
+			dir = Vector2(side * 0.35, signf(dir.y) if dir.y != 0.0 else -1.0).normalized()
 		var start := pos + dir * (r + 5.0)
-		for k: float in [0.0, -1.0, 1.0, -2.0, 2.0]:
-			var knee := start + dir * Palette.UI_LEADER + Vector2(0.0, k * step)
+		for reach: float in [1.0, 2.2]:
+			var knee := start + dir * Palette.UI_LEADER * reach
 			var end_x := knee.x + side * Palette.UI_LEADER_RUN
 			var text_x := end_x + side * 6.0
 			var rect := Rect2(Vector2(text_x if side > 0.0 else text_x - block.x, knee.y - line_h * 0.5), block)
@@ -277,6 +295,15 @@ static func place_label(pos: Vector2, r: float, block: Vector2, line_h: float, v
 				continue
 			return lay
 	return first
+
+
+## Screen discs (as rects) of every body projected on screen this frame (the card avoids them).
+func body_discs() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for id: StringName in _state:
+		if bool(_state[id]["seen"]):
+			out.append(_disc(_state[id]))
+	return out
 
 
 static func _hits(rect: Rect2, placed: Array[Rect2], discs: Array[Rect2], own: Rect2) -> bool:
