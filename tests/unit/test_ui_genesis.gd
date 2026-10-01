@@ -299,6 +299,32 @@ func test_whisper_rises_and_dissolves() -> void:
 	assert_eq(w.current_text(), "SECOND", "a newer event cross-fades over the older")
 
 
+func test_whispers_hand_off_one_at_a_time() -> void:
+	# Critic r1: "SESSION OPENED" and "MIKU AWAKENS" crossed into "SESSIONWOPENED" (two lines drawn
+	# over each other). The older line dissolves first; the newer one rises only once it is dark.
+	var w := hud.genesis.whisper
+	w.dissolve()
+	await wait_seconds(Palette.T_FAST * 2.0 + 0.1)
+	w.whisper("FIRST")
+	await wait_seconds(Palette.T_WHISPER_IN + 0.2)
+	assert_eq(w.current_text(), "FIRST")
+	w.whisper("SECOND")
+	assert_eq(w.current_text(), "SECOND", "the newer event is the current one at once")
+	var t0 := Time.get_ticks_msec()
+	var overlap := 0.0
+	var second_seen := false
+	while Time.get_ticks_msec() - t0 < int((Palette.T_WHISPER_HANDOFF + Palette.T_WHISPER_IN) * 1000.0):
+		await wait_process_frames(1)
+		overlap = maxf(overlap, minf(w.lines[0].modulate.a, w.lines[1].modulate.a))
+		for l in w.lines:
+			if l.modulate.a > 0.02 and l.text == "SECOND":
+				second_seen = true
+			if l.text == "FIRST" and l.modulate.a > 0.02:
+				assert_false(second_seen, "FIRST never shows again once SECOND rose")
+	assert_lt(overlap, 0.03, "never two whispers on screen at once")
+	assert_true(second_seen, "the newer whisper rose")
+
+
 # ------------------------------------------------------------------ labels in space
 
 func test_labels_without_nodes_or_camera_do_nothing() -> void:

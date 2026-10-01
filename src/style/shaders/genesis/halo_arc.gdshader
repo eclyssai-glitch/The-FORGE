@@ -27,8 +27,15 @@ uniform float tick_strength : hint_range(0.0, 1.0) = 0.45;
 // Breathing 0..1 (animator).
 uniform float breath : hint_range(0.0, 1.0) = 0.5;
 
+// Arc of `span` (share of the circle) from angle 0 with tapered ends. As the span nears 1 the two
+// tapers blend into a whole ring (no seam, no gap, no doubled overlap at angle 0): over the last
+// `close` share the mask eases to 1 everywhere, and at span 1 it is exactly 1.
 float arc_mask(float a, float span, float taper) {
-	return smoothstep(0.0, taper, a) * (1.0 - smoothstep(span - taper, span, a));
+	float s = clamp(span, 0.0, 1.0);
+	float t = min(taper, max(s * 0.5, 1e-3));
+	float open_mask = smoothstep(0.0, t, a) * (1.0 - smoothstep(max(s - t, 0.0), max(s, 1e-3), a));
+	float closed = smoothstep(1.0 - taper * 1.5, 1.0, s);
+	return mix(open_mask, 1.0, closed);
 }
 
 void fragment() {

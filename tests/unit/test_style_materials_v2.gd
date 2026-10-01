@@ -3,12 +3,15 @@ extends GutTest
 ## uniforms, gets its colours from Palette, and no v2 shader reads TIME (motion_time instead).
 
 const CONTRACT_UNIFORMS := {
-	&"miku_body": ["awaken", "breath", "select", "ao_strength"],
-	&"miku_hair": ["reveal", "motion_time"],
+	&"miku_body": ["awaken", "breath", "select", "ao_strength", "reveal", "reveal_origin", "reveal_reach",
+		"face_soften", "face_ao", "torso_soften", "hollow_fill"],
+	&"miku_hair": ["reveal", "motion_time", "root_level", "tone_variation", "opacity_variation",
+		"link_intensity", "link_core", "link_pulse"],
 	&"miku_gown": ["fade_top", "fade_bottom", "presence", "motion_time"],
-	&"halo_arc": ["strength", "breath"],
+	&"halo_arc": ["strength", "breath", "arc_span", "inner_span"],
 	&"hand_stone": ["veins", "motion_time", "select", "ao_strength"],
-	&"planet_forming": ["heat", "crust", "atmosphere", "formation", "motion_time", "detail"],
+	&"planet_forming": ["heat", "crust", "atmosphere", "formation", "motion_time", "detail",
+		"terminator_amount", "scatter_amount", "wrap_amount", "glint_amount", "cloud_amount"],
 	&"moon_doc": ["formation", "glow"],
 	&"ring_skill": ["formation"],
 	&"asteroid_memory": ["memory"],
@@ -93,3 +96,44 @@ func test_quality_sets_noise_detail() -> void:
 	assert_eq(int(MaterialLibrary.planet_forming().get_shader_parameter("detail")), MaterialLibrary.PLANET_DETAIL[0])
 	MaterialLibrary.apply_quality(QualityProfiles.get_profile(QualityProfiles.Level.HIGH))
 	assert_eq(int(MaterialLibrary.nebula_sky().get_shader_parameter("detail")), MaterialLibrary.SKY_DETAIL[2])
+
+
+# --- rodada de correção 1, 2ª passada -------------------------------------------------------------
+
+func test_body_reveal_defaults_to_whole_figure_from_the_brow() -> void:
+	var m := MaterialLibrary.miku_body()
+	assert_almost_eq(float(m.get_shader_parameter("reveal")), 1.0, 1e-6, "whole figure by default")
+	# Default of the uniform, read from the source (the headless renderer has no parameter defaults).
+	var rx := RegEx.create_from_string("reveal_origin\\s*=\\s*vec3\\(([^,]+),([^,]+),([^)]+)\\)")
+	var hit := rx.search(m.shader.code)
+	assert_not_null(hit, "reveal_origin has a default")
+	if hit != null:
+		var origin := Vector3(float(hit.get_string(1)), float(hit.get_string(2)), float(hit.get_string(3)))
+		var brow := GenesisLayout.anchor("miku_body", "forehead", Vector3(0.0, 1.52, 0.42))
+		assert_lt(origin.distance_to(brow), 0.05, "the reveal grows from the seed on the brow (%s vs %s)" % [origin, brow])
+	var src := m.shader.code
+	assert_true(src.contains("discard"), "reveal is opaque (discard), never a global transparency")
+	assert_false(src.contains("ALPHA"), "miku_body never writes ALPHA (the opaque pipeline stays)")
+
+
+func test_hair_link_tip_is_where_every_thread_starts() -> void:
+	var tip: Color = MaterialLibrary.hair_link_tip()
+	assert_eq(MaterialLibrary.miku_hair().get_shader_parameter("link_tip_color"), tip)
+	assert_eq(MaterialLibrary.relation_thread().get_shader_parameter("color_from"), tip)
+	assert_true(MaterialLibrary.miku_hair().shader.code.contains("CUSTOM0"), "the hair reads the strand mask")
+
+
+func test_light_functions_never_multiply_by_albedo() -> void:
+	# The engine multiplies DIFFUSE_LIGHT by ALBEDO after light(): doing it again squares the albedo
+	# (the stable planet read as a black ball).
+	for n: StringName in MaterialLibrary.GENESIS_MATERIALS:
+		var code: String = MaterialLibrary.genesis(n).shader.code
+		var at := code.find("void light()")
+		if at < 0:
+			continue
+		var body := code.substr(at)
+		for line: String in body.split("\n"):
+			var cut := line.find("//")
+			var c := line.substr(0, cut) if cut >= 0 else line
+			if c.contains("DIFFUSE_LIGHT"):
+				assert_false(c.contains("ALBEDO"), "%s: %s" % [n, c.strip_edges()])

@@ -36,6 +36,11 @@ void fragment() {
 
 	float a = k_angle01(p);
 	float swept = 1.0 - smoothstep(formation - 0.04, formation, a);
+	// The sweep's start (angle 0) fades in while the ring forms (no hard cut at the seam); as the
+	// front comes round to it the ring closes into one seamless band — at formation 1 every angle is
+	// lit (the soft front edge used to leave the last 4 % before the seam dark: a hard radial cut).
+	float closing = smoothstep(0.965, 1.0, formation);
+	swept = mix(swept * smoothstep(0.0, 0.1, a), 1.0, closing);
 	// Gaussian front: d*d, never pow(d, 2.0) (d is signed; pow of a negative base is NaN).
 	float front_d = (a - formation) / 0.015;
 	float front = (formation < 0.999) ? exp(-front_d * front_d) : 0.0;

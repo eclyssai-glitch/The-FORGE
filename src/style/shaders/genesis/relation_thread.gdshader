@@ -1,7 +1,7 @@
 // KORIUM UNIVERSE — a relation thread (link): a fibre of light prolonging MIKU's hair.
 // Owner: art-director. Mesh contract (RelationThread, `build_crossed` or `build`): ribbon(s), UV.x
 // from the source (0, hair end) to the target (1, body), UV.y across 0..1. Colour runs
-// `color_from` (the hair tip's lilac) to `color_to` (the target's family: ICE for moons, GOLD for
+// `color_from` (the tip colour of the hair's link strands, MaterialLibrary.hair_link_tip()) to `color_to` (the target's family: ICE for moons, GOLD for
 // the forming planet...). `woven` 0..1 spins the thread out from the source; `pulse` 0..1 is the
 // position of a travelling pulse (a backlink forming) — outside 0..1 there is no pulse.
 // A fibre, never a strap: a core of ~`line_px` pixels is cut across the ribbon (constant on screen

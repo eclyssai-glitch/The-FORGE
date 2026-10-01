@@ -2,9 +2,11 @@ class_name UiWhisper
 extends Control
 ## "Whispers" of the GENESIS events: when an event is emitted its poetic label rises in thin, widely
 ## spaced capitals just above the lower edge, rests and dissolves (Palette.T_WHISPER_IN / _HOLD /
-## _OUT, sine). No feed, no list, no timestamps: one line at a time. A newer event cross-fades over
-## the older one (two alternating lines). Seek/reset (world_rebuilt) dissolves whatever is showing:
-## the past is never replayed as text. Never catches the mouse.
+## _OUT, sine). No feed, no list, no timestamps: one line at a time. A newer event hands off
+## sequentially: whatever is showing dissolves first (Palette.T_WHISPER_HANDOFF from full ink,
+## shorter when it is already fading) and only then does the new line rise — two words are never
+## drawn over each other. Seek/reset (world_rebuilt) dissolves whatever is showing: the past is
+## never replayed as text. Never catches the mouse.
 
 ## Height (px) of the whisper line box; the owner places the control.
 const LINE_HEIGHT := 28.0
@@ -12,6 +14,9 @@ const LINE_HEIGHT := 28.0
 var lines: Array[Label] = []
 var _current := 0
 var _tweens: Array = [null, null]
+## Text each line shows or is about to show (a line waiting for the hand-off keeps its old text on
+## screen until it is dark).
+var _texts: Array[String] = ["", ""]
 
 
 func _init() -> void:
@@ -33,30 +38,41 @@ func _ready() -> void:
 	Simulation.world_rebuilt.connect(dissolve)
 
 
-## Text of the line currently rising or resting ("" when silent).
+## Text of the line currently rising, resting or waiting to rise ("" when silent).
 func current_text() -> String:
 	var l := lines[_current]
-	return l.text if l.modulate.a > 0.0 or _is_running(_current) else ""
+	return _texts[_current] if l.modulate.a > 0.0 or _is_running(_current) else ""
 
 
-## Whispers `text`: the previous line dissolves while this one rises.
+## Whispers `text`: whatever is showing dissolves first, then this line rises.
 func whisper(text: String) -> void:
 	if text.strip_edges() == "":
 		return
-	var old := _current
-	_current = 1 - _current
-	_fade_out(old, Palette.T_WHISPER_IN)
-	var l := lines[_current]
-	l.text = text
-	_kill(_current)
+	# The new line takes the dimmer of the two; both dissolve before it rises.
+	var next := 0 if lines[0].modulate.a <= lines[1].modulate.a else 1
+	var other := 1 - next
+	var other_out := lines[other].modulate.a * Palette.T_WHISPER_HANDOFF
+	var next_out := lines[next].modulate.a * Palette.T_WHISPER_HANDOFF
+	_fade_out(other, other_out)
+	_current = next
+	_texts[next] = text
+	_kill(next)
+	var l := lines[next]
 	if not is_inside_tree():
+		l.text = text
 		l.modulate.a = 1.0
 		return
 	var tw := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	if next_out > 0.0:
+		tw.tween_property(l, "modulate:a", 0.0, next_out)
+	tw.tween_callback(func() -> void: l.text = text)
+	var wait := maxf(other_out - next_out, 0.0)
+	if wait > 0.0:
+		tw.tween_interval(wait)
 	tw.tween_property(l, "modulate:a", 1.0, Palette.T_WHISPER_IN)
 	tw.tween_interval(Palette.T_WHISPER_HOLD)
 	tw.tween_property(l, "modulate:a", 0.0, Palette.T_WHISPER_OUT)
-	_tweens[_current] = tw
+	_tweens[next] = tw
 
 
 ## Both lines dissolve quickly (seek, reset, scenario change).
@@ -68,7 +84,7 @@ func dissolve() -> void:
 func _fade_out(i: int, duration: float) -> void:
 	_kill(i)
 	var l := lines[i]
-	if l.modulate.a <= 0.0 or not is_inside_tree():
+	if l.modulate.a <= 0.0 or duration <= 0.0 or not is_inside_tree():
 		l.modulate.a = 0.0
 		return
 	var tw := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)

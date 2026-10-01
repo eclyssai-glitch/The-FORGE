@@ -187,7 +187,11 @@ const PLANET_DETAIL: Array[int] = [3, 3, 4, 4]
 
 ## MIKU's body — lunar porcelain (pearl, fake subsurface, iridescent grazing sheen pearl -> rose
 ## -> pale gold, inner light). Vertex colour red = baked AO. Uniforms: `awaken` 0..1, `breath`
-## 0..1, `select` 0..1, `inner_glow`, `sheen`, `backlight_amount`, `ao_strength`.
+## 0..1, `select` 0..1, `inner_glow`, `sheen`, `backlight_amount`, `ao_strength`, `hollow_fill`;
+## statuary (`face_soften`, `face_ao`, `torso_soften`, `head_center`/`head_radii`); skirt dissolve
+## (`dissolve_top/bottom`, `light_turn`, `lip_intensity`); awakening **`reveal` 0..1** (radial from
+## `reveal_origin` = the brow seed, opaque with a soft gold edge; replaces fading the whole body
+## with GeometryInstance3D.transparency, which showed the skirt's inner wall).
 static func miku_body() -> ShaderMaterial:
 	if not _cache.has(&"miku_body"):
 		var m := _shader_material(GENESIS_DIR + "miku_body")
@@ -195,7 +199,9 @@ static func miku_body() -> ShaderMaterial:
 		m.set_shader_parameter("blush_color", Palette.BLUSH)
 		m.set_shader_parameter("rose_color", Palette.DUSK_ROSE)
 		m.set_shader_parameter("gold_color", Palette.GOLD)
-		m.set_shader_parameter("shadow_color", Palette.NEBULA.lerp(Palette.DUSK_ROSE, 0.55))
+		m.set_shader_parameter("shadow_color", Palette.NEBULA.lerp(Palette.DUSK_ROSE, 0.7))
+		m.set_shader_parameter("reveal_color", Palette.GOLD.lerp(Palette.PEARL, 0.25))
+		m.set_shader_parameter("reveal", 1.0)
 		m.set_shader_parameter("awaken", 1.0)
 		m.set_shader_parameter("breath", 0.5)
 		m.set_shader_parameter("select", 0.0)
@@ -203,15 +209,32 @@ static func miku_body() -> ShaderMaterial:
 	return _cache[&"miku_body"]
 
 
-## MIKU's hair — additive ribbons of light, pale gold (root) -> dusk rose -> lilac (tip), soft
-## edges, inner filaments, slow shimmer. Mesh: UV.x root->tip, UV.y across; vertex alpha = strand
-## opacity. Uniforms: `reveal` 0..1, `motion_time`, `intensity`, `seed` (duplicate per ribbon set).
+## Colour of a link strand's tip in MIKU's hair and of the start of every relation thread (the
+## hair and the graph are one fibre): the strand runs rose -> ICE and warms to this pale gold at
+## the very tip, where its thread begins.
+static func hair_link_tip() -> Color:
+	return Palette.GOLD.lerp(Palette.PEARL, 0.45)
+
+
+## MIKU's hair — one nebula mass of additive light ribbons, pale gold (root) -> dusk rose -> lilac
+## (tip), each tuft with its own tone and opacity; link strands (CUSTOM0.x) are thin bright fibres
+## turning ICE -> hair_link_tip() at the tip, where their relation thread begins. Mesh: HairRibbons
+## (UV.x root->tip, UV.y across; vertex alpha = strand opacity; CUSTOM0 = link, tuft, length).
+## Uniforms: `reveal` 0..1, `motion_time`, `intensity`, `seed` (duplicate per ribbon set),
+## `root_level` (damped stacked roots), `tone_variation`, `opacity_variation`, `link_intensity`,
+## `link_core`, `link_pulse` (position 0..1 of a gold pulse on the link strands; outside = none).
 static func miku_hair() -> ShaderMaterial:
 	if not _cache.has(&"miku_hair"):
 		var m := _shader_material(GENESIS_DIR + "miku_hair")
 		m.set_shader_parameter("root_color", Palette.GOLD.lerp(Palette.PEARL, 0.35))
 		m.set_shader_parameter("mid_color", Palette.DUSK_ROSE)
 		m.set_shader_parameter("tip_color", Palette.LILAC)
+		m.set_shader_parameter("tuft_mid_color", Palette.LILAC.lerp(Palette.PEARL, 0.3))
+		m.set_shader_parameter("tuft_tip_color", Palette.NEBULA.lerp(Palette.LILAC, 0.55))
+		m.set_shader_parameter("link_color", Palette.ICE)
+		m.set_shader_parameter("link_tip_color", hair_link_tip())
+		m.set_shader_parameter("pulse_color", Palette.GOLD.lerp(Palette.PEARL, 0.3))
+		m.set_shader_parameter("link_pulse", -1.0)
 		m.set_shader_parameter("reveal", 1.0)
 		_cache[&"miku_hair"] = m
 	return _cache[&"miku_hair"]
@@ -276,8 +299,10 @@ static func set_hand_wrist(m: ShaderMaterial, wrist: Vector3, forearm_end: Vecto
 
 ## Forming planet (sub-agent). Uniforms 0..1: `formation` (accretion, gold growing edge), `heat`
 ## (flowing golden magma), `crust` (dark cracked plates, glowing cracks), `atmosphere` (lit ICE
-## limb, DUSK_ROSE terminator, haze). Also `motion_time`, `seed` (per planet), `detail` (octaves),
-## `select`, `world_style`. Far, already-formed planets use a duplicate with formation 1, heat ~0.1,
+## limb, DUSK_ROSE terminator, haze; the formed world's seas, rose land and drifting clouds). Also
+## `motion_time`, `seed` (per planet), `detail` (octaves), `select`, `world_style`, and the look of
+## the formed world: `terminator_amount`, `scatter_amount`, `wrap_amount`, `glint_amount`,
+## `cloud_amount`. Far, already-formed planets use a duplicate with formation 1, heat ~0.1,
 ## crust 1, atmosphere 1 and their family (set_far_world_style).
 static func planet_forming() -> ShaderMaterial:
 	if not _cache.has(&"planet_forming"):
@@ -290,7 +315,9 @@ static func planet_forming() -> ShaderMaterial:
 		m.set_shader_parameter("atmo_inner_color", Palette.ICE)
 		m.set_shader_parameter("atmo_outer_color", Palette.DUSK_ROSE)
 		m.set_shader_parameter("accretion_color", Palette.GOLD)
-		m.set_shader_parameter("land_color", Palette.DUSK_ROSE.lerp(Palette.STONE, 0.3))
+		m.set_shader_parameter("land_color", Palette.DUSK_ROSE.lerp(Palette.GOLD, 0.2))
+		m.set_shader_parameter("ocean_color", Palette.INDIGO.lerp(Palette.ICE, 0.42))
+		m.set_shader_parameter("cloud_color", Palette.PEARL.lerp(Palette.ICE, 0.2))
 		m.set_shader_parameter("band_color", Palette.ICE.lerp(Palette.PEARL, 0.2))
 		m.set_shader_parameter("dust_color", Palette.DUSK_ROSE.lerp(Palette.BLUSH, 0.3))
 		m.set_shader_parameter("formation", 1.0)
@@ -368,14 +395,15 @@ static func orbit_line() -> ShaderMaterial:
 	return _cache[&"orbit_line"]
 
 
-## Relation thread (link) — fibre of light prolonging the hair: lilac at the source -> `color_to`
+## Relation thread (link) — fibre of light prolonging the hair: hair_link_tip() at the source (the
+## colour a link strand of the hair ends with) -> `color_to`
 ## at the target (default ICE; GOLD for the forming planet). Mesh: UV.x source->target, UV.y
 ## across. Uniforms: `pulse` (0..1 position of a travelling gold pulse; outside = none), `woven`
 ## 0..1 (spun out from the source), `intensity`, `color_to`.
 static func relation_thread() -> ShaderMaterial:
 	if not _cache.has(&"relation_thread"):
 		var m := _shader_material(GENESIS_DIR + "relation_thread")
-		m.set_shader_parameter("color_from", Palette.LILAC)
+		m.set_shader_parameter("color_from", hair_link_tip())
 		m.set_shader_parameter("color_to", Palette.ICE)
 		m.set_shader_parameter("pulse_color", Palette.GOLD.lerp(Palette.PEARL, 0.3))
 		m.set_shader_parameter("pulse", -1.0)
