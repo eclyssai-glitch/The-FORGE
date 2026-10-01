@@ -23,7 +23,7 @@ const RIVER_ALPHA := 0.42
 ## River presence asleep / awake (share of RIVER_ALPHA).
 const RIVER_PRESENCE := Vector2(0.25, 1.0)
 ## Where the river is born: the dissolving stretch of the porcelain skirt (object Y of the sculpture,
-## inside Miku.BODY_DISSOLVE) — grains leave the skirt where it turns into light, not at a hem.
+## inside GenesisMiku.BODY_DISSOLVE) — grains leave the skirt where it turns into light, not at a hem.
 const RIVER_BIRTH := Vector2(-2.5, -4.1)
 ## Skirt radius (object units) at the top of the birth band; it widens to the hem radius below.
 const RIVER_BIRTH_RADIUS := 0.62

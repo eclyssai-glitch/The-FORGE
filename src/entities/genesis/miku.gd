@@ -1,4 +1,4 @@
-class_name Miku
+class_name GenesisMiku
 extends Node3D
 ## MIKU, the celestial weaver (docs/VISUAL_DIRECTION.md §1). Owner: animator.
 ## The porcelain sculpture (assets/meshes/miku_body.obj, MaterialLibrary.miku_body()), a gown of

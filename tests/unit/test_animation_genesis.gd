@@ -442,10 +442,10 @@ func test_pulses_only_on_woven_threads() -> void:
 func test_the_hair_becomes_the_threads() -> void:
 	# One link strand per MIKU thread, from the single root to the point where its thread begins;
 	# the thread starts on the strand (overlapping its tip) in the figure's current pose.
-	var curves := Miku.hair_link_curves()
-	var sources := Miku.hair_sources()
+	var curves := GenesisMiku.hair_link_curves()
+	var sources := GenesisMiku.hair_sources()
 	assert_eq(curves.size(), RelationThreads.MIKU_LINKS.size(), "one link strand per thread of MIKU")
-	var root := GenesisLayout.anchor("miku_body", "hair_root", Miku.HAIR_ROOT_FALLBACK)
+	var root := GenesisLayout.anchor("miku_body", "hair_root", GenesisMiku.HAIR_ROOT_FALLBACK)
 	var seen := {}
 	for k in RelationThreads.MIKU_LINKS.size():
 		var i: int = RelationThreads.MIKU_LINKS[k]
@@ -458,7 +458,7 @@ func test_the_hair_becomes_the_threads() -> void:
 		for lift in [0.0, 1.0]:
 			for m in [0.0, 7.3]:
 				var a := RelationThreads.endpoint(i, true, m, lift)
-				var on := Miku.figure_pose(m, lift) * (root + HairRibbons.curve_point(c, 1.0 - RelationThreads.HAIR_OVERLAP))
+				var on := GenesisMiku.figure_pose(m, lift) * (root + HairRibbons.curve_point(c, 1.0 - RelationThreads.HAIR_OVERLAP))
 				assert_lt(a.distance_to(on), 1e-3, "thread %d starts on its strand (lift %.0f, m %.1f)" % [i, lift, m])
 	assert_eq(seen.size(), RelationThreads.MIKU_LINKS.size(), "each thread leaves from its own tuft")
 
