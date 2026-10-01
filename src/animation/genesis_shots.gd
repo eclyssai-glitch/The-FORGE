@@ -98,7 +98,9 @@ const TRIM_RISE := 1.12
 
 # --- Focus --------------------------------------------------------------------------------------
 const FOCUS_FILL := 0.55
-const FOCUS_PITCH := Vector2(-0.15, 0.7)
+## Focus keeps a slightly high view (from above): a low focus on the world or the hands put MIKU's
+## hem alone at the top of the frame.
+const FOCUS_PITCH := Vector2(0.36, 0.8)
 
 
 ## Writes the base shot of `mode` into `out`.
@@ -278,7 +280,7 @@ static func style_frame_poses() -> Array[Dictionary]:
 	# Statuary distance, a little from below: head, shoulders and the hair mass rising behind against
 	# the sky (never an extreme close; the older worlds' orbits stay under the frame).
 	out.append(_pose("sf_02_portrait", 12.0, SessionState.Mode.FORGE,
-		brow + Vector3(3.0, -2.2, 6.4), brow + Vector3(-0.5, -0.4, -0.6), 36.0))
+		brow + Vector3(3.0, -2.2, 6.4), brow + Vector3(-0.5, -0.35, -0.6), 31.0))
 	# The cradle station of the cinematic path: low, looking up — the molten world between the hands,
 	# MIKU whole above it against the warm core.
 	var cp: Vector3 = CRADLE_POSE[0]
