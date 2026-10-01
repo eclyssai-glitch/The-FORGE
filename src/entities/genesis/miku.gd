@@ -38,15 +38,15 @@ const BREATH_PERIOD := Palette.T_BREATH
 ## low: the root concentrates the light of every strand.
 const HAIR_LAYERS: Array = [
 	["HairMass", 10, 7101, 12.0, 0.11, 0.22, 0.014, 10.0,
-		{"spread": 0.55, "lift": 0.5, "s_amount": 0.55, "tip_open": 0.18, "root_radius": 0.1}],
+		{"spread": 0.55, "lift": 0.36, "s_amount": 0.55, "tip_open": 0.18, "root_radius": 0.1}],
 	["HairVeil", 8, 7202, 15.0, 0.06, 0.22, 0.024, 13.5,
-		{"spread": 0.75, "lift": 0.6, "s_amount": 0.6, "strands_min": 4, "strands_max": 7, "tip_open": 0.26,
+		{"spread": 0.75, "lift": 0.45, "s_amount": 0.6, "strands_min": 4, "strands_max": 7, "tip_open": 0.26,
 		"wave": 0.07, "root_radius": 0.12}],
 ]
 ## Direction the hair leaves the knot (object space; blended with the sculpt's hair_root_tangent,
 ## HAIR_TANGENT_SHARE of it): back more than up — the S lifts it as it goes (nebula `lift`) —
 ## drifting a little to her right (screen left), away from the right hand.
-const HAIR_DIRECTION := Vector3(-0.72, 0.05, -0.7)
+const HAIR_DIRECTION := Vector3(-0.85, 0.0, -0.52)
 const HAIR_TANGENT_SHARE := 0.25
 ## Link strands: one strand of the mass per relation thread of MIKU, ending exactly where its
 ## thread starts: the hair visibly becomes the graph. Each source (hair_sources) lies ON a strand of
