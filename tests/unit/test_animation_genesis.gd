@@ -319,10 +319,18 @@ func test_a_single_pulse_runs_through_every_thread() -> void:
 			was_on = on
 			t += 0.02
 		assert_eq(seen, 1, "the pulse crosses link %d exactly once" % i)
-		var done := GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HOP * GenesisChoreography.link_hop(i)
+		var done := GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HAIR \
+			+ GenesisChoreography.WAVE_HOP * GenesisChoreography.link_hop(i)
 		assert_gte(done, GenesisChoreography.link_done_at(g, i), "link %d is woven when the pulse reaches it" % i)
-	assert_lte(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HOP * hops,
-		GenesisScript.DURATION, "the wave ends before the session completes")
+	assert_lte(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HAIR
+		+ GenesisChoreography.WAVE_HOP * hops, GenesisScript.DURATION, "the wave ends before the session completes")
+	# It leaves her hair first: along the link strands, ending where her threads begin.
+	var before := GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY
+	assert_lt(GenesisChoreography.hair_wave(g, before - 0.01), 0.0, "no hair pulse before the wave")
+	assert_almost_eq(GenesisChoreography.hair_wave(g, before), 0.0, 1e-4, "the pulse leaves the root")
+	var handover := before + GenesisChoreography.WAVE_HAIR
+	assert_almost_eq(GenesisChoreography.hair_wave(g, handover), 1.0, 1e-4, "it reaches the strand tips...")
+	assert_almost_eq(GenesisChoreography.stable_wave(g, handover, hops), 0.0, 1e-4, "...as it enters her threads")
 
 
 func test_threads_end_on_the_limb() -> void:

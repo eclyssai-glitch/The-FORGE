@@ -44,17 +44,21 @@ const HAIR_LAYERS: Array = [
 ## drifting a little to her right (screen left), away from the right hand.
 const HAIR_DIRECTION := Vector3(-0.72, 0.05, -0.7)
 const HAIR_TANGENT_SHARE := 0.25
-## Link strands: one long strand of the mass per relation thread of MIKU, ending exactly where its
-## thread starts (RelationThreads.HAIR_SOURCES, relative to hair_root): the hair visibly becomes
-## the graph. Static (no sway, so the junction holds), a little wider and brighter than the mass;
-## they brighten further once their thread is spun (links.woven).
+## Link strands: one strand of the mass per relation thread of MIKU, ending exactly where its
+## thread starts: the hair visibly becomes the graph. Each source (hair_sources) lies ON a strand of
+## the mass — the longest strand of the tuft that leans most towards the thread's body, at
+## HAIR_LINK_SHARES of its length — so the link strand follows the tuft's own S (HairRibbons.nebula
+## link_ends: no hook) and the thread leaves along it. Static (no sway, so the junction holds), a
+## little wider and brighter than the mass; brighter still once their thread is spun.
 const HAIR_LINK_TUFTS := 10
 const HAIR_ROOT_FALLBACK := Vector3(-0.08, 1.73, -0.11)
+## Share of the chosen strand where each MIKU thread leaves the hair (RelationThreads.MIKU_LINKS order).
+const HAIR_LINK_SHARES: Array[float] = [0.6, 0.72, 0.66, 0.78]
 ## The hair is spun out from the knot at the awakening: the shader's growth front (`reveal`, a
 ## bright front running root -> tip) while the plume also swells from HAIR_GROW_SCALE of its size.
 const HAIR_GROW_SCALE := 0.7
 const HAIR_LINK_WIDTH := 0.09
-const HAIR_LINK_INTENSITY := Vector2(0.35, 0.75)
+const HAIR_LINK_INTENSITY := Vector2(0.24, 0.42)
 ## Gown shell: the skirt of the sculpture below GOWN_TOP (object Y), pushed out along its normals,
 ## stretched below GOWN_STRETCH_FROM by GOWN_STRETCH and flared by GOWN_FLARE, so the veil trails
 ## past the porcelain and dissolves downward into star dust (miku_gown fade_top -> fade_bottom:
@@ -90,7 +94,7 @@ const SEED_LIGHT_ENERGY := 0.04
 ## The light that reveals her: at the awakening the seed's light blooms this far (units) and this
 ## bright (GenesisChoreography.seed_bloom), then settles back to the small brow light.
 const SEED_BLOOM_RANGE := 3.4
-const SEED_BLOOM_ENERGY := 0.7
+const SEED_BLOOM_ENERGY := 0.45
 ## Asleep, the ember on her brow breathes (share of its brightness, period in seconds).
 const EMBER_BREATH := 0.22
 const EMBER_PERIOD := Palette.T_BREATH
@@ -105,13 +109,14 @@ const HALO_CLOSED_INNER := 0.8
 ## (GenesisChoreography.reveal_glow). While she is revealed the porcelain's `awaken` follows her
 ## presence (the revealed porcelain is already the lit, awake one — never a dark figure).
 const INNER_GLOW := 0.05
-const REVEAL_INNER := 1.1
+const REVEAL_INNER := 0.5
 const REVEAL_WAKE := 4.0
 ## Selection smoothing (1/s) and levels.
 const SELECT_RATE := 6.0
 
 static var _gown_mesh_cache: ArrayMesh
 static var _link_curves: Array[PackedVector3Array] = []
+static var _sources: Dictionary = {}
 
 var figure: Node3D
 var body: MeshInstance3D
@@ -127,6 +132,8 @@ var heart: Node3D
 var pick_body: StaticBody3D
 
 var _body_mat: ShaderMaterial
+## miku_body has the radial awakening `reveal` (art-director r1b).
+var _body_reveal := false
 var _gown_mat: ShaderMaterial
 var _halo_mat: ShaderMaterial
 var _hair_mats: Array[ShaderMaterial] = []
@@ -134,8 +141,8 @@ var _link_mat: ShaderMaterial
 var _select := 0.0
 var _figure_base := Transform3D.IDENTITY
 ## Last narrative values written (awaken, hair reveal, hair intensity, gown, halo, seed, presence,
-## seed bloom, head lift, halo close, link strands, reveal glow).
-var _written := PackedFloat32Array([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+## seed bloom, head lift, halo close, link strands, reveal glow, hair pulse).
+var _written := PackedFloat32Array([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2])
 ## Seed brightness (narrative) and whether she is still asleep (the ember breathes, ambient).
 var _seed := 0.0
 var _bloom := 0.0
@@ -163,6 +170,9 @@ func _ready() -> void:
 	_body_mat = MaterialLibrary.miku_body().duplicate() as ShaderMaterial
 	_body_mat.set_shader_parameter("dissolve_top", BODY_DISSOLVE.x)
 	_body_mat.set_shader_parameter("dissolve_bottom", BODY_DISSOLVE.y)
+	_body_reveal = _declares(_body_mat, &"reveal")
+	if _body_reveal:
+		_body_mat.set_shader_parameter("reveal_origin", _anchor("forehead", Vector3(0.0, 1.52, 0.42)))
 	body.material_override = _body_mat
 	# No self-shadow: the key's shadow map stair-stepped across the torso and gown (critic r1).
 	# Her baked AO + SSAO shape the porcelain; the key still lights her.
@@ -229,9 +239,15 @@ func _update_narrative() -> void:
 	if not is_equal_approx(pr, _written[6]):
 		_written[6] = pr
 		# Out of the dark: hidden before the awakening (only the seed glows), then revealed by the
-		# seed's light. Transparency only while fading (opaque pipeline otherwise).
+		# seed's light — miku_body's radial `reveal` from the brow (opaque, a soft gold front; the
+		# global transparency showed the skirt's inner wall). Fallback when the material has no
+		# `reveal`: a whole-body fade (transparency only while fading).
 		body.visible = pr > 0.001
-		body.transparency = 1.0 - pr if pr < 0.999 else 0.0
+		if _body_reveal:
+			_body_mat.set_shader_parameter("reveal", pr)
+			body.transparency = 0.0
+		else:
+			body.transparency = 1.0 - pr if pr < 0.999 else 0.0
 	if not is_equal_approx(hc, _written[9]):
 		_written[9] = hc
 		_halo_mat.set_shader_parameter("arc_span", lerpf(_halo_span.x, HALO_CLOSED_SPAN, hc))
@@ -241,7 +257,9 @@ func _update_narrative() -> void:
 		_written[0] = a
 		_written[11] = rg
 		_body_mat.set_shader_parameter("awaken", maxf(a, minf(GenesisChoreography.body_presence(g, t) * REVEAL_WAKE, 1.0)))
-		_body_mat.set_shader_parameter("inner_glow", INNER_GLOW + REVEAL_INNER * rg)
+		# With the radial reveal the shader's own luminous front carries the light; the inner-glow
+		# boost only serves the whole-body fade fallback.
+		_body_mat.set_shader_parameter("inner_glow", INNER_GLOW + (0.0 if _body_reveal else REVEAL_INNER * rg))
 	if not is_equal_approx(reveal, _written[1]) or not is_equal_approx(hi, _written[2]):
 		_written[1] = reveal
 		_written[2] = hi
@@ -252,6 +270,11 @@ func _update_narrative() -> void:
 			_hair_mats[i].set_shader_parameter("reveal", reveal)
 			_hair_mats[i].set_shader_parameter("intensity", hi * float(HAIR_LAYERS[i][5]))
 		_link_mat.set_shader_parameter("reveal", reveal)
+	# The climax pulse leaves her hair first (link strands), then runs along her threads.
+	var hw := GenesisChoreography.hair_wave(g, t)
+	if not is_equal_approx(hw, _written[12]):
+		_written[12] = hw
+		_link_mat.set_shader_parameter("link_pulse", hw)
 	var lk := GenesisChoreography.link(g, t, 0)
 	var li := hi * lerpf(HAIR_LINK_INTENSITY.x, HAIR_LINK_INTENSITY.y, lk)
 	if not is_equal_approx(li, _written[10]):
@@ -302,6 +325,17 @@ func _update_ambient(delta: float) -> void:
 	if not is_equal_approx(_select, want):
 		_select = move_toward(_select, want, SELECT_RATE * delta) if delta > 0.0 else want
 		_body_mat.set_shader_parameter("select", _select)
+
+
+## True when the shader of `mat` declares `uniform_name` (material hooks that arrive with the
+## art-director's passes).
+static func _declares(mat: ShaderMaterial, uniform_name: StringName) -> bool:
+	if mat == null or mat.shader == null:
+		return false
+	for u: Dictionary in mat.shader.get_shader_uniform_list():
+		if StringName(u.get("name", "")) == uniform_name:
+			return true
+	return false
 
 
 ## Transform of the figure at ambient time `m` with the climax head lift `head_lift` 0..1: the slow
@@ -357,6 +391,52 @@ static func hair_heading() -> Vector3:
 	return (tangent * HAIR_TANGENT_SHARE + HAIR_DIRECTION.normalized()).normalized()
 
 
+## Where each MIKU thread leaves the hair: {link index: point relative to the hair root, object
+## space of the sculpture}. For each link (RelationThreads.MIKU_LINKS order) the tuft of the mass
+## (layer 0) that leans most towards the thread's body (its rest position) and is not taken yet;
+## the point at HAIR_LINK_SHARES of that tuft's longest strand. Pure and cached.
+static func hair_sources() -> Dictionary:
+	if not _sources.is_empty():
+		return _sources
+	var L: Array = HAIR_LAYERS[0]
+	var neb := HairRibbons.nebula(Vector3.ZERO, hair_heading(), int(L[2]), HAIR_LINK_TUFTS, float(L[3]), PackedVector3Array(), L[8])
+	var curves: Array = neb["curves"]
+	var groups: PackedInt32Array = neb["groups"]
+	# The longest strand of each tuft.
+	var longest := {}
+	var lengths := {}
+	for c in curves.size():
+		var pts: PackedVector3Array = curves[c]
+		var len_c := 0.0
+		for j in range(1, pts.size()):
+			len_c += pts[j].distance_to(pts[j - 1])
+		var tuft := groups[c]
+		if not lengths.has(tuft) or len_c > float(lengths[tuft]):
+			lengths[tuft] = len_c
+			longest[tuft] = c
+	var root := GenesisLayout.anchor(MESH_NAME, "hair_root", HAIR_ROOT_FALLBACK)
+	var inv := GenesisLayout.miku_transform().affine_inverse()
+	var taken := {}
+	for k in RelationThreads.MIKU_LINKS.size():
+		var i: int = RelationThreads.MIKU_LINKS[k]
+		var share := HAIR_LINK_SHARES[k % HAIR_LINK_SHARES.size()]
+		var target: StringName = GenesisScript.LINKS[i][1]
+		var to_body := (inv * RelationThreads.body_point(i, target, 0.0) - root).normalized()
+		var best := -1
+		var best_dot := -2.0
+		for tuft: int in longest:
+			if taken.has(tuft):
+				continue
+			var p := HairRibbons.curve_point(curves[int(longest[tuft])], share)
+			var d := p.normalized().dot(to_body)
+			if d > best_dot:
+				best_dot = d
+				best = tuft
+		taken[best] = true
+		_sources[i] = HairRibbons.curve_point(curves[int(longest[best])], share)
+	return _sources
+
+
 ## The link strands of the hair (relative to the hair root, object space of the sculpture), in the
 ## order of RelationThreads.MIKU_LINKS: long strands of the mass (layer 0's seed and tufts) ending
 ## exactly at RelationThreads.HAIR_SOURCES. Pure and cached (RelationThreads follows them).
@@ -364,8 +444,9 @@ static func hair_link_curves() -> Array[PackedVector3Array]:
 	if not _link_curves.is_empty():
 		return _link_curves
 	var ends := PackedVector3Array()
+	var src := hair_sources()
 	for i: int in RelationThreads.MIKU_LINKS:
-		ends.append(RelationThreads.HAIR_SOURCES[i])
+		ends.append(src[i])
 	var L: Array = HAIR_LAYERS[0]
 	var neb := HairRibbons.nebula(Vector3.ZERO, hair_heading(), int(L[2]), HAIR_LINK_TUFTS, float(L[3]), ends, L[8])
 	var curves: Array = neb["curves"]

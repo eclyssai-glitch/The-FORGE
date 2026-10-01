@@ -52,15 +52,6 @@ const INTENSITY := 0.55
 const HAIR_LINE_PX := 2.1
 ## MIKU's own threads (GenesisScript.LINKS indices whose source is MIKU), in hair-strand order.
 const MIKU_LINKS: Array[int] = [0, 4, 5, 6]
-## Hair sources (MIKU object space, relative to the hair_root anchor), one per MIKU link: where a
-## long strand of her hair (Miku.hair_link_curves) ends and its thread continues — on the flanks of
-## the plume, so each thread leaves the hair on its own side.
-const HAIR_SOURCES := {
-	0: Vector3(-1.1, 2.2, -1.6),
-	4: Vector3(0.35, 3.2, -2.8),
-	5: Vector3(0.9, 2.6, -2.0),
-	6: Vector3(-1.6, 3.0, -2.4),
-}
 ## The thread starts this far (share of the strand's control points) before the strand's tip and
 ## overlaps it, leaving along the strand's own direction (no kink, no pinch at the junction).
 const HAIR_OVERLAP := 0.06
@@ -282,7 +273,7 @@ static func hair_point(i: int) -> Vector3:
 	var k := MIKU_LINKS.find(i)
 	var curves := Miku.hair_link_curves()
 	if k < 0 or k >= curves.size():
-		return root + (HAIR_SOURCES.get(i, Vector3(0.0, 2.5, -1.5)) as Vector3)
+		return root + Vector3(0.0, 2.5, -1.5)
 	return root + HairRibbons.curve_point(curves[k], 1.0 - HAIR_OVERLAP)
 
 
