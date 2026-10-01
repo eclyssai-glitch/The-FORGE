@@ -98,3 +98,17 @@ Regras: escritor único por área; interfaces existentes preservadas (âncoras J
   (`GOWN_VEIL = true`, `GOWN_FADE = (-0.35, -5.4)`, `GOWN_STRETCH = 0.75`, `GOWN_FLARE = 0.3`) e a varredura do anel;
   opcionais por órbita `tube_radius`/`body_gap`; `miku_body` dirigível (`dissolve_top/bottom`, `light_turn`,
   `lip_intensity`). Ressalva: planeta herói ainda escuro sob o rig (key no planeta).
+- game-engineer (`a83198b`): sombras 4096/4 cascatas + filtro por perfil; capturas em HIGH por padrão; blends
+  suaves de ambiente por modo; `world.set_exposure_trim`; `tools/record_genesis.sh` (jogo real + áudio → MP4).
+- procedural-modeler (`b3248bf`): MIKU votiva (massa de cabelo esculpida, corpete drapeado, ombros caídos, sem cós),
+  falanges com planos e unhas, mão direita tecendo, `HairRibbons.nebula` + fios de link (CUSTOM0), lascas limpas.
+- art-director 2ª passada (`11270de`): `light()` elevava o albedo ao quadrado (planeta quase preto) — corrigido com
+  teste; mundo formado rosa/azul com nuvens e limbo ICE; `reveal` radial no `miku_body`; suavização do retrato;
+  cabelo com fios de link (ICE→ouro) contínuos com `relation_thread`; halo sem costura; legendas sequenciais.
+- animator 1ª/2ª passadas (`3772bc3`, `f192d16`): abertura pela semente, sombras sem escada (MIKU sem auto-sombra),
+  clímax 53–56 s, UNIVERSE povoado, caminho de câmera desenhado; ganchos ligados; cabelo vira o grafo; berço com
+  MIKU inteira; key/aura dos mundos no clímax.
+- Revisão do coordenador (style frames integrados): herói e "cabelo = grafo" (`sf_05`) fortes; planeta estável
+  bonito. Pendentes para a revisão 2: retrato de perto (pescoço longo, "placa" no queixo), rochas do cinturão
+  poliédricas, brilho estourado no despertar (~4,6 s), grãos escuros na dissolução, KESTRE-4 parecido com o herói,
+  `MotionClock` não determinístico nas capturas.

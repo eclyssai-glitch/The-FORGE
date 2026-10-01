@@ -122,8 +122,7 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   technical-auditor, correções, export, checkpoint).
 - Retomada: ver o estado das fases abaixo; worktrees de agentes interrompidos sem commits podem ser removidas e
   relançadas a partir do contrato.
-- Estado: Fase A — game-engineer integrado (`e854114`, 217/217, smoke PASS nos dois cenários; ADR-014);
-  art-director e sound-designer integrados. Fase B: game-engineer integrado (`9842659`, 263/263; smoke ORIGIN PASS 10/10);
-  procedural-modeler (Fase A + refinamento `a5da39a`), UI diegética (art-director) e cena animada (animator) integrados
-  (331/331; smoke GENESIS PASS 10/10). art-critic rodada 1: REPROVADO 6/10 (`docs/evidence/loop-04/critic-r1.md`) →
-  rodada de correção `docs/contracts/loop-04-fixes.md` (meta ≥ 8). Correção de NaN em shaders em andamento.
+- Estado: Fases A e B integradas. art-critic r1: REPROVADO 6/10 (`docs/evidence/loop-04/critic-r1.md`) → rodada de
+  correção 1 integrada nas cinco áreas (`docs/contracts/loop-04-fixes.md`, merge `f192d16`; 362/362; smokes PASS).
+  Próximo: gravação do jogo real com áudio (`tools/record_genesis.sh`) e revisão art-critic r2; depois Fase C
+  (virada para GENESIS, export, auditoria técnica, checkpoint).
