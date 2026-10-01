@@ -217,42 +217,56 @@ Metadados: `JSON.parse_string(FileAccess.get_file_as_string("res://assets/meshes
 
 ## MIKU — `assets/meshes/miku_body.obj` + `.json`
 
-Estátua sacra estilizada original (abstração tipo Brancusi, "Musa adormecida" / mármore art déco),
-não anime: ~11 cabeças (cabeça 0,53 u do queixo ao alto), cabeça curvada ~17° para a frente/baixo,
-levemente inclinada e girada; pescoço longo, clavículas e esternocleidomastoides suaves, busto
-discreto, contrapposto (ombros e quadril inclinados em sentidos opostos, tronco girado), braços
-longos abertos para a frente e para baixo. Da cintura: vestido em sino alongado (quadril, leve
-estreitamento, alargamento final), pregas verticais com torção lenta, leve varrida para trás, perna
-relaxada insinuada sob o tecido, **aberto embaixo** (casca de 3–4 cm, domo interno em y ≈ −1,7)
-com barra irregular suave. Sem pés, sem pernas.
+Estátua sacra estilizada original — **estatuária votiva** (korai, mármore art déco), não anime nem
+manequim: ~11 cabeças (cabeça 0,53 u do queixo ao alto, sem o cabelo), cabeça curvada ~17° para a
+frente/baixo, levemente inclinada e girada; pescoço longo, contrapposto (ombros e quadril inclinados
+em sentidos opostos, tronco girado), braços longos abertos para a frente e para baixo. Veste um
+único vestido: **corpete drapeado** do ombro à cintura que continua, sem costura nem cós, no sino
+alongado da saia (pregas verticais com torção lenta, leve varrida para trás, perna relaxada
+insinuada), **aberto embaixo** (casca de 3–4 cm, domo interno em y ≈ −1,7) com barra irregular
+suave. Sem pés, sem pernas.
 
-**Rosto (refino do Loop 4)** — um único oval contínuo, sem aresta dura. O rosto é um **relevo**
-(campo de altura z = f(x, y) no referencial da cabeça, com distância normalizada pelo gradiente)
-sobre um oval em ovo com queixo afinado; toda feição é uma elevação ou depressão gaussiana suave:
-testa lisa e cheia; arcada superciliar sutil que flui para a raiz do nariz; nariz fino e reto
-(projeção ≈ 0,04 u, ponta pequena); cavidade orbital rasa com a **pálpebra fechada em amêndoa**
-(borda superior macia, linha dos cílios em arco suave para baixo, pálpebra inferior leve); maçãs e
-bochechas suaves, têmporas levemente recuadas; boca só como relevo de lábios (divisão quase
-imperceptível); queixo pequeno e delicado; a linha da mandíbula sobe do queixo para a orelha (corte
-inclinado atrás), sem papada. Todo limite (clamp) do relevo é suave: uma quina no campo aparece como
-costura nas normais. Perfil: testa 0,22 · glabela 0,224 · raiz 0,22 · ponta do nariz 0,253 ·
-subnasal 0,215 · lábios 0,222/0,21 · queixo 0,21 (z no referencial da cabeça).
+**Rodada de correção do Loop 4 (art-critic: "manequim/alienígena careca")** — o que mudou:
+- **Rosto como massa**: a arcada superciliar é um plano contínuo da testa à raiz do nariz (perfil
+  grego) com o rebordo orbital em **massa** que avança sobre o olho (+0,011) e faz sombra; cavidade
+  mais funda sob a arcada; a **pálpebra fechada é uma amêndoa convexa** (+0,012, borda inferior
+  macia) sobre o globo, sem sulco de cílio; **lábios como volumes** (superior com arco do cupido,
+  inferior mais cheio, altura afinando para os cantos — nada de "caixa"), divisão só onde as duas
+  massas se encontram, cantos recolhidos e leve concavidade sob o lábio inferior; queixo definido.
+- **Massa de cabelo esculpida** (`_hair`, `_knot`): espessura real sobre o crânio (2,0 cm na linha do
+  cabelo → +2,0 no alto, +3,0 nas faixas que cobrem as orelhas, +1,2 atrás; 1 cm ≈ 0,023 u), linha
+  do cabelo com rolo macio (rampa 0,087 u), **21 mechas largas** penteadas para trás (meridianos em
+  torno do eixo rosto → coque, ondulação 0,1 rad, relevo 0,0095 entre crista e sulco) com 3 fios
+  finos por mecha; convergem num **coque enrolado alto** na parte de trás da cabeça (elipsoide
+  0,105 × 0,088 × 0,085 com torção em espiral) que termina numa **cauda curta** de 0,13 u ao longo
+  da saída das fitas (50° acima da horizontal, para trás): `hair_root` é a ponta dessa cauda — onde
+  a escultura vira a nebulosa de luz (`HairRibbons.nebula`). A cabeça ganhou volume nobre na
+  silhueta e não lê careca em nenhum ângulo.
+- **Ombros caídos com clavícula**: trapézio numa linha longa e descendente do pescoço (y 1,07) a um
+  ombro baixo e estreito (articulação em (±0,40, 0,76), antes (±0,42, 0,79); jugo 0,33 de largura,
+  antes 0,40); clavículas afinando (0,021 → 0,017) com as fossas supraclaviculares suaves acima.
+- **Sem seios modelados**: o peito é um **corpete drapeado** (`_bodice`) — o tecido passa como um
+  plano do ombro à cintura (casca 1,1 cm sobre o tronco + volume de drapeado frontal), decote
+  em concha suave abaixo das clavículas (mais baixo nas costas), **swags em U** do cowl sob o decote
+  (0,013) e **pregas largas** (7, amplitude 0,017) que nascem dos ombros em diagonal e convergem na
+  cintura, acalmando sobre o peito e os ombros. Sem cava recortada (os braços se fundem sobre o
+  tecido no ombro: uma borda de tecido junto à pele fechava túneis na axila).
+- **Sem cós**: removida a faixa da cintura; acima da cintura a saia mergulha sob o corpete (máximo
+  suave de y, 0,6 × y) e a união usa k 0,07 — uma superfície contínua, sem lábio. O quadril da saia
+  ficou mais macio (0,13 em vez de 0,17, sem o estreitamento de "saia lápis").
+- **Braços**: ombro→cotovelo→punho mais afastados do corpo (cotovelos (±0,78, 0,0), punhos (1,10,
+  −0,47) / (−1,10, −0,40)) — o braço não "derrete" no quadril de perfil; braço 0,102 → 0,07 no
+  cotovelo; **antebraço mais cheio** (tubo 0,07 → 0,086 → 0,07 → 0,048 + dois ventres musculares,
+  antes 0,068 → 0,078 → 0,062 → 0,045). Mãos de MIKU com leque um pouco mais aberto (+0,12 → −0,24
+  rad) — os dedos não se tocam na grade (gênero 0).
 
-**Cabelo** — calota presa ao crânio (espessura 0,9 cm na frente → 2,6 cm atrás), com rampa larga na
-linha do cabelo (sem ressalto/faixa na testa); a linha do cabelo é função do azimute: testa → têmpora
-→ desce na frente da orelha (não modelada) até o meio dela → contorna por trás → nuca, cobrindo a
-orelha e deixando a mandíbula livre (sem capuz). 22 sulcos rasos de penteado (0,15 cm) varrem da
-testa para trás e convergem, escondidos, sob um **coque baixo** (elipsoide largo na região
-occipital + fluxo curto) de onde partem as fitas (`hair_root`); sem chifre, sem mecha lateral.
-
-**Braços** — anatomia estilizada mantendo o alongamento: deltoide cheio, ventres do bíceps e do
-tríceps, cotovelo macio, massa do antebraço logo abaixo do cotovelo afunilando para um **punho fino
-e achatado** (fino na direção da palma). Raios ≈ 0,10 (ombro/deltoide) → 0,068 (cotovelo) → 0,08
-(antebraço) → 0,045 × 0,035 (punho); antes 0,10 → 0,064 → 0,071 → 0,046 em tubo liso.
-
-**Mãos de MIKU** — dedos separados e legíveis à distância: leque pequeno (abertura +0,09 → −0,19
-rad do indicador ao mínimo), flexão crescente para o mínimo, fusão só na base (`fuse_k` 0,05, antes
-0,28, que dava uma "luva"); polegar solto. Gênero 0 verificado.
+**"Buraco escuro" no tronco e braço "derretendo" (sf_05/g12)** — investigado: a malha não tem furo
+(0 arestas de borda, Euler 2, 1 componente) nem normais invertidas na região; a mancha é a **sombra
+projetada do braço direito pela key** (vinda do lado direito dela) sobre o flanco, com o serrilhado
+do mapa de sombra; o "derreter" era o braço quase encostado ao quadril na projeção. Prova:
+`game_look.gd --shadows=0` no mesmo enquadramento do `sf_05` remove a mancha (seção Previews). Com
+os braços mais afastados, a sombra cai mais na saia; o resto é do rig (animator/game-engineer:
+sombra suave/sem escada ou MIKU sem auto-sombra da key).
 
 - Referencial: +Y para cima, **frente +Z**, **origem no centro da cintura**; mão esquerda dela em +X.
 - Bounds: min (−1,444, −4,334, −1,610), max (1,424, 1,760, 1,191) → **6,09 u de altura** (barra

@@ -5,7 +5,8 @@ extends SceneTree
 ## (back DUSK_ROSE, rim ICE, key PEARL = only shadow caster, fill NEBULA), placed with the
 ## in-game transform (GenesisLayout). Views are given in the sculpture's object space.
 ##   tools/_display.sh godot --path . --script res://tools/sculpt/preview/game_look.gd -- \
-##     --obj=PATH --kind=miku|hand_left|hand_right --views=JSON --out=DIR [--clay=1]
+##     --obj=PATH --kind=miku|hand_left|hand_right --views=JSON --out=DIR [--clay=1] [--shadows=0]
+##     [--hair_json=assets/meshes/miku_body.json (MIKU: nebula hair proof)]
 
 var _args := {}
 
@@ -143,7 +144,7 @@ func _run() -> void:
 	_dir_light(root, Palette.ICE, RIM_DIR, 1.25)
 	var key := _dir_light(root, Palette.PEARL, KEY_DIR, 1.05)
 	key.light_volumetric_fog_energy = 0.0
-	key.shadow_enabled = true
+	key.shadow_enabled = _args.get("shadows", "1") != "0"  # --shadows=0: diagnostics
 	key.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DISTANCE
 	key.shadow_blur = KEY_SHADOW_BLUR

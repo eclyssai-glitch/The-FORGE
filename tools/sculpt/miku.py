@@ -283,7 +283,7 @@ def _torso(skip=()):
     torso = S.blend(base, parts)
     if "hollows" not in skip:
         for s in (-1.0, 1.0):   # supraclavicular hollows: the clavicle reads as a bone
-            torso = S.subtract(torso, S.ellipsoid((s * 0.17, 0.93, 0.025), (0.08, 0.024, 0.036)), 0.06)
+            torso = S.subtract(torso, S.ellipsoid((s * 0.17, 0.935, 0.025), (0.075, 0.02, 0.03)), 0.07)
     if "spine" not in skip:
         torso = S.subtract(torso, S.capsule((0, 0.08, -0.183), (0, 0.80, -0.207), 0.02), 0.07)
     return torso
@@ -311,7 +311,9 @@ def _bodice(torso):
         ang = np.arctan2(x + 0.06, y + 0.3)
         ph = PLEATS * ang + 0.9 * np.sin(2.3 * ang + 0.4)
         pleat = PLEAT_AMP * (0.5 + 0.5 * np.cos(ph))
-        pleat *= smoothstep(-0.12, 0.12, y) * (1.0 - 0.75 * smoothstep(0.5, 0.64, y) * front)
+        # (the pleats calm down over the chest and the shoulders: the cloth lies smooth there,
+        # no stripes on the shoulder caps)
+        pleat *= smoothstep(-0.12, 0.12, y) * (1.0 - 0.8 * smoothstep(0.5, 0.66, y))
         pleat *= 0.55 + 0.45 * smoothstep(-0.05, 0.12, z)
         # cowl: soft U-shaped swags hanging across the chest under the neckline
         cu = (y - 1.9 * (x - 0.02) ** 2 - 0.47) / 0.085
