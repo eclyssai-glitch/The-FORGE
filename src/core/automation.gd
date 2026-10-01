@@ -395,11 +395,15 @@ func _world() -> WorldScript:
 	return scene.get_node_or_null(^"World") as WorldScript
 
 
-## Jumps every camera rig straight to the current mode's shot (no tween) before settling.
+## Jumps every camera rig straight to the current mode's shot (no tween) and the GENESIS
+## environment straight to the mode's settings (no blend) before settling.
 func _snap_cameras() -> void:
 	for node in get_tree().get_nodes_in_group(&"camera_director"):
 		if node.has_method(&"snap_to_mode_shot"):
 			node.call(&"snap_to_mode_shot")
+	var world := _world()
+	if world:
+		world.snap_environment()
 
 
 ## Lets camera tweens and time-based visuals settle before a capture.
