@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 
 import numpy as np
+from scipy import signal
 
 import dsp
 from dsp import SR, note
@@ -39,6 +40,22 @@ def swell_env(n: int, attack: float, hold: float, release: float) -> np.ndarray:
     return dsp.env_swell(n, attack, hold, release)
 
 
+# The low register of GENESIS (docs/AUDIO.md, "grave"): the A1 root is felt, not piled up.
+# Its weight sits in the harmonics A2 E3 A3 (110-220 Hz), which a notebook speaker still plays
+# and from which the ear rebuilds the missing A1. Each partial has a detuned twin (slow beating).
+ROOT_STACK = [(1, 0.45), (2, 0.85), (3, 0.62), (4, 0.4), (5, 0.16), (6, 0.1)]
+
+
+def harmonic_root(f0: float, n: int, rng, stack=ROOT_STACK, beat_hz: float = 0.11) -> np.ndarray:
+    """Mono harmonic stack on f0 (default A1) weighted towards 110-220 Hz."""
+    t = dsp.seconds(n)
+    y = np.zeros(n)
+    for k, a in stack:
+        for twin, g in [(0.0, 1.0), (beat_hz * (1 + 0.37 * k), 0.45)]:
+            y += a * g * np.sin(2 * np.pi * (k * f0 + twin) * t + rng.uniform(0, 2 * np.pi))
+    return y
+
+
 # ------------------------------------------------------------------ SFX
 
 def miku_awaken(rng):
@@ -64,15 +81,15 @@ def miku_awaken(rng):
 
 
 def hands_summon(rng):
-    """Deep, heavy, reverent: sub swell on A1/E1, stone-grain rumble, low 'oo' breath. No hit."""
+    """Deep, heavy, reverent: A1 swell carried by its harmonics, stone-grain rumble in the body
+    register, low 'oo' breath (A2/E3). No hit."""
     dur = 6.5
     n = int(dur * SR)
-    t = dsp.seconds(n)
     env = swell_env(n, 1.9, 1.3, 3.0)
-    sub = np.sin(2 * np.pi * note("A1") * t) + 0.6 * np.sin(2 * np.pi * note("E1") * t + 1.0)
-    sub = dsp.soft_saturate(0.8 * sub, 1.8) * env  # a little harmonic weight for small speakers
-    rumble = dsp.butter(rng.standard_normal((n, 2)), "lowpass", 150.0, 4)
-    rumble = dsp.butter(rumble, "highpass", 28.0, 2)
+    # A1 felt through its harmonics. No E1: its 41 Hz and the saturated A1/E1 intermodulation
+    # were the sub-bass "carpet" (loop 4 critique).
+    sub = harmonic_root(note("A1"), n, rng) * env
+    rumble = dsp.butter(rng.standard_normal((n, 2)), "bandpass", [75.0, 260.0], 2)
     slow = dsp.butter(rng.standard_normal(n), "lowpass", 1.2, 2)
     slow = 0.6 + 0.4 * slow / (np.max(np.abs(slow)) + 1e-9)
     rumble *= (swell_env(n, 2.3, 1.0, 2.8) * slow)[:, None]
@@ -93,8 +110,8 @@ def hands_summon(rng):
     def nrm(x):
         return x / (np.max(np.abs(x)) + 1e-12)
 
-    dry = (0.8 * mono_to(nrm(sub)) + 0.55 * nrm(rumble) + 0.22 * nrm(stone)
-           + 0.28 * nrm(breath))
+    dry = (0.72 * mono_to(nrm(sub)) + 0.4 * nrm(rumble) + 0.26 * nrm(stone)
+           + 0.4 * nrm(breath))
     ir = dsp.reverb_ir(4.5, 5.0, seed=12, predelay=0.04, rt_high=1.4)
     return dsp.wet_dry(dry, ir, 0.3, 3.0)
 
@@ -140,11 +157,10 @@ def planet_seed(rng):
     b = dsp.bell(note("A2"), dur, decay=2.4, rng=rng, brightness=0.8, attack=0.008)
     b2 = dsp.bell(note("E4"), dur, decay=1.6, rng=rng, brightness=0.55, attack=0.01)
     b3 = dsp.bell(note("A4"), dur, decay=1.3, rng=rng, brightness=0.5, attack=0.01)
-    t = dsp.seconds(n)
-    body = np.sin(2 * np.pi * note("A1") * t) + 0.7 * np.sin(2 * np.pi * note("A2") * t + 0.4)
-    body = dsp.soft_saturate(0.7 * body, 1.5) * swell_env(n, 0.5, 0.8, 3.2)
+    body = harmonic_root(note("A1"), n, rng) * swell_env(n, 0.5, 0.8, 3.2)
     dry = (mono_to(0.7 * b / np.max(np.abs(b))) + dsp.pan(0.22 * b2 / np.max(np.abs(b2)), -0.3)
-           + dsp.pan(0.16 * b3 / np.max(np.abs(b3)), 0.3) + mono_to(0.45 * body))
+           + dsp.pan(0.16 * b3 / np.max(np.abs(b3)), 0.3)
+           + mono_to(0.42 * body / np.max(np.abs(body))))
     ir = dsp.reverb_ir(5.0, 6.0, seed=14, predelay=0.035)
     return dsp.wet_dry(dry, ir, 0.35, 3.5)
 
@@ -162,12 +178,13 @@ def accretion_0(rng):
             fk = k * f0
             if fk > 4000:
                 break
-            amp = a0 / k / np.sqrt(1 + (fk / fc) ** 4)
+            # glow from above, weight from 110-220 Hz: the A1 / E2 fundamentals are thinned
+            amp = a0 / k / np.sqrt(1 + (fk / fc) ** 4) / np.sqrt(1 + (95.0 / fk) ** 4)
             out += amp * np.sin(2 * np.pi * fk * t * (1 + 0.0007 * np.sin(2 * np.pi * 0.3 * t))
                                 + rng.uniform(0, 2 * np.pi))
     out *= swell_env(n, 1.2, 1.6, 2.6)
     stereo = dsp.pan(out, -0.12) + dsp.pan(np.roll(out, int(0.011 * SR)), 0.12)
-    murmur = dsp.butter(rng.standard_normal((n, 2)), "bandpass", [60.0, 260.0], 2)
+    murmur = dsp.butter(rng.standard_normal((n, 2)), "bandpass", [90.0, 320.0], 2)
     wob = dsp.butter(rng.standard_normal(n), "lowpass", 3.0, 2)
     wob = np.clip(0.5 + 0.5 * wob / (np.max(np.abs(wob)) + 1e-9), 0, 1)
     murmur *= (wob * swell_env(n, 1.4, 1.4, 2.4))[:, None]
@@ -288,23 +305,36 @@ def links_woven(rng):
 
 
 def planet_stable(rng):
-    """Resolution: a wide Aadd9 chord — choir, bells and a warm root — breathing out slowly."""
+    """The climax (visual peak of light at the same instant): a wide Aadd9 that arrives at once
+    and keeps opening. A soft cluster of bells (A3 E4 A4) lands on the event and cascades up
+    through C#5 E5 A5 B5 E6 like light spreading; the choir (low Aadd9 'oh'->'ah', then an upper
+    'ah' A4 C#5 E5) and the harmonic A1 root bloom under it within ~1 s; a halo of high air
+    breathes with the choir. The fullest moment of the mix: every register at once."""
     dur = 9.5
     n = int(dur * SR)
-    ch = dsp.choir([note(x) for x in ["A2", "E3", "A3", "C#4", "E4", "B4"]], n, rng, "oh", "ah",
-                   np.clip(dsp.seconds(n) / 3.0, 0, 1), voices=3, detune_cents=3.0, spread=0.9)
-    ch *= swell_env(n, 1.6, 2.8, 3.4)[:, None]
+    morph = np.clip(dsp.seconds(n) / 2.4, 0, 1)
+    low = dsp.choir([note(x) for x in ["A2", "E3", "A3", "C#4", "E4", "B4"]], n, rng, "oh", "ah",
+                    morph, voices=3, detune_cents=3.0, spread=0.9)
+    low *= swell_env(n, 0.9, 3.0, 3.6)[:, None]
+    high = dsp.choir([note(x) for x in ["A4", "C#5", "E5"]], n, rng, "ah", "ah", None, voices=3,
+                     detune_cents=3.5, spread=1.0)
+    high *= swell_env(n, 1.4, 2.6, 3.6)[:, None]
     bells = np.zeros((n, 2))
-    for i, (nm, t0) in enumerate([("A3", 0.0), ("E4", 0.14), ("C#5", 0.3), ("A5", 0.48),
-                                  ("B5", 0.7)]):
-        b = dsp.bell(note(nm), dur - t0, decay=3.0 - 0.3 * i, rng=rng, brightness=0.5,
-                     attack=0.015)
-        dsp.add_at(bells, dsp.pan(b, -0.4 + 0.2 * i), t0)
-    t = dsp.seconds(n)
-    root = np.sin(2 * np.pi * note("A1") * t) + 0.5 * np.sin(2 * np.pi * note("E2") * t)
-    root *= swell_env(n, 1.4, 2.8, 3.4)
-    dry = (ch / np.max(np.abs(ch)) + 0.45 * bells / np.max(np.abs(bells))
-           + mono_to(0.35 * root / np.max(np.abs(root))))
+    cascade = [("A3", 0.0, 1.0), ("E4", 0.05, 0.85), ("A4", 0.1, 0.75), ("C#5", 0.24, 0.6),
+               ("E5", 0.38, 0.55), ("A5", 0.54, 0.5), ("B5", 0.72, 0.42), ("E6", 0.92, 0.34)]
+    for i, (nm, t0, a) in enumerate(cascade):
+        b = dsp.bell(note(nm), dur - t0, decay=3.2 - 0.25 * i, rng=rng, brightness=0.5,
+                     attack=0.018)
+        dsp.add_at(bells, dsp.pan(b * a, -0.55 + 1.1 * i / (len(cascade) - 1)), t0)
+    root = harmonic_root(note("A1"), n, rng) * swell_env(n, 0.6, 3.2, 3.6)
+    air = dsp.spectral_shape(n, dsp.band_shape(6000.0, 0.45), rng)
+    air *= (swell_env(n, 1.2, 2.4, 3.4) ** 1.5)[:, None]
+
+    def nrm(x):
+        return x / (np.max(np.abs(x)) + 1e-12)
+
+    dry = (nrm(low) + 0.55 * nrm(high) + 0.5 * nrm(bells) + mono_to(0.4 * nrm(root))
+           + 0.06 * nrm(air))
     ir = dsp.reverb_ir(6.0, 7.0, seed=22, predelay=0.04)
     return dsp.wet_dry(dry, ir, 0.45, 4.0)
 
@@ -349,16 +379,27 @@ SOUNDS = {
     "sfx_ring_form": (ring_form, "st", -17.5),
     "sfx_belt_form": (belt_form, "st", -18.0),
     "sfx_links_woven": (links_woven, "st", -17.5),
-    "sfx_planet_stable": (planet_stable, "st", -16.0),
+    "sfx_planet_stable": (planet_stable, "st", -15.0),   # the climax: loudest and fullest
     "ui_tick": (ui_tick, "tp", -24.0),
     "ui_select": (ui_select, "tp", -21.0),
 }
 
 
+# High-pass on every one-shot: nothing below the A1 register reaches the mix (sub-bass carpet,
+# loop 4). Causal (no pre-ringing before an attack), 6th-order Butterworth: -3 dB at 33 Hz,
+# -15 dB at 25 Hz, -25 dB at 20 Hz, flat (< 0.1 dB) from 45 Hz up, so A1 = 55 Hz is untouched.
+SFX_HPF_HZ = 33.0
+
+
+def sub_guard(x: np.ndarray) -> np.ndarray:
+    sos = signal.butter(6, SFX_HPF_HZ, "highpass", fs=SR, output="sos")
+    return signal.sosfilt(sos, x, axis=0)
+
+
 def render(name: str) -> np.ndarray:
     fn, mode, target = SOUNDS[name]
     x = fn(rng_for(name))
-    x = dsp.butter(x, "highpass", 25.0, 2)  # DC / infrasonic guard
+    x = sub_guard(x)
     x = x / (np.max(np.abs(x)) + 1e-12)       # trim floor is relative to the peak
     if mode == "st":
         x = dsp.trim_tail(x, floor_db=-54.0, fade=0.8)

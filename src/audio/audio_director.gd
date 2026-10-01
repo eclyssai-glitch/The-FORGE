@@ -3,9 +3,13 @@ extends Node
 ## The sound of KORIUM UNIVERSE (GENESIS). Plays the cosmic ambience loop and the formation
 ## one-shots, driven only by Simulation signals (see docs/AUDIO.md).
 ##
-## - Ambience: amb_cosmos_loop on bus Ambience, faded in on start; ducked a few dB under the big
-##   SFX (tween, not sidechain: deterministic and only for the sounds that deserve it);
-##   ~-6 dB and darker while PAUSED.
+## - Ambience: two complementary stems of one 72 s loop, amb_cosmos_floor (< ~230 Hz: drone and
+##   wind foot) and amb_cosmos_air (the rest), played sample-locked by an AudioStreamSynchronized
+##   on bus Ambience and faded in on start. Under the big low-register moments (LOW_RECESS) only
+##   the floor stem steps back (band ducking, no EQ colouring): the SFX carry the grave there.
+##   The first big moments also duck the whole ambience a few dB (DUCKING_SOUNDS). Tweens, not
+##   sidechain: deterministic and only for the sounds that deserve it. ~-6 dB and darker while
+##   PAUSED.
 ## - SFX: `Simulation.event_emitted` -> `sound_for(event)` -> a pooled player on bus SFX.
 ##   With an anchor registered for the sound's source (`set_anchor(&"planet", node)` ...) it
 ##   plays positionally on an AudioStreamPlayer3D that follows the anchor; otherwise 2D.
@@ -22,7 +26,11 @@ const BUS_UI := &"UI"
 const BUSES: Array[StringName] = [BUS_MASTER, BUS_AMBIENCE, BUS_SFX, BUS_UI]
 
 const AUDIO_DIR := "res://assets/audio/"
-const AMBIENCE := &"amb_cosmos_loop"
+## Ambience stems, in AudioStreamSynchronized order: floor (index AMB_FLOOR), air.
+const AMBIENCE_FLOOR := &"amb_cosmos_floor"
+const AMBIENCE_AIR := &"amb_cosmos_air"
+const AMBIENCE_STEMS: Array[StringName] = [AMBIENCE_FLOOR, AMBIENCE_AIR]
+const AMB_FLOOR := 0
 
 ## Event type -> sound (file `AUDIO_DIR + sound + ".ogg"`). `planet.layer` is resolved by its
 ## payload `layer` through LAYER_SOUNDS. Unlisted types play nothing.
@@ -69,14 +77,23 @@ const SOUND_GAIN_DB: Dictionary = {
 	&"sfx_ring_form": -1.5,
 	&"sfx_belt_form": -2.0,
 	&"sfx_links_woven": -1.5,
-	&"sfx_planet_stable": 0.0,
+	&"sfx_planet_stable": 0.0,  # asset mastered 1 LU above the other big moments: the climax
 	&"ui_tick": 0.0,
 	&"ui_select": 0.0,
 }
-## The big moments: they duck the ambience by DUCK_DB.
+## Big moments that duck the whole ambience by DUCK_DB. Not planet.stable: the climax is the
+## fullest moment of the mix, the ambience stays under it (only its floor steps back).
 const DUCKING_SOUNDS: Array[StringName] = [
-	&"sfx_miku_awaken", &"sfx_hands_summon", &"sfx_planet_seed", &"sfx_planet_stable",
+	&"sfx_miku_awaken", &"sfx_hands_summon", &"sfx_planet_seed",
 ]
+## Big low-register moments -> how long (s) the ambience floor stays recessed by RECESS_DB
+## (after RECESS_ATTACK, before RECESS_RELEASE). Their own harmonic root replaces it.
+const LOW_RECESS: Dictionary = {
+	&"sfx_hands_summon": 3.5,
+	&"sfx_planet_seed": 2.5,
+	&"sfx_accretion_0": 3.5,
+	&"sfx_planet_stable": 5.0,
+}
 ## Second moon one whole tone up (E6/B6 -> F#6/C#7, still A pentatonic).
 const MOON_PITCH_STEP := 1.122462
 
@@ -91,6 +108,9 @@ const DUCK_DB := -4.0
 const DUCK_ATTACK := 0.6
 const DUCK_HOLD := 2.5
 const DUCK_RELEASE := 3.0
+const RECESS_DB := -8.0
+const RECESS_ATTACK := 0.8
+const RECESS_RELEASE := 3.5
 const STOP_FADE := 0.25
 const PAUSE_FADE := 0.35
 const SILENT_DB := -60.0
@@ -119,8 +139,13 @@ var _paused := false
 var _amb_fade_db := SILENT_DB
 var _amb_duck_db := 0.0
 var _amb_pause_db := 0.0
+## Floor stem offset (dB): 0 or down to RECESS_DB under LOW_RECESS sounds.
+var _amb_floor_db := 0.0
+var _amb_floor_applied := INF
+var _amb_sync: AudioStreamSynchronized
 var _amb_fade_tween: Tween
 var _duck_tween: Tween
+var _recess_tween: Tween
 var _pause_tween: Tween
 
 
@@ -154,6 +179,9 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if ambience_player:
 		ambience_player.volume_db = ambience_db()
+	if _amb_sync and _amb_floor_db != _amb_floor_applied:
+		_amb_sync.set_sync_stream_volume(AMB_FLOOR, _amb_floor_db)
+		_amb_floor_applied = _amb_floor_db
 	for p in _following.keys():
 		var anchor: Variant = _following[p]
 		if not is_instance_valid(anchor) or not (p as AudioStreamPlayer3D).playing:
@@ -194,9 +222,9 @@ static func sound_path(sound: StringName) -> String:
 	return AUDIO_DIR + String(sound) + ".ogg"
 
 
-## Every sound the director may play (ambience, event sounds, UI).
+## Every sound the director may play (ambience stems, event sounds, UI).
 static func all_sounds() -> Array[StringName]:
-	var out: Array[StringName] = [AMBIENCE]
+	var out: Array[StringName] = AMBIENCE_STEMS.duplicate()
 	for s in EVENT_SOUNDS.values():
 		if not out.has(s):
 			out.append(s)
@@ -288,6 +316,8 @@ func play_sound(sound: StringName, pitch := 1.0) -> bool:
 		p.call(&"play")
 		if DUCKING_SOUNDS.has(sound):
 			duck()
+		if LOW_RECESS.has(sound):
+			recess_floor(LOW_RECESS[sound])
 	last_played = sound
 	played_count += 1
 	return true
@@ -316,7 +346,7 @@ func stop_all_sfx(fade := STOP_FADE) -> void:
 
 
 func start_ambience() -> void:
-	if ambience_player == null or not _streams.has(AMBIENCE):
+	if ambience_player == null or _amb_sync == null:
 		return
 	if not ambience_player.playing:
 		ambience_player.play()
@@ -343,6 +373,23 @@ func duck() -> void:
 	_duck_tween.tween_interval(DUCK_HOLD)
 	_duck_tween.tween_property(self, "_amb_duck_db", 0.0, DUCK_RELEASE) \
 		.set_trans(Tween.TRANS_SINE)
+
+
+## Recesses the ambience floor stem by RECESS_DB for `hold` s, then releases it.
+func recess_floor(hold: float) -> void:
+	if _recess_tween:
+		_recess_tween.kill()
+	_recess_tween = create_tween()
+	_recess_tween.tween_property(self, "_amb_floor_db", RECESS_DB, RECESS_ATTACK) \
+		.set_trans(Tween.TRANS_SINE)
+	_recess_tween.tween_interval(hold)
+	_recess_tween.tween_property(self, "_amb_floor_db", 0.0, RECESS_RELEASE) \
+		.set_trans(Tween.TRANS_SINE)
+
+
+## Current offset (dB) of the ambience floor stem relative to the air stem.
+func ambience_floor_db() -> float:
+	return _amb_floor_db
 
 
 func set_paused(paused: bool) -> void:
@@ -378,7 +425,10 @@ func _on_world_rebuilt() -> void:
 	stop_all_sfx()
 	if _duck_tween:
 		_duck_tween.kill()
+	if _recess_tween:
+		_recess_tween.kill()
 	_amb_duck_db = 0.0
+	_amb_floor_db = 0.0
 
 
 func _on_playback_changed(status: EventTimeline.Status) -> void:
@@ -392,7 +442,8 @@ func _build_players() -> void:
 	ambience_player = AudioStreamPlayer.new()
 	ambience_player.name = "Ambience"
 	ambience_player.bus = BUS_AMBIENCE
-	ambience_player.stream = _streams.get(AMBIENCE)
+	_amb_sync = _build_ambience_stream()
+	ambience_player.stream = _amb_sync
 	ambience_player.volume_db = SILENT_DB
 	add_child(ambience_player)
 	for i in POOL_2D:
@@ -417,6 +468,20 @@ func _build_players() -> void:
 	_ui_player.bus = BUS_UI
 	_ui_player.max_polyphony = 4
 	add_child(_ui_player)
+
+
+## The two ambience stems locked sample by sample (they only sum back to the loop in sync),
+## or null when a stem is missing.
+func _build_ambience_stream() -> AudioStreamSynchronized:
+	for s in AMBIENCE_STEMS:
+		if not _streams.has(s):
+			return null
+	var sync := AudioStreamSynchronized.new()
+	sync.stream_count = AMBIENCE_STEMS.size()
+	for i in AMBIENCE_STEMS.size():
+		sync.set_sync_stream(i, _streams[AMBIENCE_STEMS[i]])
+		sync.set_sync_stream_volume(i, 0.0)
+	return sync
 
 
 func _all_voices() -> Array[Node]:

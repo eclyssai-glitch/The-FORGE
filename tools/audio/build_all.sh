@@ -19,7 +19,7 @@ mkdir -p "$wav" "$out"
 touch build/audio/.gdignore  # keep Godot from importing the intermediate WAVs
 export PYTHONDONTWRITEBYTECODE=1
 
-"$PY" tools/audio/synth_ambience.py "$wav/amb_cosmos_loop.wav"
+"$PY" tools/audio/synth_ambience.py "$wav/amb_cosmos_floor.wav" "$wav/amb_cosmos_air.wav"
 "$PY" tools/audio/synth_sfx.py "$wav"
 
 if [ "$mode" = "--check" ]; then
