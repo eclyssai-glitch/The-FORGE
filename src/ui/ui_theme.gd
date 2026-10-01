@@ -265,6 +265,38 @@ static func _build_genesis(t: Theme) -> void:
 	t.set_stylebox("panel", "Card", card)
 	t.set_type_variation("Seal", "PanelContainer")
 	t.set_stylebox("panel", "Seal", empty(0, 2))
+	_build_living(t)
+
+
+## LIVING (Loop 5) variations: the call line. Speech, not labels: lowercase, never tracked, pearl
+## ink with a soft night outline (legible over the bright nebula), no box, no GOLD.
+##   LineEdit: CallField (the typed words; placeholder faint, caret soft, selection a thread)
+##   Label:    CallEcho (the whisper of what MIKU understood; its ink is set per kind by the line)
+##             CallSent (the sent words rising into the scene)
+static func _build_living(t: Theme) -> void:
+	var speech := font_sans(400, 0)
+	t.set_type_variation("CallField", "LineEdit")
+	t.set_font("font", "CallField", speech)
+	t.set_font_size("font_size", "CallField", Palette.SIZE_CALL)
+	t.set_color("font_color", "CallField", Palette.UI_INK)
+	t.set_color("font_uneditable_color", "CallField", Palette.UI_INK_SOFT)
+	t.set_color("font_placeholder_color", "CallField", Palette.UI_INK_FAINT)
+	t.set_color("font_selected_color", "CallField", Palette.UI_INK)
+	t.set_color("selection_color", "CallField", Palette.UI_THREAD)
+	t.set_color("caret_color", "CallField", Palette.UI_INK_SOFT)
+	t.set_color("clear_button_color", "CallField", Palette.UI_INK_FAINT)
+	t.set_color("font_outline_color", "CallField", Palette.UI_SHADE)
+	t.set_constant("outline_size", "CallField", 3)
+	t.set_constant("caret_width", "CallField", 1)
+	for st in ["normal", "focus", "read_only"]:
+		t.set_stylebox(st, "CallField", empty(6, 4))
+	_label(t, "CallEcho", speech, Palette.SIZE_LABEL, Palette.UI_INK_SOFT)
+	_label(t, "CallSent", speech, Palette.SIZE_CALL, Palette.UI_INK_SOFT)
+	for v in ["CallEcho", "CallSent"]:
+		t.set_color("font_shadow_color", v, Palette.UI_SHADE)
+		t.set_constant("shadow_offset_x", v, 0)
+		t.set_constant("shadow_offset_y", v, 1)
+		t.set_constant("shadow_outline_size", v, 3)
 
 
 static func _label(t: Theme, variation: String, font: Font, size: int, color: Color) -> void:

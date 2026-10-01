@@ -462,6 +462,125 @@ static func genesis(material_name: StringName) -> ShaderMaterial:
 	return null
 
 
+# --- LIVING (Loop 5, MIKU LIVING CHARACTER prototype). Shaders in shaders/living/; placeholders ----
+# that carry state legibly (rules: docs/VISUAL_DIRECTION.md section 12). Same conventions as GENESIS:
+# cached and shared, `.duplicate()` per body with its own state (every hand, thread, artifact and
+# work world has its own), `motion_time` broadcast to the cached instances only (owners of
+# duplicates set it), colours from Palette, no TIME, NaN-safe.
+
+const LIVING_DIR := "living/"
+
+## Names of the LIVING getters (tests, lookdev, quality/motion broadcasts).
+const LIVING_MATERIALS: Array[StringName] = [
+	&"angelic_hand", &"intent_thread", &"config_artifact", &"work_world",
+]
+
+
+## Angelic hand — luminous pearl/ivory porcelain, translucent (BACKLIGHT BLUSH), soft cool rim, an
+## inner light seen inside the porcelain. One family for N hands (duplicate per hand). Uniforms:
+## `drive` 0..1 (tension: the inner light gathers into warm filaments flowing along `flow_axis`;
+## 0 = cool pearl rest), `presence` 0..1 (condenses from `presence_origin` within `presence_reach`),
+## `select` 0..1, `motion_time`, `hand_size` (object units wrist -> fingertip: all pattern scales
+## follow it), wrist dissolve `wrist_point`/`forearm_end`/`wrist_fade` (set_hand_wrist works on it).
+static func angelic_hand() -> ShaderMaterial:
+	if not _cache.has(&"angelic_hand"):
+		var m := _shader_material(LIVING_DIR + "angelic_hand")
+		m.set_shader_parameter("pearl_color", Palette.PEARL)
+		m.set_shader_parameter("ivory_color", Palette.PEARL.lerp(Palette.GOLD, 0.16))
+		m.set_shader_parameter("scatter_color", Palette.BLUSH)
+		m.set_shader_parameter("rim_color", Palette.PEARL.lerp(Palette.ICE, 0.45))
+		m.set_shader_parameter("glow_color", Palette.PEARL.lerp(Palette.ICE, 0.3))
+		m.set_shader_parameter("drive_color", Palette.GOLD.lerp(Palette.PEARL, 0.3))
+		m.set_shader_parameter("drive", 0.0)
+		m.set_shader_parameter("presence", 1.0)
+		m.set_shader_parameter("select", 0.0)
+		m.set_shader_parameter("hand_size", 1.0)
+		_cache[&"angelic_hand"] = m
+	return _cache[&"angelic_hand"]
+
+
+## Intent thread — MIKU's will made visible: constant pixel width, additive. Uniforms: `tension`
+## 0..1 (slack = faint, wide, uneven; taut = thin, bright, glints running origin -> hand, slight
+## hum), `presence` 0..1 (spun out from the origin), `release` 0..1 (dissolves into grains from the
+## origin; reset to 0 before reuse), `anger` 0..1 (colder, whiter, harder, tremor), `seed`,
+## `motion_time`, `intensity`, `width_px` (relaxed, taut), `glow_px`, `vibration_px`, `ribbon_px`.
+## Mesh contract (centre-line strip, the shader widens it on screen): shaders/living/
+## intent_thread.gdshader header; reference encoder: IntentThreadStrip (src/style/). The curve's slack is geometry (the animator's spring
+## curve sags when tension is low); the material carries width, light, hum and colour.
+static func intent_thread() -> ShaderMaterial:
+	if not _cache.has(&"intent_thread"):
+		var m := _shader_material(LIVING_DIR + "intent_thread")
+		m.set_shader_parameter("origin_color", hair_link_tip())
+		m.set_shader_parameter("calm_color", Palette.LILAC.lerp(Palette.PEARL, 0.55))
+		m.set_shader_parameter("taut_color", Palette.PEARL.lerp(Palette.GOLD, 0.22))
+		m.set_shader_parameter("anger_color", Palette.PEARL.lerp(Palette.ICE, 0.4))
+		m.set_shader_parameter("tension", 0.0)
+		m.set_shader_parameter("presence", 1.0)
+		m.set_shader_parameter("release", 0.0)
+		m.set_shader_parameter("anger", 0.0)
+		_cache[&"intent_thread"] = m
+	return _cache[&"intent_thread"]
+
+
+## Configuration artifact — a floating sheet of light with MIKU's configuration in a faint asemic
+## script: three sections (headers on lines 0, 4, 8) of `key · value` lines. Uniforms: `presence`
+## 0..1 (unrolls from the top, then the lines are written in), `edit` 0..1 (caret crossing line
+## `edit_row`: new glyphs behind it, old ahead, rearranging around it), `validated` 0..1 (ease over
+## Palette.T_CONFIRM: a short sweep of light, then a pale-gold seal on the edited line), `edit_row`,
+## `aspect` (quad width / height), `rows`, `seed`, `motion_time`, `intensity`. QuadMesh, UV top-left.
+static func config_artifact() -> ShaderMaterial:
+	if not _cache.has(&"config_artifact"):
+		var m := _shader_material(LIVING_DIR + "config_artifact")
+		m.set_shader_parameter("sheet_color", Palette.PEARL.lerp(Palette.ICE, 0.35))
+		m.set_shader_parameter("ink_color", Palette.PEARL.lerp(Palette.ICE, 0.15))
+		m.set_shader_parameter("edit_color", Palette.PEARL.lerp(Palette.BLUSH, 0.4))
+		m.set_shader_parameter("pulse_color", Palette.PEARL)
+		m.set_shader_parameter("seal_color", Palette.GOLD.lerp(Palette.PEARL, 0.35))
+		m.set_shader_parameter("presence", 1.0)
+		m.set_shader_parameter("edit", 0.0)
+		m.set_shader_parameter("validated", 0.0)
+		_cache[&"config_artifact"] = m
+	return _cache[&"config_artifact"]
+
+
+## Work world — a world built by the hands in stages. Uniforms 0..1: `formation` (courses laid along
+## `build_axis`, tiles spreading with gold edges; the open shell shows a warm core), `compression`
+## (flattened along `press_dir`, seams close, pressure rings), `stress` (fissures open and glow,
+## loose plates lift), `heal` (fissures settle into gold kintsugi; keep `stress` while healing).
+## Also `seed`, `courses`, `tile_scale`, `detail` (Quality octaves), `select`, `motion_time`.
+static func work_world() -> ShaderMaterial:
+	if not _cache.has(&"work_world"):
+		var m := _shader_material(LIVING_DIR + "work_world")
+		m.set_shader_parameter("stone_color", Palette.STONE)
+		m.set_shader_parameter("stone_light_color", Palette.INDIGO.lerp(Palette.LILAC, 0.3))
+		m.set_shader_parameter("seam_color", Palette.SPACE_DEEP.lerp(Palette.NEBULA, 0.4))
+		m.set_shader_parameter("build_color", Palette.GOLD)
+		m.set_shader_parameter("fissure_hot_color", Palette.PEARL.lerp(Palette.GOLD, 0.45))
+		m.set_shader_parameter("fissure_edge_color", Palette.MAGMA)
+		m.set_shader_parameter("mend_color", Palette.GOLD)
+		m.set_shader_parameter("mend_deep_color", Palette.GOLD_DEEP)
+		m.set_shader_parameter("core_color", Palette.MAGMA.lerp(Palette.GOLD_DEEP, 0.4))
+		m.set_shader_parameter("press_color", Palette.GOLD.lerp(Palette.BLUSH, 0.4))
+		m.set_shader_parameter("rim_color", Palette.ICE)
+		m.set_shader_parameter("formation", 1.0)
+		m.set_shader_parameter("stress", 0.0)
+		m.set_shader_parameter("compression", 0.0)
+		m.set_shader_parameter("heal", 0.0)
+		m.set_shader_parameter("detail", PLANET_DETAIL[2])
+		_cache[&"work_world"] = m
+	return _cache[&"work_world"]
+
+
+## LIVING material by name (one of LIVING_MATERIALS); null for an unknown name.
+static func living(material_name: StringName) -> ShaderMaterial:
+	match material_name:
+		&"angelic_hand": return angelic_hand()
+		&"intent_thread": return intent_thread()
+		&"config_artifact": return config_artifact()
+		&"work_world": return work_world()
+	return null
+
+
 ## Writes `motion_time` on every cached material that has it (call once per frame with
 ## MotionClock.now()). Duplicates are owned by their entity, which sets it itself.
 static func set_motion_time(t: float) -> void:
@@ -478,6 +597,7 @@ static func apply_quality(profile: Dictionary) -> void:
 	var level := clampi(int(profile.get("level", 2)), 0, SKY_DETAIL.size() - 1)
 	nebula_sky().set_shader_parameter("detail", SKY_DETAIL[level])
 	planet_forming().set_shader_parameter("detail", PLANET_DETAIL[level])
+	work_world().set_shader_parameter("detail", PLANET_DETAIL[level])
 
 
 static var _uniform_cache: Dictionary = {}

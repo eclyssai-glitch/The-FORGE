@@ -17,6 +17,8 @@ var toggle_button: UiGlyphButton
 var card: PanelContainer
 var quality_buttons: Array[Button] = []
 var cinematic_button: Button
+## The few keys of the active dialect (set_keys).
+var keys_label: Label
 ## Slider per bus name.
 var sliders: Dictionary = {}
 
@@ -83,9 +85,9 @@ func _init() -> void:
 		grid.add_child(s)
 		sliders[vol[0]] = s
 
-	var keys := UiKit.label(KEYS, &"NoteFaint")
-	keys.name = "Keys"
-	v.add_child(keys)
+	keys_label = UiKit.label(KEYS, &"NoteFaint")
+	keys_label.name = "Keys"
+	v.add_child(keys_label)
 
 
 func _ready() -> void:
@@ -102,6 +104,11 @@ static func volume_to_slider(db: float) -> float:
 ## Bus volume (dB) of a slider position (0 = silence floor).
 static func slider_to_volume(v: float) -> float:
 	return maxf(linear_to_db(v), SILENT_DB) if v > 0.0001 else SILENT_DB
+
+
+## Replaces the keys line (another dialect, e.g. LIVING, has other keys).
+func set_keys(text: String) -> void:
+	keys_label.text = text
 
 
 func set_open(on: bool) -> void:
