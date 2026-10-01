@@ -159,7 +159,11 @@ func test_miku_wakes() -> void:
 	var short := miku.hair_pivot.scale.x
 	await _seek(GenesisScript.T_AWAKEN + 2.0)
 	assert_true(miku.body.visible)
-	assert_gt(miku.body.transparency, 0.05, "revealed by the seed's light, not popped in")
+	# Revealed by the seed's light, not popped in: the radial `reveal` of miku_body when the material
+	# has it (opaque, from the brow), else a whole-body fade.
+	var rv: Variant = (miku.body.material_override as ShaderMaterial).get_shader_parameter("reveal")
+	var revealing := (rv is float and float(rv) < 0.95) or miku.body.transparency > 0.05
+	assert_true(revealing, "revealed by the seed's light, not popped in")
 	assert_gt(miku.seed_light.omni_range, Miku.SEED_LIGHT_RANGE + 1.0, "the seed's light blooms out")
 	await _seek(GenesisScript.T_AWAKEN + 12.0)
 	assert_true(miku.halo.visible)
@@ -181,7 +185,7 @@ func test_hands_let_go_after_stable() -> void:
 	assert_gt((hands.pivots[&"hand_right"] as Node3D).position.distance_to(GenesisLayout.PLANET_CENTER),
 		at_stable.distance_to(GenesisLayout.PLANET_CENTER) + 0.5, "the right hand withdraws from the world")
 	assert_gt((hands.pivots[&"hand_left"] as Node3D).position.distance_to(GenesisLayout.PLANET_CENTER),
-		left_at_stable.distance_to(GenesisLayout.PLANET_CENTER) + 0.5, "the left hand lowers away")
+		left_at_stable.distance_to(GenesisLayout.PLANET_CENTER) + 0.5, "the left hand withdraws")
 	assert_lt(hands.veins_of(&"hand_right"), 0.12, "the kintsugi has cooled")
 
 
@@ -189,7 +193,12 @@ func test_the_stable_wave_lights_the_threads() -> void:
 	var rt: RelationThreads = _n["RelationThreads"]
 	await _seek(GenesisScript.T_STABLE - 0.2)
 	var base := float(rt.threads[0].material_override.get_shader_parameter("intensity"))
-	await _seek(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HOP * 0.5)
+	await _seek(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HAIR * 0.5)
+	var hair_pulse: Variant = (_n["Miku"] as Miku).hair_links.material_override.get_shader_parameter("link_pulse")
+	assert_true(hair_pulse is float and float(hair_pulse) > 0.0 and float(hair_pulse) < 1.0,
+		"the climax pulse first runs out along the link strands of her hair")
+	await _seek(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HAIR
+		+ GenesisChoreography.WAVE_HOP * 0.5)
 	assert_gt(float(rt.threads[0].material_override.get_shader_parameter("intensity")), base * 1.5,
 		"the pulse lights MIKU's thread as it runs")
 	assert_true(rt.pulses.visible)

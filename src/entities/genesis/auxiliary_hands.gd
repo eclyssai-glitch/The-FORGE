@@ -69,7 +69,7 @@ const WEAVE_PAIRS: Array = [
 	["tip_thumb", "tip_index"], ["tip_index", "tip_middle"], ["tip_middle", "tip_ring"],
 	["tip_ring", "tip_little"], ["tip_thumb", "tip_ring"], ["tip_index", "tip_little"],
 ]
-const WEAVE_SAG := 0.22
+const WEAVE_SAG := 0.12
 const WEAVE_WIDTH := 0.03
 const WEAVE_INTENSITY := 0.5
 const WEAVE_PULSE_PERIODS := Vector2(3.5, 6.0)

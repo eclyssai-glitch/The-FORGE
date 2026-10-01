@@ -29,21 +29,24 @@ const T_CUE := Palette.T_CRANE
 const T_USER := Palette.T_CINEMATIC * 1.35
 
 # --- Mode shots ---------------------------------------------------------------------------------
-const FORGE_TARGET := Vector3(0.0, 4.6, 1.0)
+## Hero: low enough that the cradling left hand is in the frame (its palm above the bottom edge).
+const FORGE_TARGET := Vector3(0.0, 3.7, 1.0)
 const FORGE_YAW := 0.06
 const FORGE_PITCH := -0.06
-const FORGE_DISTANCE := 23.0
-const FORGE_FOV := 36.5
+const FORGE_DISTANCE := 25.0
+const FORGE_FOV := 37.0
 const UNIVERSE_TARGET := Vector3(0.0, 14.0, -2.0)
 const UNIVERSE_YAW := 0.2
 const UNIVERSE_PITCH := 0.1
 const UNIVERSE_DISTANCE := 56.0
 const UNIVERSE_FOV := 46.0
-const OBSERVATORY_TARGET := Vector3(0.0, 4.2, 1.2)
+## Observatory: high three-quarter, steep enough that the lines of sight to the world and the hands
+## pass inside the memory belt's ring (no rocks over the planet), with the hair and its threads in frame.
+const OBSERVATORY_TARGET := Vector3(0.0, 6.0, 1.0)
 const OBSERVATORY_YAW := -0.78
-const OBSERVATORY_PITCH := 0.55
-const OBSERVATORY_DISTANCE := 32.0
-const OBSERVATORY_FOV := 40.0
+const OBSERVATORY_PITCH := 0.75
+const OBSERVATORY_DISTANCE := 36.0
+const OBSERVATORY_FOV := 42.0
 
 # --- Cinematic cues (FORGE) ---------------------------------------------------------------------
 const CUE_PORTRAIT := &"cue_g_portrait"
@@ -82,7 +85,7 @@ const CRANE_PULL := 0.7
 const CRANE_TILT_FROM := 0.2
 const PORTRAIT_POSE := [Vector3(0.0, 7.1, -0.4), 0.08, -0.02, 16.5, 36.0]
 const HERO_DOLLY_DUR := 13.5
-const HERO_POSE := [Vector3(0.0, 4.6, 1.0), 0.0, -0.06, 23.5, 36.5]
+const HERO_POSE := [Vector3(0.0, 3.7, 1.0), 0.0, -0.06, 25.5, 37.0]
 const CRADLE_DUR := 12.0
 const CRADLE_POSE := [Vector3(0.2, 3.0, 1.0), -0.32, -0.38, 16.5, 44.0]
 const RISE_DUR := 15.0
@@ -272,15 +275,19 @@ static func style_frame_poses() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	out.append(_pose("sf_01_hero", 55.0, SessionState.Mode.FORGE,
 		rig_position(FORGE_TARGET, FORGE_YAW + 0.02, FORGE_PITCH, FORGE_DISTANCE - 1.0), FORGE_TARGET, FORGE_FOV))
-	# Statuary distance: head, shoulders and the hair mass rising behind (never an extreme close).
+	# Statuary distance, a little from below: head, shoulders and the hair mass rising behind against
+	# the sky (never an extreme close; the older worlds' orbits stay under the frame).
 	out.append(_pose("sf_02_portrait", 12.0, SessionState.Mode.FORGE,
-		brow + Vector3(3.1, -1.6, 6.4), brow + Vector3(-0.45, -0.75, -0.6), 34.0))
+		brow + Vector3(3.0, -3.0, 6.2), brow + Vector3(-0.5, -0.55, -0.6), 36.0))
+	# The cradle station of the cinematic path: low, looking up — the molten world between the hands,
+	# MIKU whole above it against the warm core.
+	var cp: Vector3 = CRADLE_POSE[0]
 	out.append(_pose("sf_03_cradle", 25.0, SessionState.Mode.FORGE,
-		planet + Vector3(-4.6, -0.9, 8.8), planet + Vector3(0.4, 0.9, 0.0), 40.0))
+		rig_position(cp, CRADLE_POSE[1], CRADLE_POSE[2], CRADLE_POSE[3]), cp, CRADLE_POSE[4]))
 	out.append(_pose("sf_04_world_detail", 47.5, SessionState.Mode.FORGE,
 		planet + Vector3(3.2, 1.6, 5.4), planet + Vector3(-0.2, 0.1, 0.0), 36.0))
 	out.append(_pose("sf_05_threads", 53.0, SessionState.Mode.OBSERVATORY,
-		rig_position(OBSERVATORY_TARGET, OBSERVATORY_YAW, OBSERVATORY_PITCH, OBSERVATORY_DISTANCE - 4.0),
+		rig_position(OBSERVATORY_TARGET, OBSERVATORY_YAW, OBSERVATORY_PITCH, OBSERVATORY_DISTANCE - 2.0),
 		OBSERVATORY_TARGET, OBSERVATORY_FOV))
 	# The system, closer than the UNIVERSE mode shot: the belt, both older worlds and their threads.
 	out.append(_pose("sf_06_system", 55.0, SessionState.Mode.UNIVERSE,

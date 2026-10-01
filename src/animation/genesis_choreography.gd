@@ -458,9 +458,9 @@ static func hair_wave(g: GenesisState, t: float) -> float:
 	if g.stable_at < 0.0:
 		return -1.0
 	var x := t - (g.stable_at + WAVE_DELAY)
-	if x < 0.0 or x > WAVE_HAIR:
+	if x < 0.0 or x > WAVE_HAIR + 1e-4:
 		return -1.0
-	return Motion.eased(x / WAVE_HAIR, Tween.TRANS_SINE, Tween.EASE_IN)
+	return Motion.eased(minf(x / WAVE_HAIR, 1.0), Tween.TRANS_SINE, Tween.EASE_IN)
 
 
 ## Pulse position 0..1 of the stable wave `wave` on a link of hop `hop`; -1 when not on it.
