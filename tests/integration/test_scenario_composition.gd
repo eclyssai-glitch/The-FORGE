@@ -167,13 +167,106 @@ func test_genesis_quality_and_mode() -> void:
 	assert_eq(int(sky.get_shader_parameter("detail")), MaterialLibrary.SKY_DETAIL[3])
 	assert_gt(env.fog_depth_begin, low_begin, "without volumetric the depth fog starts closer")
 	Session.set_mode(SessionState.Mode.FORGE)
+	world.snap_environment()
 	var forge_energy := float(sky.get_shader_parameter("sky_energy"))
 	Session.set_mode(SessionState.Mode.OBSERVATORY)
+	world.snap_environment()
 	assert_lt(float(sky.get_shader_parameter("sky_energy")), forge_energy, "OBSERVATORY: the nebula recedes")
 	Session.set_mode(SessionState.Mode.UNIVERSE)
+	world.snap_environment()
 	assert_eq(env.fog_depth_end, float(GenesisEnvironment.mode_settings(SessionState.Mode.UNIVERSE)["fog_depth_end"]))
 	assert_gt(env.fog_depth_end, float(GenesisEnvironment.mode_settings(SessionState.Mode.FORGE)["fog_depth_end"]),
 		"UNIVERSE sees the whole system")
+
+
+func test_genesis_mode_change_blends_without_pop() -> void:
+	Simulation.set_scenario(Scenario.GENESIS)
+	var env: Environment = world.environment
+	var sky := world.genesis_sky
+	Session.set_mode(SessionState.Mode.FORGE)
+	world.snap_environment()
+	var forge := GenesisEnvironment.mode_settings(SessionState.Mode.FORGE)
+	var obs := GenesisEnvironment.mode_settings(SessionState.Mode.OBSERVATORY)
+	Session.set_mode(SessionState.Mode.OBSERVATORY)
+	# Nothing jumps on the mode change itself.
+	assert_almost_eq(float(sky.get_shader_parameter("sky_energy")), float(forge["sky_energy"]), 1e-4)
+	assert_almost_eq(env.fog_depth_end, float(forge["fog_depth_end"]), 1e-3)
+	assert_true(world.environment_blending())
+	# Frame by frame (30 fps): monotonic, and no frame moves more than a small share of the gap.
+	var dt := 1.0 / 30.0
+	var prev := float(sky.get_shader_parameter("sky_energy"))
+	var gap := absf(float(obs["sky_energy"]) - float(forge["sky_energy"]))
+	var max_step := 0.0
+	var frames := int(ceil(GenesisEnvironment.MODE_BLEND / dt)) + 1
+	for i in frames:
+		world._step_environment(dt)
+		var e := float(sky.get_shader_parameter("sky_energy"))
+		assert_true(e <= prev + 1e-6, "sky energy recedes monotonically")
+		max_step = maxf(max_step, prev - e)
+		prev = e
+	assert_lt(max_step, gap * 0.08, "no frame takes more than 8% of the change")
+	assert_false(world.environment_blending())
+	assert_almost_eq(float(sky.get_shader_parameter("sky_energy")), float(obs["sky_energy"]), 1e-5)
+	assert_almost_eq(env.fog_depth_end, float(obs["fog_depth_end"]), 1e-4)
+	# A snap lands at once.
+	Session.set_mode(SessionState.Mode.UNIVERSE)
+	world.snap_environment()
+	assert_almost_eq(env.tonemap_exposure,
+		float(GenesisEnvironment.mode_settings(SessionState.Mode.UNIVERSE)["tonemap_exposure"]), 1e-5)
+
+
+func test_genesis_exposure_trim_eases_and_clamps() -> void:
+	Simulation.set_scenario(Scenario.GENESIS)
+	var env: Environment = world.environment
+	Session.set_mode(SessionState.Mode.FORGE)
+	world.snap_environment()
+	var base := float(GenesisEnvironment.mode_settings(SessionState.Mode.FORGE)["tonemap_exposure"])
+	assert_almost_eq(env.tonemap_exposure, base, 1e-5)
+	world.set_exposure_trim(1.2)
+	assert_almost_eq(env.tonemap_exposure, base, 1e-5, "the trim never jumps")
+	var prev := env.tonemap_exposure
+	for i in 30:
+		world._step_environment(1.0 / 30.0)
+		assert_true(env.tonemap_exposure >= prev - 1e-6)
+		assert_lt(env.tonemap_exposure - prev, 0.02, "eased: a small step per frame")
+		prev = env.tonemap_exposure
+	world.snap_environment()
+	assert_almost_eq(env.tonemap_exposure, base * 1.2, 1e-5)
+	world.set_exposure_trim(9.0)
+	assert_eq(world.exposure_trim_target(), GenesisEnvironment.TRIM_RANGE.y, "clamped")
+	# Recomposition resets the trim.
+	Simulation.set_scenario(Scenario.ORIGIN_CHAMBER)
+	Simulation.set_scenario(Scenario.GENESIS)
+	assert_eq(world.exposure_trim_target(), 1.0)
+	assert_almost_eq(world.environment.tonemap_exposure,
+		float(GenesisEnvironment.mode_settings(Session.mode)["tonemap_exposure"]), 1e-5)
+
+
+func test_genesis_blend_helpers() -> void:
+	var a := {"x": 0.0, "y": 10, "s": "a"}
+	var b := {"x": 1.0, "y": 20, "s": "b"}
+	var m := GenesisEnvironment.blend_settings(a, b, 0.25)
+	assert_almost_eq(float(m["x"]), 0.25, 1e-6)
+	assert_almost_eq(float(m["y"]), 12.5, 1e-6)
+	assert_eq(m["s"], "a")
+	assert_eq(GenesisEnvironment.blend_settings(a, b, 1.0)["s"], "b")
+	assert_eq(GenesisEnvironment.blend_weight(0.0), 0.0)
+	assert_eq(GenesisEnvironment.blend_weight(1.0), 1.0)
+	assert_almost_eq(GenesisEnvironment.blend_weight(0.5), 0.5, 1e-6)
+	assert_eq(GenesisEnvironment.smooth_toward(1.0, 1.2, 0.0), 1.0)
+	assert_eq(GenesisEnvironment.smooth_toward(1.0, 1.2, 100.0), 1.2)
+	assert_eq(GenesisEnvironment.MODE_BLEND, GenesisShots.T_USER, "the environment follows the camera's mode move")
+
+
+func test_genesis_tour_args() -> void:
+	var Tour := load("res://tools/review/genesis_tour.gd")
+	assert_true(Tour.hud_from_arg("on"))
+	assert_false(Tour.hud_from_arg("off"))
+	assert_eq(Tour.level_from_arg("low"), QualityProfiles.Level.LOW)
+	assert_eq(Tour.level_from_arg("bogus"), QualityProfiles.Level.HIGH, "HIGH by default")
+	assert_eq(Tour.size_from_arg("960x540"), Vector2i(960, 540))
+	assert_eq(Tour.size_from_arg("x"), Vector2i.ZERO)
+	assert_eq(Tour.LEAD_IN + GenesisScript.DURATION + Tour.TAIL, 60.5, "56 s + 4 s of breath after the lead-in")
 
 
 func test_sky_motion_is_throttled() -> void:

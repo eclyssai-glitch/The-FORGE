@@ -102,6 +102,16 @@ var _scenario_nodes: Array[Node] = []
 var _sky_motion_enabled := true
 var _sky_motion_applied := -1.0
 
+## GENESIS environment shown now (GenesisEnvironment.MODES layout) and the mode blend in flight:
+## from, to, seconds elapsed (>= MODE_BLEND = settled). Empty until the first mode is applied.
+var _env_current: Dictionary = {}
+var _env_from: Dictionary = {}
+var _env_to: Dictionary = {}
+var _env_elapsed := 0.0
+## Exposure trim shown now and its target (World.set_exposure_trim; 1 = the mode's exposure).
+var exposure_trim := 1.0
+var _trim_target := 1.0
+
 
 func _ready() -> void:
 	world_environment = WorldEnvironment.new()
@@ -147,9 +157,10 @@ func _exit_tree() -> void:
 		get_tree().node_added.disconnect(_on_node_added)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if scenario != Scenario.GENESIS:
 		return
+	_step_environment(delta)
 	var t := MotionClock.now()
 	MaterialLibrary.set_motion_time(t)
 	if _sky_motion_enabled and genesis_sky:
@@ -157,6 +168,54 @@ func _process(_delta: float) -> void:
 		if step != _sky_motion_applied:
 			_sky_motion_applied = step
 			genesis_sky.set_shader_parameter("motion_time", step)
+
+
+## GENESIS: asks for an exposure trim (x the mode's exposure; clamped to
+## GenesisEnvironment.TRIM_RANGE). The environment eases towards it (TRIM_TAU), so a camera cue
+## can compensate a darker framing without a pop. Ignored outside GENESIS; reset on recomposition.
+func set_exposure_trim(trim: float) -> void:
+	_trim_target = GenesisEnvironment.clamp_trim(trim)
+
+
+## Target of the exposure trim (1 = none).
+func exposure_trim_target() -> float:
+	return _trim_target
+
+
+## True while a GENESIS mode blend is in flight.
+func environment_blending() -> bool:
+	return not _env_current.is_empty() and _env_elapsed < GenesisEnvironment.MODE_BLEND
+
+
+## Ends any GENESIS environment blend and trim easing at once (automation snaps, composition).
+func snap_environment() -> void:
+	if scenario != Scenario.GENESIS or environment == null:
+		return
+	if not _env_to.is_empty():
+		_env_current = _env_to.duplicate()
+		_env_from = _env_current
+	_env_elapsed = GenesisEnvironment.MODE_BLEND
+	exposure_trim = _trim_target
+	if not _env_current.is_empty():
+		GenesisEnvironment.apply_settings(environment, genesis_sky, _env_current, exposure_trim)
+
+
+## Per-frame GENESIS environment easing (real time, like the camera's transitions): the mode
+## blend and the exposure trim. Writes the environment only while something moves.
+func _step_environment(delta: float) -> void:
+	if _env_current.is_empty() or environment == null:
+		return
+	var dirty := false
+	if _env_elapsed < GenesisEnvironment.MODE_BLEND:
+		_env_elapsed = minf(_env_elapsed + delta, GenesisEnvironment.MODE_BLEND)
+		var k := GenesisEnvironment.blend_weight(_env_elapsed / GenesisEnvironment.MODE_BLEND)
+		_env_current = GenesisEnvironment.blend_settings(_env_from, _env_to, k)
+		dirty = true
+	if exposure_trim != _trim_target:
+		exposure_trim = GenesisEnvironment.smooth_toward(exposure_trim, _trim_target, delta)
+		dirty = true
+	if dirty:
+		GenesisEnvironment.apply_settings(environment, genesis_sky, _env_current, exposure_trim)
 
 
 ## Modules [name, path] of a scenario (ORIGIN CHAMBER for an unknown id).
@@ -280,6 +339,10 @@ func _compose_scenario(id: StringName) -> void:
 			genesis_sky = GenesisEnvironment.make_sky_material()
 		environment = GenesisEnvironment.make_environment(genesis_sky)
 		_sky_motion_applied = -1.0
+		_env_current = {}
+		_env_to = {}
+		exposure_trim = 1.0
+		_trim_target = 1.0
 	else:
 		environment = EnvironmentProfile.make_environment()
 	world_environment.environment = environment
@@ -327,6 +390,7 @@ func _apply_quality_and_mode() -> void:
 	if not Quality.profile.is_empty():
 		_on_quality_changed(Quality.profile)
 	_on_mode_changed(Session.mode)
+	snap_environment()
 
 
 func _on_scenario_changed(id: StringName) -> void:
@@ -358,7 +422,7 @@ func _on_quality_changed(profile: Dictionary) -> void:
 
 func _on_mode_changed(mode: SessionState.Mode) -> void:
 	if scenario == Scenario.GENESIS:
-		GenesisEnvironment.apply_mode(environment, genesis_sky, mode)
+		_blend_environment_to(GenesisEnvironment.mode_settings(mode))
 	else:
 		EnvironmentProfile.apply_mode_fog(environment, mode)
 	if universe:
@@ -368,3 +432,18 @@ func _on_mode_changed(mode: SessionState.Mode) -> void:
 		var shot: Array = shots.get(mode, shots[SessionState.Mode.FORGE])
 		fallback_camera.position = shot[0]
 		fallback_camera.look_at(shot[1])
+
+
+## Starts blending the GENESIS environment from what is shown now to `target` (the first
+## application lands at once).
+func _blend_environment_to(target: Dictionary) -> void:
+	if _env_current.is_empty():
+		_env_current = target.duplicate()
+		_env_from = _env_current
+		_env_to = target.duplicate()
+		_env_elapsed = GenesisEnvironment.MODE_BLEND
+		GenesisEnvironment.apply_settings(environment, genesis_sky, _env_current, exposure_trim)
+		return
+	_env_from = _env_current.duplicate()
+	_env_to = target.duplicate()
+	_env_elapsed = 0.0

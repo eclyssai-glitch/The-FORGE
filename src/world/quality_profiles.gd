@@ -2,8 +2,12 @@ class_name QualityProfiles
 extends RefCounted
 ## Graphics quality presets. Pure data; applied by the Quality autoload and by the
 ## world components that listen to Quality.profile_changed.
-## "shadow_splits": cascades of the key DirectionalLight3D (1, 2 or 4), read by the LightRig and
-## mapped to DirectionalLight3D.directional_shadow_mode.
+## "shadow_splits": cascades of the key DirectionalLight3D (1, 2 or 4), read by the light rigs and
+## mapped to DirectionalLight3D.directional_shadow_mode. 4 on every level since Loop 4 r1: two
+## cascades in a 2048 atlas stair-stepped the key shadow across MIKU (few casters, cheap passes).
+## "shadow_size": directional and positional shadow atlas (Quality applies both).
+## "shadow_filter": RenderingServer.ShadowQuality of the soft PCF filter (directional and
+## positional), applied by Quality; the rig's shadow_blur widens the kernel, the filter sets its taps.
 
 enum Level { LOW, MEDIUM, HIGH, ULTRA }
 
@@ -21,7 +25,8 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 0.77, "scaling_mode": Viewport.SCALING_3D_MODE_FSR,
 				"msaa": Viewport.MSAA_DISABLED, "fxaa": true,
 				"ssao": false, "ssil": false, "glow": true, "volumetric_fog": false,
-				"shadow_size": 2048, "shadows": true, "shadow_splits": 2, "particles": 0.35,
+				"shadow_size": 4096, "shadows": true, "shadow_splits": 4, "particles": 0.35,
+				"shadow_filter": RenderingServer.SHADOW_QUALITY_SOFT_LOW,
 			}
 		Level.MEDIUM:
 			return {
@@ -29,7 +34,8 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
 				"msaa": Viewport.MSAA_2X, "fxaa": false,
 				"ssao": true, "ssil": false, "glow": true, "volumetric_fog": true,
-				"shadow_size": 2048, "shadows": true, "shadow_splits": 4, "particles": 0.6,
+				"shadow_size": 4096, "shadows": true, "shadow_splits": 4, "particles": 0.6,
+				"shadow_filter": RenderingServer.SHADOW_QUALITY_SOFT_MEDIUM,
 			}
 		Level.HIGH:
 			return {
@@ -38,6 +44,7 @@ static func get_profile(level: Level) -> Dictionary:
 				"msaa": Viewport.MSAA_4X, "fxaa": false,
 				"ssao": true, "ssil": false, "glow": true, "volumetric_fog": true,
 				"shadow_size": 4096, "shadows": true, "shadow_splits": 4, "particles": 1.0,
+				"shadow_filter": RenderingServer.SHADOW_QUALITY_SOFT_HIGH,
 			}
 		_:
 			return {
@@ -45,7 +52,8 @@ static func get_profile(level: Level) -> Dictionary:
 				"render_scale": 1.0, "scaling_mode": Viewport.SCALING_3D_MODE_BILINEAR,
 				"msaa": Viewport.MSAA_4X, "fxaa": false,
 				"ssao": true, "ssil": true, "glow": true, "volumetric_fog": true,
-				"shadow_size": 4096, "shadows": true, "shadow_splits": 4, "particles": 1.0,
+				"shadow_size": 8192, "shadows": true, "shadow_splits": 4, "particles": 1.0,
+				"shadow_filter": RenderingServer.SHADOW_QUALITY_SOFT_ULTRA,
 			}
 
 

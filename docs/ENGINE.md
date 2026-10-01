@@ -73,9 +73,50 @@ Módulos GENESIS (`GENESIS_MODULES`, caminhos fixos do contrato da Fase B, dono:
 - O resto do custo (viewport: escala, MSAA, FXAA, atlas de sombras) é do autoload `Quality`;
   partículas e luzes aplicam a parte delas no mesmo sinal.
 - Chaves do perfil (`QualityProfiles.get_profile`): `level`, `render_scale`, `scaling_mode`, `msaa`, `fxaa`,
-  `ssao`, `ssil`, `glow`, `volumetric_fog`, `shadow_size`, `shadows`, `shadow_splits`, `particles`.
-  `shadow_splits` = cascatas da luz direcional principal (LOW 2, MEDIUM/HIGH/ULTRA 4); quem a aplica
-  é o rig de luz (`directional_shadow_mode`), lendo `Quality.profile["shadow_splits"]`.
+  `ssao`, `ssil`, `glow`, `volumetric_fog`, `shadow_size`, `shadows`, `shadow_splits`, `shadow_filter`,
+  `particles`. `shadow_splits` = cascatas da luz direcional principal (4 em todos os níveis desde o Loop 4 r1);
+  quem a aplica é o rig de luz (`directional_shadow_mode`), lendo `Quality.profile["shadow_splits"]`.
+  Ver *Sombras direcionais* abaixo.
+
+## Sombras direcionais (Loop 4 r1)
+
+Diagnóstico (`sf_07_contraluz`, tronco e vestido de MIKU): a "escada" era **resolução**, não bias. Os style
+frames da r1 saíram em AUTO, que sob llvmpipe detecta CPU → **LOW**: atlas direcional 2048 com 2 cascatas
+(o rig então usa alcance 36 e blur 2,2) — a sombra do braço sobre o vestido caía numa cascata de ~1024 texels
+para ~36 u e virava degraus de ~10–15 px na tela. O mesmo quadro em HIGH (4096, 4 cascatas, alcance 60) já
+era liso. Correção do lado do mundo:
+
+| Nível | Atlas direcional e posicional (`shadow_size`) | Cascatas (`shadow_splits`) | Filtro PCF (`shadow_filter`) |
+|---|---|---|---|
+| LOW | 4096 (era 2048) | 4 (era 2) | `SHADOW_QUALITY_SOFT_LOW` |
+| MEDIUM | 4096 (era 2048) | 4 | `SHADOW_QUALITY_SOFT_MEDIUM` |
+| HIGH | 4096 | 4 | `SHADOW_QUALITY_SOFT_HIGH` |
+| ULTRA | 8192 (era 4096) | 4 | `SHADOW_QUALITY_SOFT_ULTRA` |
+
+- O autoload `Quality` aplica o atlas (`RenderingServer.directional_shadow_atlas_set_size(size, true)` — 16 bits
+  de profundidade bastam: a escada não era precisão — e `Viewport.positional_shadow_atlas_size`) e o filtro
+  (`RenderingServer.directional_soft_shadow_filter_set_quality` e `positional_soft_shadow_filter_set_quality`),
+  em todo `profile_changed`. `project.godot` mantém `soft_shadow_filter_quality=3` só como valor de partida.
+- Custo: o GENESIS tem pouquíssimos projetores (só a key; cinturão, anel, fios, véu e halo com
+  `cast_shadow` OFF), então 4 passes de cascata são baratos mesmo no LOW; 4096² a 16 bits = 32 MB.
+- Prova (`--quality=low`, mesma pose `sf_07`): sem degraus; borda macia contínua no vestido e no tronco. HIGH
+  continua liso; `sf_01_hero` (MIKU na cascata 3, ~23 u) liso nos três casos.
+- Capturas e style frames rodam em HIGH por padrão (`docs/BUILD.md`, *Qualidade das capturas*), com o nível
+  escrito em cada linha do log.
+
+**O que o rig deve usar** (dono: animator; `GenesisLightRig._on_quality`):
+- `shadow_enabled = profile["shadows"]`, `directional_shadow_mode = LightRig.shadow_mode_for(profile["shadow_splits"])`
+  (sempre 4 agora; o ramo de 2 cascatas fica só como reserva).
+- Alcance (`directional_shadow_max_distance`) o menor que cubra os planos de herói: hoje 60 u. Com MIKU a
+  9–25 u da câmera, as divisões padrão (0,1/0,2/0,5 → 6/12/30 u) põem o tronco nas cascatas 2–3 (≈ 2048
+  texels para 12–30 u). Encurtar para ~40 u (ou `directional_shadow_split_2/3` ≈ 0,25/0,6) adensa ainda mais;
+  no UNIVERSE (câmera a ~68 u) a sombra some de qualquer forma.
+- Suavidade: `shadow_blur` 1,0–2,0 (o kernel; os *taps* vêm do `shadow_filter` do perfil). Sem
+  `light_angular_distance` (PCSS) — ruído pontilhado sem TAA (visto nos previews de escultura).
+- Acne/terminador nas superfícies curvas: `shadow_normal_bias` 1,0–2,0 (hoje 1,4) e `shadow_bias` ≈ 0,03–0,1
+  (padrão 0,1); `directional_shadow_blend_splits = true` evita a costura entre cascatas.
+- Alternativa que o animator pode escolher: MIKU sem projetar sombra da key (`cast_shadow` OFF nas instâncias
+  dela) e o AO por vértice + SSAO fazendo o assentamento — o mundo não depende disso.
 
 ## Ambiente GENESIS (`src/world/genesis_environment.gd`, `class_name GenesisEnvironment`)
 
@@ -87,6 +128,28 @@ Configuração pura (RefCounted), só com cores de `Palette`; bíblia §4 (luz),
   não a toca: o mundo escreve o `motion_time` do céu quantizado em `SKY_MOTION_HZ` = 4 Hz
   (`sky_motion_step(t)` = `floor(t·4)/4`, escrito só quando muda → ≤ 4 re-renderizações da radiância por
   segundo); no LOW o céu fica estático (`sky_motion_enabled(profile)`).
+- **Sem pops por modo/plano** (Loop 4 r1): a troca de modo no GENESIS não aplica mais os valores de uma vez.
+  O mundo mistura todas as chaves de `MODES` (exposição, névoa de profundidade, comprimento da volumétrica,
+  `sky_energy`/`star_intensity`/`nebula_intensity`) do valor **em tela** ao do novo modo em
+  `GenesisEnvironment.MODE_BLEND` = `GenesisShots.T_USER` (3,51 s, a mesma duração do movimento de câmera da
+  troca de modo), com peso `smoothstep` (`blend_settings`, `blend_weight`, `apply_settings`), em tempo real
+  (`world._process` → `_step_environment(delta)`); uma troca no meio de outra parte do que está em tela. Os
+  uniforms do céu só mudam durante a mistura (a radiância é refeita só nesses quadros). Composição/recomposição
+  e as capturas aplicam direto: `world.snap_environment()` (a automação chama junto do `snap_to_mode_shot`).
+  API: `world.environment_blending()`, `world.snap_environment()`.
+- **Compensação de exposição pela câmera**: `world.set_exposure_trim(k)` (k × a exposição do modo, limitado a
+  `TRIM_RANGE` 0,75–1,35) — o mundo aproxima exponencialmente (`smooth_toward`, `TRIM_TAU` 0,9 s), nunca salta;
+  `exposure_trim_target()`; volta a 1 na recomposição. Só a exposição muda; o dono continua sendo o
+  `GenesisEnvironment`. O `CameraDirector` é filho do mundo (`get_parent().call(&"set_exposure_trim", k)`).
+- **Diagnóstico do "salto ~48–50 s"** (tomada inteira real `tools/record_genesis.sh --resolution=960x540
+  --hud=off`, câmera cinematográfica, HIGH, 1823 quadros; luma média por quadro com `signalstats`): **nenhum
+  pop** — a maior variação entre quadros consecutivos é 2,1/255, no fade de entrada. A luma fica ~70 de T+15 a
+  T+38, desce de forma contínua até 41 em T+49,5 e volta a 69 no fim do respiro. A descida é composição: os
+  planos `cue_g_orbits`/`cue_g_belt` (yaw 0,32 → 0,75) tiram o núcleo quente da nebulosa do quadro, e o
+  cruzamento para `cue_g_threads` (yaw −0,62) passa pelo céu índigo; numa sequência de 1 quadro/2 s
+  (48,2 → 41,3 entre T+47,5 e T+49,5) isso lê como salto. Correção cabe ao desenho dos planos (animator), que
+  pode também pedir `set_exposure_trim(~1,15–1,25)` no plano do cinturão. O ambiente GENESIS não tem nada
+  dependente do tempo além do `motion_time` do céu (4 Hz) e o rig só escreve `ambient_light_energy`.
 - **Tonemap** AgX, exposição 1,0 (1,05 no UNIVERSE). **Glow** contido: limiar HDR 1,0, `glow_bloom` 0,
   escala HDR 1,8, teto de luminância 8, níveis 2–5 (halo largo e macio só em emissão verdadeira: semente,
   kintsugi, magma, pulsos); ligado também no LOW.
@@ -297,5 +360,9 @@ some), âncoras após recomposição, relatório `audio=` do smoke, `silence_aud
 GENESIS falsa (camada 2 + `entity_id`) e sem sementes no GENESIS, planos de reserva, `--scenario=` pelo
 `Simulation`, poses de style frame (padrão válidas, três modos, do diretor ≥ 6 ou padrão, `apply_pose`),
 lista `CAPTURES_GENESIS`.
-`tests/unit/test_quality_profiles.gd`: perfis completos (inclui `shadow_splits`), custo monotônico,
-`shadow_splits` LOW 2 e demais 4.
+`tests/unit/test_quality_profiles.gd`: perfis completos (inclui `shadow_splits`, `shadow_filter`), custo
+monotônico (também o filtro), 4 cascatas em todos os níveis, atlas ≥ 4096 e filtro ≥ SOFT_LOW (HIGH = SOFT_HIGH).
+`tests/integration/test_scenario_composition.gd` (Loop 4 r1): troca de modo GENESIS sem salto (nada muda no
+quadro da troca; quadro a quadro a 30 fps monotônico e ≤ 8 % da diferença por quadro; chega ao alvo em
+`MODE_BLEND`; `snap_environment` aplica direto), trim de exposição (suave, limitado, zerado na recomposição),
+helpers de mistura e argumentos do `genesis_tour` (HUD, nível, tamanho, 0,5 + 56 + 4 s).

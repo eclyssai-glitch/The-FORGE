@@ -292,8 +292,8 @@ func _run_capture(dir: String) -> void:
 		var img := get_viewport().get_texture().get_image()
 		var path := abs_dir.path_join("%s.png" % c[0])
 		img.save_png(path)
-		print("[capture] %s (t=%.1f, %s, selected=%s, hud=%s, %dx%d)" % [path, c[1], Session.mode_name(),
-			Session.selected, Session.hud_visible, img.get_width(), img.get_height()])
+		print("[capture] %s (t=%.1f, %s, selected=%s, hud=%s, %dx%d, quality=%s)" % [path, c[1], Session.mode_name(),
+			Session.selected, Session.hud_visible, img.get_width(), img.get_height(), Quality.level_name()])
 	Session.set_hud_visible(true)
 	_quit(0)
 
@@ -341,8 +341,8 @@ func _run_style_frames(dir: String) -> void:
 		var file := "%s.png" % pose["name"]
 		img.save_png(abs_dir.path_join(file))
 		names.append(file)
-		print("[style-frame] %s (t=%.1f, %s, %dx%d)" % [abs_dir.path_join(file), float(pose["time"]),
-			Session.mode_name(), img.get_width(), img.get_height()])
+		print("[style-frame] %s (t=%.1f, %s, %dx%d, quality=%s)" % [abs_dir.path_join(file), float(pose["time"]),
+			Session.mode_name(), img.get_width(), img.get_height(), Quality.level_name()])
 		if Vector2i(img.get_width(), img.get_height()) != StyleFrames.SIZE:
 			push_warning("style frame %s is %dx%d, not %dx%d" % [file, img.get_width(), img.get_height(),
 				StyleFrames.SIZE.x, StyleFrames.SIZE.y])
@@ -395,11 +395,15 @@ func _world() -> WorldScript:
 	return scene.get_node_or_null(^"World") as WorldScript
 
 
-## Jumps every camera rig straight to the current mode's shot (no tween) before settling.
+## Jumps every camera rig straight to the current mode's shot (no tween) and the GENESIS
+## environment straight to the mode's settings (no blend) before settling.
 func _snap_cameras() -> void:
 	for node in get_tree().get_nodes_in_group(&"camera_director"):
 		if node.has_method(&"snap_to_mode_shot"):
 			node.call(&"snap_to_mode_shot")
+	var world := _world()
+	if world:
+		world.snap_environment()
 
 
 ## Lets camera tweens and time-based visuals settle before a capture.
