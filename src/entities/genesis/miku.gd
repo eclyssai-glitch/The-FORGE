@@ -3,17 +3,21 @@ extends Node3D
 ## MIKU, the celestial weaver (docs/VISUAL_DIRECTION.md §1). Owner: animator.
 ## The porcelain sculpture (assets/meshes/miku_body.obj, MaterialLibrary.miku_body()), a gown of
 ## light over the skirt that trails below the hem and dissolves into star dust
-## (MaterialLibrary.miku_gown(); the dust river itself is the Stardust module), hair of light
-## ribbons (HairRibbons + miku_hair()) rising up and back from the crown like nebula filaments,
-## the gold seed on her brow, and the astrolabe halo (halo_arc()) turning behind her head.
+## (MaterialLibrary.miku_gown(); the dust river itself is the Stardust module; the porcelain skirt
+## itself dissolves into grains, miku_body dissolve_top/bottom), hair as ONE nebula mass of light
+## ribbons (HairRibbons.nebula + miku_hair()) leaving the sculpted knot back and up in an S, whose
+## link strands become MIKU's relation threads, the gold seed on her brow, and the astrolabe halo
+## (halo_arc()) turning behind her head.
 ##
-## Narrative (GenesisChoreography, from Simulation.genesis + Simulation.time): asleep she is dim
-## porcelain with short, faint hair; at miku.awaken the seed lights, the porcelain wakes
-## (`awaken`), the hair is spun out to its full length, the gown gains presence and the halo
-## swells in. The seed surges gently on each act of creation.
+## Narrative (GenesisChoreography, from Simulation.genesis + Simulation.time): in the dark only
+## the seed glows; at miku.awaken it blooms and its light reveals her (miku_body `reveal`, radial
+## from the brow), the hair is spun out (`reveal` front), the gown's veil comes once the reveal
+## reaches the skirt, the halo swells in. The seed surges gently on each act of creation; at
+## planet.stable she raises her head, the halo closes and the climax pulse leaves her hair along
+## the link strands (`link_pulse`) before it runs along her threads.
 ## Ambient (MotionClock): breathing (Palette.T_BREATH) on the porcelain, halo and a slow float of
-## the whole figure; the hair sways in three layers with different periods; the halo turns once
-## per Palette.T_HALO_TURN.
+## the whole figure; the two hair layers sway with different periods (the link strands hold
+## still: their threads continue them); the halo turns once per Palette.T_HALO_TURN.
 ## Anchors (hair root, brow, head, chest, hem) are read from assets/meshes/miku_body.json.
 ## Entity `miku`: the Figure node is the visual root (group entity_miku, focus bounds = mesh
 ## bounds), picked through a capsule StaticBody3D (layer 2); audio anchor = the heart.
@@ -67,7 +71,7 @@ const HAIR_LINK_INTENSITY := Vector2(0.24, 0.42)
 ## the veil carries on past it and the Stardust river takes the grains down to the world.
 const GOWN_VEIL := true
 const GOWN_TOP := -0.2
-const GOWN_OFFSET := 0.03
+const GOWN_OFFSET := 0.012
 ## Skirt envelope of the sculpture (object units): radius at the hips, flare below.
 const SKIRT_RADIUS := 0.56
 const SKIRT_FLARE := 0.45

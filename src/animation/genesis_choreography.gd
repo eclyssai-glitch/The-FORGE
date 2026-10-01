@@ -22,7 +22,7 @@ const REVEAL_DUR := 2.6
 const REVEAL_GLOW := 1.0
 const REVEAL_GLOW_FALL := 3.0
 ## The inner light leads the presence (it is full once REVEAL_GLOW_LEAD⁻¹ of her is there).
-const REVEAL_GLOW_LEAD := 8.0
+const REVEAL_GLOW_LEAD := 3.0
 ## The seed's own light blooms out of it while it reveals her (rise, fall in seconds).
 const SEED_BLOOM_RISE := 1.5
 const SEED_BLOOM_FALL := 5.5

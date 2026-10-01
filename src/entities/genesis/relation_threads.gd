@@ -2,8 +2,8 @@ class_name RelationThreads
 extends Node3D
 ## The relational threads (links of the vault graph, translated into astronomy). Owner: animator.
 ## One thread per GenesisScript.LINKS entry: a fibre of light (RelationThread crossed ribbons +
-## a duplicate of MaterialLibrary.relation_thread()) that leaves MIKU's hair — from a point inside
-## the rising plume, where the hair turns lilac — and arcs out to the body it links, or runs
+## a duplicate of MaterialLibrary.relation_thread()) that leaves MIKU's hair — from the tip of one of
+## its link strands, out on the rising plume — and arcs out to the body it links, or runs
 ## between two bodies (planet -> moons / ring, and the backlink from NAUVE-2 back to the new world).
 ## At links.woven the threads are spun one after the other from their source
 ## (GenesisChoreography.link): the mesh is the first part [0, w] of the final arc (exact Bézier
@@ -12,8 +12,10 @@ extends Node3D
 ## — a pair of soft motes riding the arc (ambient, MotionClock: the woven graph keeps breathing
 ## after the session completes). Colour at the target: GOLD for the forming world, ICE for moons,
 ## pale gold for the ring, lilac-rose for the belt, dusk rose for distant worlds.
-## The material's own `woven` front and `pulse` are held off (woven = 1, pulse < 0): both raise a
-## negative base to a power (NaN on llvmpipe and several drivers) — reported to the art-director.
+## MIKU's threads continue her hair: each leaves from the tip of its link strand (Miku.hair_link_curves,
+## following the figure's float and head lift) along the strand's own direction (tangent_arc), so
+## hair and thread read as one fibre. The material's own `woven` front and `pulse` are held off
+## (woven = 1, pulse < 0): the weave grows by geometry and the pulses are motes.
 ## Endpoints that orbit are followed: planet -> moon threads live in a replica of the moon's orbit
 ## pivot (static mesh, rotated with the moon); threads to the slowly orbiting distant worlds are
 ## rebuilt only when an end moved more than REBUILD_STEP.
@@ -59,8 +61,9 @@ const HAIR_OVERLAP := 0.06
 ## this angle (cosine; beyond it the start direction is turned towards the body).
 const HAIR_TANGENT_MIN_COS := 0.55
 ## MIKU floats (and lifts her head at the climax): her threads are rebuilt when their hair end
-## moved farther than this (units).
-const HAIR_REBUILD_STEP := 0.015
+## moved farther than this (units) — a few rebuilds per second at most; the overlap with the strand
+## and the thread's faded start hide the gap in between.
+const HAIR_REBUILD_STEP := 0.04
 ## Bulge direction per link (world); default up.
 const BULGE := {
 	0: Vector3(-1.0, 0.1, 0.45),

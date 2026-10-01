@@ -102,6 +102,8 @@ func test_everything_is_continuous() -> void:
 		"presence": GenesisChoreography.body_presence, "bloom": GenesisChoreography.seed_bloom,
 		"climax": GenesisChoreography.climax, "release": GenesisChoreography.hands_release,
 		"lift": GenesisChoreography.head_lift, "halo_close": GenesisChoreography.halo_close,
+		"reveal_glow": GenesisChoreography.reveal_glow, "gown": GenesisChoreography.gown_presence,
+		"trim": GenesisShots.cue_trim,
 	}
 	for k: String in fns:
 		assert_lt(_max_jump(fns[k]), 0.05, "%s has no jump between 0.02 s samples" % k)
@@ -435,3 +437,67 @@ func test_pulses_only_on_woven_threads() -> void:
 			assert_between(p, 0.0, 1.0)
 		m += 0.1
 	assert_true(seen, "a pulse travels every period")
+
+
+func test_the_hair_becomes_the_threads() -> void:
+	# One link strand per MIKU thread, from the single root to the point where its thread begins;
+	# the thread starts on the strand (overlapping its tip) in the figure's current pose.
+	var curves := Miku.hair_link_curves()
+	var sources := Miku.hair_sources()
+	assert_eq(curves.size(), RelationThreads.MIKU_LINKS.size(), "one link strand per thread of MIKU")
+	var root := GenesisLayout.anchor("miku_body", "hair_root", Miku.HAIR_ROOT_FALLBACK)
+	var seen := {}
+	for k in RelationThreads.MIKU_LINKS.size():
+		var i: int = RelationThreads.MIKU_LINKS[k]
+		assert_eq(GenesisScript.LINKS[i][0], &"miku")
+		var c: PackedVector3Array = curves[k]
+		assert_lt(c[0].length(), 0.25, "strand %d leaves the single root" % k)
+		assert_lt(c[c.size() - 1].distance_to(sources[i]), 1e-3, "strand %d ends where its thread begins" % k)
+		assert_gt(sources[i].length(), 2.0, "the thread leaves the plume, not the knot")
+		seen[sources[i]] = true
+		for lift in [0.0, 1.0]:
+			for m in [0.0, 7.3]:
+				var a := RelationThreads.endpoint(i, true, m, lift)
+				var on := Miku.figure_pose(m, lift) * (root + HairRibbons.curve_point(c, 1.0 - RelationThreads.HAIR_OVERLAP))
+				assert_lt(a.distance_to(on), 1e-3, "thread %d starts on its strand (lift %.0f, m %.1f)" % [i, lift, m])
+	assert_eq(seen.size(), RelationThreads.MIKU_LINKS.size(), "each thread leaves from its own tuft")
+
+
+func test_threads_leave_along_their_strand() -> void:
+	var a := Vector3(0.0, 10.0, 0.0)
+	var b := Vector3(6.0, 2.0, 4.0)
+	var chord := (b - a).normalized()
+	# Within the allowed angle the arc leaves exactly along the strand.
+	var side := chord.cross(Vector3.UP).normalized()
+	var tn := (chord * 0.8 + side * 0.6).normalized()
+	var arc := RelationThreads.tangent_arc(a, b, tn)
+	var t0 := RelationThread.arc_tangent(a, b, arc[0], 0.0, arc[1]).normalized()
+	assert_gt(t0.dot(tn), 0.999, "the thread continues the strand's direction")
+	assert_almost_eq(RelationThread.arc_point(a, b, arc[0], 1.0, arc[1]).distance_to(b), 0.0, 1e-4, "and still ends on its body")
+	# A strand heading away from the body: the start is turned to the allowed angle (no U-turn loop).
+	var away := (-chord * 0.6 + side * 0.8).normalized()
+	arc = RelationThreads.tangent_arc(a, b, away)
+	t0 = RelationThread.arc_tangent(a, b, arc[0], 0.0, arc[1]).normalized()
+	assert_almost_eq(t0.dot(chord), RelationThreads.HAIR_TANGENT_MIN_COS, 1e-3, "turned towards the body")
+	assert_gt(t0.dot(side), 0.0, "on the strand's side")
+
+
+func test_exposure_trim_follows_the_belt_rise() -> void:
+	var g := _full()
+	assert_almost_eq(GenesisShots.cue_trim(_state_at(20.0), 20.0), 1.0, 1e-6, "no trim before the rise")
+	var top := GenesisScript.MOON_TIMES[0] + GenesisShots.RISE_DUR
+	assert_almost_eq(GenesisShots.cue_trim(_state_at(top - 0.5), top - 0.5), GenesisShots.TRIM_RISE, 1e-3,
+		"the rise over the belt is compensated")
+	assert_almost_eq(GenesisShots.cue_trim(g, GenesisScript.DURATION), 1.0, 1e-6, "back to the mode's exposure at the end")
+
+
+func test_reveal_comes_from_the_light() -> void:
+	var g := _full()
+	assert_eq(GenesisChoreography.reveal_glow(_state_at(2.0), 2.0), 0.0, "nothing glows in the dark")
+	assert_eq(GenesisChoreography.gown_presence(_state_at(2.0), 2.0), 0.0, "in the dark the gown is only dust")
+	var mid := GenesisScript.T_AWAKEN + GenesisChoreography.REVEAL_DELAY + GenesisChoreography.REVEAL_DUR * 0.5
+	assert_gt(GenesisChoreography.reveal_glow(g, mid), 0.9, "she is revealed as light")
+	assert_lt(GenesisChoreography.gown_presence(g, GenesisScript.T_AWAKEN + GenesisChoreography.REVEAL_DELAY + 0.3), 0.01,
+		"no veil before the reveal reaches the skirt")
+	assert_lt(GenesisChoreography.hair_reveal(g, GenesisScript.T_AWAKEN + 0.5), GenesisChoreography.HAIR_ASLEEP + 1e-6,
+		"no comet of hair in the dark: it is spun out once the light reveals her")
