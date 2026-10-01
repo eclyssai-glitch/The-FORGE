@@ -218,7 +218,8 @@ static func detect_language(raw: String, words: PackedStringArray) -> String:
 
 
 ## Rule 1: "[miku[,:]] [set|defina|definir|ajuste|ajustar|configure] <path> [=|:|to|para|em] <value>".
-## Only when <path> is "section.key" with a known section, or a known key / asset feature.
+## Only when <path> is "section.key" with a known section, or a known key / asset feature; a bare
+## key needs a numeric value (or names an asset feature).
 static func _parse_structured(norm: String) -> StructuredPatch:
 	if _structured == null:
 		_structured = RegEx.create_from_string(
@@ -242,6 +243,9 @@ static func _parse_structured(norm: String) -> StructuredPatch:
 	var value: Variant = value_text
 	if number.is_valid_float():
 		value = number.to_float()
+	elif section == &"" and not ConfigSchema.requires_asset(key):
+		# "glow up", "halo maior": words, not a structured value — left to the phrase rules.
+		return null
 	var p := StructuredPatch.absolute(path, value)
 	p.text = norm
 	return p
