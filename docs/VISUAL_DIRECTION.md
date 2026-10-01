@@ -66,22 +66,22 @@ progresso narrativo (`formation`, `heat`, `veins`…) vem de `Simulation.genesis
 
 | Getter | Aparência | Controles |
 |---|---|---|
-| `miku_body()` | porcelana perolada: albedo pérola/blush, mármore de contraste mínimo, **sheen iridescente** em ângulo rasante pérola → rosa → ouro pálido, translucidez falsa na silhueta (emissão dependente da vista), luz interna suave; AO = `COLOR.r` do vértice | `awaken`, `breath`, `select`, `inner_glow`, `sheen`, `backlight_amount`, `ao_strength` |
+| `miku_body()` | **porcelana fosca luminosa**: dielétrico pérola de rugosidade ~0,5 e especular baixo e largo (`light()` próprio: Blinn-Phong normalizado), luz que envolve a forma (`wrap_amount`) com **espalhamento BLUSH** na faixa além do terminador e sombras direcionais nunca pretas (`shadow_lift`, tingido BLUSH); sheen pérola → rosa → ouro pálido só em ângulo rasante; todo termo rasante com **Fresnel antisserrilhado** (`fwidth`, sem contorno "adesivo"); abaixo de `dissolve_top` a saia **vira luz e se dissolve em grãos** (frente fbm quebrada por ruído fino, lábio luminoso, nunca barra dura); AO = `COLOR.r` | `awaken`, `breath`, `select`, `wrap_amount`, `scatter_amount`, `shadow_lift`, `sheen`, `dissolve_top`/`dissolve_bottom`, `grain_scale`, `lip_intensity`, `light_turn`, `motion_time` |
 | `miku_hair()` | fitas aditivas; ouro pálido (raiz) → rosa → lilás (ponta), filamentos internos, borda suave, cintilação lenta rumo às pontas. Malha: UV.x raiz→ponta, UV.y através; alpha do vértice = opacidade do fio | `reveal`, `motion_time`, `intensity`, `seed` |
-| `miku_gown()` | véu de luz aditivo, mais claro em ângulo rasante, comido por ruído de cima para baixo (Y do objeto), deixando grãos de estrela | `fade_top`, `fade_bottom`, `presence`, `motion_time` |
+| `miku_gown()` | véu de luz aditivo **só nas faces da frente** (sem espessura interna), mais claro em ângulo rasante (Fresnel antisserrilhado), comido de cima para baixo (Y do objeto) por uma frente que se quebra em grãos com lábio luminoso, deixando grãos de estrela que passam ao rio do `Stardust` | `fade_top`, `fade_bottom`, `presence`, `motion_time`, `grain_scale` |
 | `halo_arc()` | arco de astrolábio incompleto + arco interno oposto + graduação fina; linhas de largura constante em pixels (quad) | `strength`, `breath`, `arc_span` |
-| `hand_stone()` | basalto azul-noite polido (clearcoat) com estrelas dentro da pedra (espaço do objeto) e **kintsugi seletivo**: só algumas bordas de Voronoi são fraturas remendadas — as que seguem 1–2 caminhos longos (crista de ruído de baixa frequência) mais uma pequena fração de ramos escolhidos pelo hash da própria borda (`k_voronoi2`/`k_edge_hash`); o resto da rede não existe (nada de grade). Ouro sempre presente e apagado; `veins` espalha e acende | `veins`, `motion_time`, `select`, `vein_scale`, `star_scale`, `vein_share`, `vein_path_scale` |
-| `planet_forming()` | `formation` acreção por muitos grãos que se juntam (nunca um borrão solitário) com borda GOLD → `heat` **lago de lava**: pele escura resfriada cortada por rios incandescentes finos em duas escalas e poucas ressurgências (meios-tons raros: nada de "mancha") → `crust` placas (Voronoi com deformação forte) assentando uma a uma; só parte das bordas fica aberta e acesa (`open_share`), as outras são costuras seladas; tom por placa e por "continente"; a rede de fendas some quando as células ficam pequenas na tela (planeta distante mostra continentes, não colmeia) → `atmosphere` névoa de limbo + aro fino ICE→DUSK_ROSE | `formation`, `heat`, `crust`, `atmosphere`, `motion_time`, `seed`, `detail`, `select`, `open_share` |
+| `hand_stone()` | **pedra-noite legível**: basalto STONE acetinado (clearcoat baixo, relevo fino por ruído), **profundidade**: nuvem nebular e estrelas vistas um pouco dentro da pedra (paralaxe no espaço do objeto), **rim ICE** fino antisserrilhado, kintsugi seletivo (bordas de Voronoi em 1–2 caminhos longos + ramos por hash da borda) sempre visível como ouro apagado (`vein_rest`); `veins` espalha e acende; o **antebraço se dissolve em grãos** a partir do pulso (`MaterialLibrary.set_hand_wrist`) | `veins`, `motion_time`, `select`, `vein_scale`, `star_scale`, `vein_share`, `vein_path_scale`, `wrist_point`/`forearm_end`/`wrist_fade`, `bump_strength` |
+| `planet_forming()` | `formation` acreção por grãos com borda GOLD → `heat` lago de lava (rios finos em duas escalas) → `crust` placas Voronoi assentando; bordas abertas esfriam com o calor (mundo formado não é "bola de gude rachada") → `atmosphere` **dispersão**: limbo ICE no lado diurno, faixa DUSK_ROSE no terminador (`light()` próprio), névoa suave; **continentes legíveis** (terra quente × bacias escuras). `world_style` dá famílias aos mundos distantes (x faixas ICE, y poeira rosa; `MaterialLibrary.set_far_world_style`) | `formation`, `heat`, `crust`, `atmosphere`, `motion_time`, `seed`, `detail`, `select`, `open_share`, `world_style`, `scatter_amount`, `terminator_amount` |
 | `moon_doc()` | gelo fosco com estratos finos (páginas), rim ICE fino, acreção igual ao planeta | `formation`, `glow`, `seed`, `select` |
 | `ring_skill()` | bandas finas douradas com vãos escuros sobre quad (raio do UV); formação varre o círculo com borda quente | `formation`, `inner`, `outer`, `bands`, `intensity` |
-| `asteroid_memory()` | pedra rugosa, rim rosa-lilás; ~5 % das rochas (por `INSTANCE_ID`) guardam um brilho GOLD discreto | `memory`, `glint_share` |
-| `orbit_line()` | linha fina aditiva, mais clara logo atrás do corpo, desvanecendo ao longo do arco | `head`, `trail`, `base`, `formation` |
-| `relation_thread()` | fibra de luz LILAC (sai do cabelo) → cor do alvo (ICE luas, GOLD planeta), afinando nas pontas; pulso GOLD viajante = backlink | `pulse`, `woven`, `color_to`, `intensity` |
-| `nebula_sky()` | céu: nebulosa índigo/violeta por fbm deformado, faixa larga e **núcleo quente atrás de MIKU** (`warm_dir`, padrão −Z levemente acima do horizonte) que é **luz, não tinta**: coração perolado-dourado, corpo GOLD, bordas DUSK_ROSE → LILAC, carregado por **filamentos de gás** iluminados por dentro (cristas do campo deformado + leve fluxo radial, sem raios) e cortado pelas lanes de poeira — um halo liso vira "lama" bege sob AgX; 3 camadas de estrelas de tamanho em pixel, cintilação sutil, **dithering**; passe de radiância sem estrelas | `warm_dir`, `motion_time`, `detail`, `sky_energy`, `star_intensity`, `warm_intensity`, `core_intensity`, `filament_strength` |
+| `asteroid_memory()` | pedra rugosa com normais curvadas para a esfera da rocha (`smooth_shape`: facetas lidas como pedra gasta), rim rosa-lilás largo e antisserrilhado (rochas pequenas nunca viram buraco preto); ~5 % das rochas (por `INSTANCE_ID`) guardam um brilho GOLD discreto | `memory`, `glint_share`, `rim_intensity`, `smooth_shape` |
+| `orbit_line()` | linha fina aditiva, mais clara logo atrás do corpo; o tubo é refeito no vértice como **fita voltada à câmera** e o núcleo tem ~`line_px` px constantes (sem "régua", sem contas por segmento); some quando o plano da órbita fica de perfil (`edge_on_fade`) e afina até sumir perto do corpo (`body_gap`) | `head`, `trail`, `base`, `formation`, `line_px`, `edge_on_fade`, `body_gap`, `tube_radius` |
+| `relation_thread()` | fibra de luz LILAC (sai do cabelo) → cor do alvo (ICE luas, GOLD planeta): núcleo de ~`line_px` px constantes, cada fita pesada por n·v² (das duas cruzadas, a que fica de perfil passa a linha à outra: nunca uma "tira"), afina e some perto dos dois corpos; pulso GOLD viajante = backlink | `pulse`, `woven`, `color_to`, `intensity`, `line_px`, `end_fade` |
+| `nebula_sky()` | céu: nebulosa índigo/violeta por fbm deformado, faixa larga e **núcleo quente atrás de MIKU** (`warm_dir`, padrão −Z levemente acima do horizonte) que é **luz, não tinta**: coração perolado-dourado, corpo GOLD, bordas DUSK_ROSE → LILAC, carregado por **filamentos de gás** iluminados por dentro (cristas do campo deformado + leve fluxo radial, sem raios) e cortado pelas lanes de poeira — um halo liso vira "lama" bege sob AgX; estruturas **poucas e grandes** (`nebula_scale`), **vazios escuros** de verdade (`void_scale`), filamentos só perto do núcleo, lanes finas e quebradas (nada de "lápide"), faixa inclinada (nada de coluna violeta); 3 camadas de estrelas de tamanho em pixel, cintilação sutil, **dithering**; passe de radiância sem estrelas | `warm_dir`, `motion_time`, `detail`, `sky_energy`, `star_intensity`, `warm_intensity`, `core_intensity`, `filament_strength` |
 
 Contratos de malha: linhas (órbitas, fios) funcionam melhor como **fitas cruzadas** (duas larguras ortogonais)
 ou tubo fino, porque uma fita plana some de lado. Planetas/luas: qualquer esfera (padrões no espaço da direção).
-Esculturas (`miku_body.obj`, mãos) não precisam de UV. `mote(color)`/`spark(color)` seguem para poeira e faíscas.
+Esculturas (`miku_body.obj`, mãos) não precisam de UV. `mote(color)`/`spark(color)` seguem para poeira e faíscas. Motes da família GOLD (r − b > `GOLD_MOTE_WARMTH`) são menores (`GOLD_MOTE_DISC`) e em menor número (`GOLD_MOTE_KEEP`) a partir da 9ª instância de cada nuvem (semente, clarões e brilhos ficam intactos): poeira, nunca bokeh. Todos os shaders passam pela verificação estática de NaN (`tests/unit/test_style_shader_safety.gd`: `pow` com base limitada, `sqrt`/`log` de valores limitados, `k_safe_normalize`, `k_angle01`, divisões protegidas).
 
 ## 4. Iluminação
 
@@ -131,8 +131,8 @@ cria nada). Maiúsculas finas com espaçamento largo para palavras/sussurros; mi
 `T_LABEL`), nada surge de repente. Dois dialetos no `Hud` por cenário (`scenario_changed`): ORIGIN mantém os
 painéis v1 até a virada; GENESIS usa `GenesisHud`.
 
-- **Selo** DEMO MODE: anel pequeno + "DEMO MODE" em mono espaçado + "all events simulated" apagado; sem
-  caixa, sem cara de alerta; sempre visível (também com H). Grupo `demo_badge`.
+- **Selo** DEMO MODE: anel pequeno + "DEMO MODE" em mono espaçado + "all events simulated" apagado com
+  sombra noturna discreta (`SealNote`, legível sobre a nebulosa clara); sem caixa, sem cara de alerta; sempre visível (também com H). Grupo `demo_badge`.
 - **Modos**: UNIVERSE · FORGE · OBSERVATORY, a palavra ativa em tinta plena, um fio curto desliza sob ela.
 - **Transporte**: arco fino (órbita rasa) no centro inferior com um ponto por evento e o playhead; revela
   controles (reiniciar/tocar/pausar em glifos; fase, relógio e velocidades em palavras) quando o ponteiro
@@ -141,14 +141,18 @@ painéis v1 até a virada; GENESIS usa `GenesisHud`.
 - **Sussurros**: o rótulo do evento sobe, repousa e se dissolve acima do arco; uma linha por vez; seek/reset
   dissolve (o passado não é relido como texto).
 - **Rótulos no espaço**: nome projetado da posição 3D do corpo com fio-guia (diagonal + corrida
-  horizontal), no lado de fora da tela, evitando outros rótulos e outros corpos. FORGE/UNIVERSE: só o corpo
+  horizontal), **radial** (para fora do centro do quadro, girando até achar lugar fora dos corpos e dos
+  outros rótulos — nada de pilha num lado), sobre um **véu noturno esfumado** (legível sobre a nebulosa
+  clara e o cabelo). FORGE/UNIVERSE: só o corpo
   em hover/seleção. OBSERVATORY: todos, com o signo (planeta ● subagente, lua ◗ documentação, anel skills,
   cinturão memória, fio link) e o tipo simbólico, mais uma legenda mínima — o vault lido como astronomia.
   Corpo ainda não formado (status UNFORMED) não é nomeado.
-- **Cartão** do corpo selecionado: pequeno, ao lado do corpo (fio-guia até ele), signo + tipo, nome,
-  status, uma frase, FOCUS e fechar; sem corpo na tela, repousa à direita. Rótulos sob o cartão recuam.
-- **Missão** (OBSERVATORY): nome poético + uma linha por objetivo (em curso em tinta plena com anel,
-  cumpridos suaves, por vir apagados); sem contagens nem porcentagens.
+- **Cartão** do corpo selecionado: **sem moldura** (véu esfumado + tinta + fio-guia até o corpo), ao lado
+  do corpo e deslocado para fora dos outros corpos (nenhum corpo desenhado através do texto); signo + tipo,
+  nome, status, uma frase, FOCUS e fechar; sem corpo na tela, repousa à direita. Rótulos sob o cartão recuam.
+- **Missão** (OBSERVATORY): nome poético + só o objetivo **em curso** (tinta plena, anel) precedido dos
+  dois últimos versos vividos bem apagados (`UI_THREAD`); o que vem não está escrito; sem contagens nem
+  porcentagens.
 - **Configurações**: signo de afinação → cartão com qualidade, câmera cinematográfica, volumes
   Master/Ambience/SFX (`AudioDirector.set_bus_volume_db`) e as poucas teclas. Sons de UI (`ui_tick`,
   `ui_select`) só em interação do usuário, via grupo `audio_director`.

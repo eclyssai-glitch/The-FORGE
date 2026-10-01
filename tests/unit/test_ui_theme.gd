@@ -126,4 +126,4 @@ func test_dormant_seed_select_contract() -> void:
 		names.append(String(u["name"]))
 	for want: String in ["select", "select_color", "select_energy", "energy", "cold_color", "cold_energy"]:
 		assert_has(names, want, "uniform %s" % want)
-	assert_true(m.shader.code.contains("pow(1.0 - nv, 3.0)"), "BONE rim falls off as (1 - n.v)^3")
+	assert_true(m.shader.code.contains("pow(max(1.0 - nv, 0.0), 3.0)"), "BONE rim falls off as (1 - n.v)^3")

@@ -118,7 +118,7 @@ void fragment() {
 
 	// --- Emission (every term has a narrative owner) ---
 	float nv = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	float fres = pow(1.0 - nv, 3.0);
+	float fres = pow(max(1.0 - nv, 0.0), 3.0);
 	vec3 emit = vec3(0.0);
 
 	// EMBER: only where energy flows (assembly, final lock), scaled by global power.
@@ -128,7 +128,7 @@ void fragment() {
 	emit += ember_color * lock * lock_line * ember_edge_energy * lock_edge_share;
 
 	// PALE: verification sweep band (world Y) and per-segment check flash.
-	float dy = (v_world.y - scan_y) / scan_half_width;
+	float dy = (v_world.y - scan_y) / max(scan_half_width, 1e-3);
 	float band = exp(-dy * dy) * clamp(scan_strength, 0.0, 1.0);
 	emit += pale_color * band * (line * pale_edge_energy + chamfer * 0.45 + 0.05);
 	emit += pale_color * flash * (line * v_outer * flash_edge_energy + 0.08);

@@ -55,7 +55,7 @@ func set_genesis(on: bool) -> void:
 	marker.visible = not on
 	seal.visible = on
 	label.theme_type_variation = &"SealText" if on else &"BadgeText"
-	sub.theme_type_variation = &"NoteFaint" if on else &"DataDim"
+	sub.theme_type_variation = &"SealNote" if on else &"DataDim"
 	sub.text = ("·  " + SUBTEXT_GENESIS) if on else ("·  " + SUBTEXT)
 
 

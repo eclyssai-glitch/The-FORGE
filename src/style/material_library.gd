@@ -129,12 +129,23 @@ static func dormant_seed() -> ShaderMaterial:
 ## additive, round soft disc (shaders/particle_mote.gdshader), alpha from the particle colour
 ## ramp (vertex colour). Uniform `near_fade` (Vector2, view metres: hidden -> visible), default
 ## (3.5, 8.0). `color` must be a Palette colour; cached per colour — duplicate() to tune near_fade.
+## GOLD-family motes (red minus blue above GOLD_MOTE_WARMTH) draw a smaller disc and only a share of
+## their instances (from instance 8 on; the first motes of a cloud are never touched).
+const GOLD_MOTE_WARMTH := 0.15
+const GOLD_MOTE_DISC := 0.6
+const GOLD_MOTE_KEEP := 0.55
+
+
 static func mote(color: Color) -> ShaderMaterial:
 	var key := StringName("mote_" + color.to_html(true))
 	if not _cache.has(key):
 		var m := _shader_material("particle_mote")
 		m.set_shader_parameter("color", color)
 		m.set_shader_parameter("near_fade", Vector2(3.5, 8.0))
+		if color.r - color.b > GOLD_MOTE_WARMTH:
+			# GOLD family: fewer, smaller motes (dust, never bokeh).
+			m.set_shader_parameter("disc_radius", GOLD_MOTE_DISC)
+			m.set_shader_parameter("keep_share", GOLD_MOTE_KEEP)
 		_cache[key] = m
 	return _cache[key]
 
@@ -184,7 +195,7 @@ static func miku_body() -> ShaderMaterial:
 		m.set_shader_parameter("blush_color", Palette.BLUSH)
 		m.set_shader_parameter("rose_color", Palette.DUSK_ROSE)
 		m.set_shader_parameter("gold_color", Palette.GOLD)
-		m.set_shader_parameter("shadow_color", Palette.INDIGO.lerp(Palette.NEBULA, 0.5))
+		m.set_shader_parameter("shadow_color", Palette.NEBULA.lerp(Palette.DUSK_ROSE, 0.55))
 		m.set_shader_parameter("awaken", 1.0)
 		m.set_shader_parameter("breath", 0.5)
 		m.set_shader_parameter("select", 0.0)
@@ -233,27 +244,41 @@ static func halo_arc() -> ShaderMaterial:
 	return _cache[&"halo_arc"]
 
 
-## Auxiliary hands — polished night basalt (clearcoat) with stars inside the stone and gold
-## kintsugi veins. Vertex colour red = baked AO. Uniforms: `veins` 0..1 (lit network + glow),
-## `motion_time`, `select` 0..1, `vein_scale`, `star_scale`.
+## Auxiliary hands — legible night stone (satin, low clearcoat) with nebular depth and stars inside
+## the stone, a thin ICE rim and gold kintsugi veins (always a dim inlay). Vertex colour red = baked
+## AO. Uniforms: `veins` 0..1 (lit network + glow), `motion_time`, `select` 0..1, `vein_scale`,
+## `star_scale`, `wrist_point`/`forearm_end`/`wrist_fade` (see set_hand_wrist).
 static func hand_stone() -> ShaderMaterial:
 	if not _cache.has(&"hand_stone"):
 		var m := _shader_material(GENESIS_DIR + "hand_stone")
 		m.set_shader_parameter("stone_color", Palette.STONE)
-		m.set_shader_parameter("stone_light_color", Palette.INDIGO.lerp(Palette.NEBULA, 0.45))
+		m.set_shader_parameter("stone_light_color", Palette.NEBULA.lerp(Palette.LILAC, 0.12))
 		m.set_shader_parameter("star_color", Palette.PEARL.lerp(Palette.ICE, 0.4))
 		m.set_shader_parameter("gold_color", Palette.GOLD)
 		m.set_shader_parameter("gold_deep_color", Palette.GOLD_DEEP)
+		m.set_shader_parameter("rim_color", Palette.ICE)
+		m.set_shader_parameter("depth_color", Palette.NEBULA.lerp(Palette.LILAC, 0.3))
 		m.set_shader_parameter("veins", 0.0)
 		m.set_shader_parameter("select", 0.0)
 		_cache[&"hand_stone"] = m
 	return _cache[&"hand_stone"]
 
 
+## Wrist dissolve of a hand_stone() duplicate: the forearm turns into grains from `wrist` toward
+## `forearm_end` (object space of the hand mesh: the sculpt's "wrist_center" / "forearm_end"
+## anchors). `fade` = shares of that segment where the dissolve starts / nothing is left.
+static func set_hand_wrist(m: ShaderMaterial, wrist: Vector3, forearm_end: Vector3,
+		fade := Vector2(0.05, 0.85)) -> void:
+	m.set_shader_parameter("wrist_point", wrist)
+	m.set_shader_parameter("forearm_end", forearm_end)
+	m.set_shader_parameter("wrist_fade", fade)
+
+
 ## Forming planet (sub-agent). Uniforms 0..1: `formation` (accretion, gold growing edge), `heat`
-## (flowing golden magma), `crust` (dark cracked plates, glowing cracks), `atmosphere` (ice ->
-## dusk-rose fresnel rim). Also `motion_time`, `seed` (per planet), `detail` (octaves), `select`.
-## Far, already-formed planets use a duplicate with formation 1, heat ~0.1, crust 1, atmosphere 1.
+## (flowing golden magma), `crust` (dark cracked plates, glowing cracks), `atmosphere` (lit ICE
+## limb, DUSK_ROSE terminator, haze). Also `motion_time`, `seed` (per planet), `detail` (octaves),
+## `select`, `world_style`. Far, already-formed planets use a duplicate with formation 1, heat ~0.1,
+## crust 1, atmosphere 1 and their family (set_far_world_style).
 static func planet_forming() -> ShaderMaterial:
 	if not _cache.has(&"planet_forming"):
 		var m := _shader_material(GENESIS_DIR + "planet_forming")
@@ -265,6 +290,9 @@ static func planet_forming() -> ShaderMaterial:
 		m.set_shader_parameter("atmo_inner_color", Palette.ICE)
 		m.set_shader_parameter("atmo_outer_color", Palette.DUSK_ROSE)
 		m.set_shader_parameter("accretion_color", Palette.GOLD)
+		m.set_shader_parameter("land_color", Palette.DUSK_ROSE.lerp(Palette.STONE, 0.3))
+		m.set_shader_parameter("band_color", Palette.ICE.lerp(Palette.PEARL, 0.2))
+		m.set_shader_parameter("dust_color", Palette.DUSK_ROSE.lerp(Palette.BLUSH, 0.3))
 		m.set_shader_parameter("formation", 1.0)
 		m.set_shader_parameter("heat", 1.0)
 		m.set_shader_parameter("crust", 0.0)
@@ -272,6 +300,16 @@ static func planet_forming() -> ShaderMaterial:
 		m.set_shader_parameter("detail", PLANET_DETAIL[2])
 		_cache[&"planet_forming"] = m
 	return _cache[&"planet_forming"]
+
+
+## Families of the distant, already-formed worlds (`world_style` of planet_forming()): x = ICE
+## latitude bands, y = rose dust. Index = GenesisScript.FAR_PLANET_NAMES order.
+const FAR_WORLD_STYLES: Array[Vector2] = [Vector2(1.0, 0.0), Vector2(0.0, 1.0)]
+
+
+## Gives a planet_forming() duplicate the look of distant world `index` (FAR_WORLD_STYLES).
+static func set_far_world_style(m: ShaderMaterial, index: int) -> void:
+	m.set_shader_parameter("world_style", FAR_WORLD_STYLES[posmod(index, FAR_WORLD_STYLES.size())])
 
 
 ## Documentation moon — knowledge ice: frosted pale ice with faint strata (pages), cool

@@ -1,10 +1,14 @@
 class_name UiMissionVerse
 extends VBoxContainer
 ## GENESIS mission (OBSERVATORY): a minimal poem instead of a checklist. The mission's name (the part
-## of Mission.title_for after the dash) in spaced capitals, then one line per objective of
-## Mission.evaluate: the objective under way in full ink with an open ring, the fulfilled ones soft
-## with a small filled dot, the ones still to come faint with a tiny dot. No counts, no percentages.
+## of Mission.title_for after the dash) in spaced capitals, then the last PAST_SHOWN verses already
+## lived, barely there (thread ink, a tiny dot), and the objective under way in full ink with an open
+## ring. Older verses and what is still to come are not written (hidden rows). No counts, no
+## percentages.
 ## Rebuilt on event_emitted / world_rebuilt / scenario_changed. Never catches the mouse.
+
+## Verses already lived that stay written (the most recent ones).
+const PAST_SHOWN := 2
 
 var title_label: Label
 var lines_box: VBoxContainer
@@ -84,10 +88,17 @@ func refresh() -> void:
 	if states == _states:
 		return
 	_states = states
+	var last := states.size() - 1
+	for i in states.size():
+		if states[i] == 1:
+			last = i
+			break
 	for i in mini(states.size(), _rows.size()):
 		var l: Label = _rows[i][2]
-		var col: Color = [Palette.UI_INK_FAINT, Palette.UI_INK, Palette.UI_INK_SOFT][states[i]]
+		var col: Color = [Palette.UI_INK_FAINT, Palette.UI_INK, Palette.UI_THREAD][states[i]]
 		l.add_theme_color_override("font_color", col)
+		(_rows[i][0] as Control).visible = states[i] == 1 or (states[i] == 2 and i >= last - PAST_SHOWN \
+				and (i < last or states[last] == 2))
 		(_rows[i][1] as Control).queue_redraw()
 
 
@@ -102,7 +113,7 @@ func _draw_sign(sign: Control, i: int) -> void:
 	var c := sign.size * 0.5
 	match _states[i]:
 		2:
-			sign.draw_circle(c, 2.2, Palette.UI_INK_SOFT, true, -1.0, true)
+			sign.draw_circle(c, 1.4, Palette.UI_THREAD, true, -1.0, true)
 		1:
 			sign.draw_arc(c, 3.6, 0.0, TAU, 20, Palette.UI_INK, 1.0, true)
 		_:

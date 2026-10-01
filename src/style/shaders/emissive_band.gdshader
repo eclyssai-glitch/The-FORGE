@@ -11,7 +11,7 @@ uniform float softness : hint_range(0.05, 1.0) = 0.6;
 
 void fragment() {
 	float across = 1.0 - abs(UV.y * 2.0 - 1.0);
-	float fall = smoothstep(0.0, softness, across);
+	float fall = smoothstep(0.0, max(softness, 1e-3), across);
 	float s = clamp(strength, 0.0, 1.0);
 	ALBEDO = color * intensity * fall * s;
 	ALPHA = fall * s;

@@ -18,6 +18,6 @@ void fragment() {
 	ALBEDO = shell_color;
 	METALLIC = 0.7;
 	ROUGHNESS = 0.36;
-	EMISSION = rim_color * pow(fres, 3.0) * rim_energy
-		+ ember_color * e * pow(fres, 3.0) * ember_rim_energy;
+	float fres3 = pow(max(fres, 0.0), 3.0);
+	EMISSION = rim_color * fres3 * rim_energy + ember_color * e * fres3 * ember_rim_energy;
 }

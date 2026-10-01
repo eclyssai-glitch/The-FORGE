@@ -25,7 +25,7 @@ void vertex() {
 
 void fragment() {
 	float radius = mix(1.0, length(UV - vec2(0.25, 0.75)) * 4.0, v_top);
-	float keep = 1.0 - smoothstep(edge_fade.x, edge_fade.y, radius);
+	float keep = 1.0 - smoothstep(edge_fade.x, max(edge_fade.y, edge_fade.x + 1e-4), radius);
 	ALBEDO = floor_color * keep;
 	METALLIC = 0.0;
 	SPECULAR = specular_amount * keep;
