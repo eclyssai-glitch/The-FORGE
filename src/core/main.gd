@@ -5,7 +5,7 @@ extends Node
 ##   --capture=<dir>         save evidence screenshots of each demo phase to <dir>, then exit
 ##   --capture-only=<prefix> with --capture: only captures whose name starts with <prefix>
 ##   --quality=<low|medium|high|ultra>   force a quality level for this run (not persisted)
-##   --scenario=<origin_chamber|genesis> play that scenario instead of the default one (read
+##   --scenario=<origin_chamber|genesis|living> play that scenario instead of the default one (read
 ##                           by the Simulation autoload at startup, so the world composes it
 ##                           directly); unknown ids are warned about and ignored
 ##   --style-frames=<dir>    save the GENESIS style frames (StyleFrames, HUD hidden, 1920x1080)

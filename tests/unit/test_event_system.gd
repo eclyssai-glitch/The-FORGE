@@ -29,7 +29,7 @@ func test_script_uses_only_known_types_and_covers_all() -> void:
 
 func test_all_types_is_the_union_of_scenario_types() -> void:
 	var union := {}
-	for t in SimEvent.ORIGIN_TYPES + SimEvent.GENESIS_TYPES:
+	for t in SimEvent.ORIGIN_TYPES + SimEvent.GENESIS_TYPES + SimEvent.LIVING_TYPES:
 		union[t] = true
 	assert_eq(SimEvent.ALL_TYPES.size(), union.size(), "ALL_TYPES lists each type once")
 	for t in SimEvent.ALL_TYPES:
@@ -39,6 +39,7 @@ func test_all_types_is_the_union_of_scenario_types() -> void:
 	for t in [SimEvent.SESSION_OPENED, SimEvent.SESSION_COMPLETED]:
 		assert_has(SimEvent.ORIGIN_TYPES, t)
 		assert_has(SimEvent.GENESIS_TYPES, t)
+		assert_has(SimEvent.LIVING_TYPES, t)
 
 
 func test_script_follows_required_sequence() -> void:

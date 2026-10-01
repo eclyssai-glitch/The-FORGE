@@ -280,9 +280,12 @@ func test_catalog_statuses_progress_with_the_state() -> void:
 
 
 func test_scenario_registry() -> void:
-	assert_eq(Scenario.IDS.size(), 2)
+	assert_eq(Scenario.IDS.size(), 3)
 	assert_eq(Scenario.IDS[0], Scenario.ORIGIN_CHAMBER)
 	assert_eq(Scenario.IDS[1], Scenario.GENESIS)
+	assert_eq(Scenario.IDS[2], Scenario.LIVING)
+	assert_true(Scenario.supports_seek(Scenario.GENESIS))
+	assert_true(Scenario.supports_seek(Scenario.ORIGIN_CHAMBER))
 	assert_eq(Scenario.DEFAULT, Scenario.ORIGIN_CHAMBER)
 	assert_true(Scenario.is_valid(&"genesis"))
 	assert_false(Scenario.is_valid(&"nope"))

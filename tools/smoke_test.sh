@@ -6,8 +6,16 @@
 # The world must be composed for the scenario with every module (`modules=N/N`, AudioDirector
 # included); GENESIS also requires the audio anchors planet/miku/hands (`audio=present anchors=`).
 # Without a sound card (Linux, no /dev/snd) the Dummy audio driver is used (tools/_proc.sh).
+# LIVING (`--scenario=living`, Loop 5): played at 8x to the end, then real interaction requests
+# (clicks on MIKU/a world, call-line texts: attention, world target, config patches, REQUIRES_ASSET,
+# SEMANTIC without provider) must end with their expected status, the configuration must change
+# and be restored exactly (`config_mutated=true`, `config_reverted=true`), seek is refused and
+# reset recomposes the scene.
 # Exit 0 = PASS. A HUD without those groups fails (`ui=absent`) unless SMOKE_ALLOW_MISSING_UI=1,
 # which passes --allow-missing-ui to the game (only for branches where the UI does not exist yet).
+# SMOKE_ALLOW_MISSING_MODULES=1 (LIVING only) passes --allow-missing-modules: missing world modules
+# are reported as WARN and `modules=N/M` with N != M does not fail (only for branches where the
+# animator's LIVING modules do not exist yet).
 # Fails on: RESULT=FAIL, missing RESULT line (e.g. a script failed to load),
 # any SCRIPT ERROR / Parse Error in the log, a `modules=N/M` line with N != M (a world module
 # — entity, fx or camera script — failed to load), or the TIMEOUT (seconds, default 240) expiring.
@@ -25,6 +33,7 @@ if [ "${1:-}" = "--pack" ]; then pack="$2"; shift 2; fi
 TIMEOUT="${TIMEOUT:-240}"
 game_flags=(--smoke-test)
 if [ "${SMOKE_ALLOW_MISSING_UI:-0}" = "1" ]; then game_flags+=(--allow-missing-ui); fi
+if [ "${SMOKE_ALLOW_MISSING_MODULES:-0}" = "1" ]; then game_flags+=(--allow-missing-modules); fi
 GRACE="${SMOKE_GRACE:-15}"
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
 log="$(mktemp)"
@@ -54,7 +63,7 @@ fi
 modules_line="$(grep -oE "^modules=[0-9]+/[0-9]+" "$log" | tail -n1 || true)"
 if [ -z "$modules_line" ]; then echo "smoke_test: no modules= line." >&2; exit 1; fi
 loaded="${modules_line#modules=}"; total="${loaded#*/}"; loaded="${loaded%/*}"
-if [ "$loaded" != "$total" ]; then
+if [ "$loaded" != "$total" ] && [ "${SMOKE_ALLOW_MISSING_MODULES:-0}" != "1" ]; then
   echo "smoke_test: only $loaded of $total world modules loaded — failing." >&2; exit 1
 fi
 ui_line="$(grep -oE "^ui=[a-z]+" "$log" | tail -n1 || true)"

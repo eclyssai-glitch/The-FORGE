@@ -52,6 +52,45 @@ const CAPTURES_GENESIS: Array = [
 	["g17_planet_focus", 55.5, SessionState.Mode.UNIVERSE, &"planet_forming", &"planet_forming"],
 	["g18_hud_hidden", 55.5, SessionState.Mode.FORGE, {"hud": false}],
 ]
+## LIVING capture points (Loop 5): [file name, simulation time, mode, (options)]. LIVING has no
+## seek (ADR-015): the scenario PLAYS in real time from T+0 and each shot is taken when
+## Simulation.time reaches it; LivingScript.USER_CUES are injected as real input on the way
+## (LivingCuePlayer). Segments: LIFE 0.5, PUPPET 12 (hands 13/19/25), WORLD WORK 31 (steps
+## 33/39/45/51), FAILURE 57 (fails 61/68, torn down 70.5, recovered 79, whole 83), ATTENTION 89
+## (click MIKU 90), TARGET 101 (click VESPER 102), CONFIGURATION 114 ("aumente sua altura" 115,
+## SEMANTIC 130), end 140.
+const CAPTURES_LIVING: Array = [
+	["l01_life", 8.0, SessionState.Mode.FORGE],
+	["l02_one_hand", 16.0, SessionState.Mode.FORGE],
+	["l03_two_hands", 22.0, SessionState.Mode.FORGE],
+	["l04_many_hands", 28.5, SessionState.Mode.FORGE],
+	["l05_gather", 36.0, SessionState.Mode.FORGE],
+	["l06_mantle", 48.0, SessionState.Mode.FORGE],
+	["l07_failure", 62.5, SessionState.Mode.FORGE],
+	["l08_composure_lost", 71.5, SessionState.Mode.FORGE],
+	["l09_recovered", 84.5, SessionState.Mode.FORGE],
+	["l10_attention", 92.0, SessionState.Mode.FORGE],
+	["l11_world_target", 105.0, SessionState.Mode.FORGE],
+	["l12_config_file", 120.0, SessionState.Mode.FORGE],
+	["l13_config_applied", 127.0, SessionState.Mode.FORGE],
+	["l14_semantic_declined", 136.5, SessionState.Mode.FORGE],
+	["l15_hud_hidden", 139.0, SessionState.Mode.FORGE, {"hud": false}],
+]
+## LIVING smoke: requests sent through the real Session paths (clicks: Session.click; text:
+## Session.submit_call) -> [kind ("click"|"say"), argument, expected InteractionRouter status].
+const SMOKE_LIVING_REQUESTS: Array = [
+	["click", &"miku", InteractionRouter.ST_ATTENTION],
+	["click", &"world_vesper", InteractionRouter.ST_WORLD],
+	["say", "Miku!", InteractionRouter.ST_ATTENTION],
+	["say", "Miku, trabalhe no planeta da direita", InteractionRouter.ST_WORLD],
+	["say", "Miku, aumente sua altura", InteractionRouter.ST_APPLIED],
+	["say", "appearance.height 1.04", InteractionRouter.ST_APPLIED],
+	["say", "Miku, ombros um pouco mais largos", InteractionRouter.ST_APPLIED],
+	["say", "Miku, me dê asas", InteractionRouter.ST_REQUIRES_ASSET],
+	["say", "Miku, fique mais curiosa, mas menos impulsiva", InteractionRouter.ST_PROVIDER_UNAVAILABLE],
+]
+## Real seconds the LIVING smoke waits for one request's plan (the body performs every action).
+const SMOKE_REQUEST_TIMEOUT := 45.0
 ## Real seconds a capture waits after seek/mode change (and after a focus request).
 const CAPTURE_SETTLE := 2.4
 const FOCUS_SETTLE := 3.6
@@ -78,10 +117,18 @@ func _ready() -> void:
 
 ## Capture list of a scenario.
 static func captures_for(scenario: StringName) -> Array:
-	return CAPTURES_GENESIS if scenario == Scenario.GENESIS else CAPTURES
+	match scenario:
+		Scenario.GENESIS:
+			return CAPTURES_GENESIS
+		Scenario.LIVING:
+			return CAPTURES_LIVING
+	return CAPTURES
 
 
 func _run_smoke() -> void:
+	if Simulation.scenario == Scenario.LIVING:
+		await _run_smoke_living()
+		return
 	var lines: PackedStringArray = []
 	var ok := true
 	var received: Array[StringName] = []
@@ -165,6 +212,10 @@ static func _smoke_audio(world: WorldScript, lines: PackedStringArray) -> bool:
 
 ## Report line with the final phase and the scenario's formation counters.
 static func phase_line(state: ScenarioState) -> String:
+	if state is LivingState:
+		var lv := state as LivingState
+		return "phase=%s steps=%d/%d failures=%d recovered=%s whole=%s" % [lv.phase_name(), lv.steps_done(),
+			LivingScript.STEP_COUNT, lv.failures, lv.recovered_at >= 0.0, lv.world_complete_at >= 0.0]
 	if state is GenesisState:
 		var g := state as GenesisState
 		return "phase=%s layers=%d/%d moons=%d/%d" % [g.phase_name(), g.layers_formed(), GenesisScript.LAYER_COUNT,
@@ -269,6 +320,9 @@ static func _text_has_demo(n: Node) -> bool:
 func _run_capture(dir: String) -> void:
 	var abs_dir := dir if dir.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(dir)
 	DirAccess.make_dir_recursive_absolute(abs_dir)
+	if Simulation.scenario == Scenario.LIVING:
+		await _run_capture_living(abs_dir)
+		return
 	# Captures must not depend on how far the entry fade got: end it before anything is shot.
 	var main := get_parent()
 	if main and main.has_method(&"finish_fade"):
@@ -351,6 +405,183 @@ func _run_style_frames(dir: String) -> void:
 		f.store_string("\n".join(names) + "\n")
 		f.close()
 	Session.set_hud_visible(true)
+	_quit(0)
+
+
+# ------------------------------------------------------------------ LIVING (Loop 5)
+
+
+## LIVING smoke: plays the scenario at SMOKE_SPEED to the end (modules, events, mission), then
+## sends SMOKE_LIVING_REQUESTS through the real Session paths to the LivingInteraction module and
+## waits for each plan to be performed by MIKU (or the null executor): every request must end
+## with its expected status, the configuration must really change (appearance.height) and be put
+## back exactly as it was (the player's user file is snapshotted and restored). Then pause holds,
+## seek is refused, and reset recomposes the scene (fresh nodes) at phase 0. Then the native UI.
+## `--allow-missing-modules` reports missing world modules as WARN instead of FAIL (only for
+## branches where the animator's modules do not exist yet).
+func _run_smoke_living() -> void:
+	var lines: PackedStringArray = []
+	var ok := true
+	var received: Array[StringName] = []
+	Simulation.event_emitted.connect(func(e: SimEvent) -> void: received.append(e.id))
+	Session.set_mode(Session.Mode.FORGE)
+	Simulation.set_speed(SMOKE_SPEED)
+	Simulation.start()
+	var started := Time.get_ticks_msec()
+	var frames := 0
+	while Simulation.status != EventTimeline.Status.COMPLETE:
+		await get_tree().process_frame
+		frames += 1
+		if Time.get_ticks_msec() - started > 120_000:
+			lines.append("FAIL timeout after %d frames at t=%.1f" % [frames, Simulation.time])
+			ok = false
+			break
+	var elapsed := (Time.get_ticks_msec() - started) / 1000.0
+	var expected := Scenario.build_events(Simulation.scenario).size()
+	lines.append("scenario=%s" % Simulation.scenario)
+	lines.append("renderer=%s adapter=%s" % [RenderingServer.get_current_rendering_method(), RenderingServer.get_video_adapter_name()])
+	lines.append("quality=%s" % Quality.level_name())
+	var world := _world()
+	var expected_modules := WorldScript.expected_module_names(Simulation.scenario)
+	var missing: Array[String] = expected_modules.duplicate()
+	if world and world.scenario == Simulation.scenario:
+		missing = world.missing_modules()
+	lines.append("modules=%d/%d" % [expected_modules.size() - missing.size(), expected_modules.size()])
+	var modules_ok := missing.is_empty()
+	if not modules_ok:
+		var allowed := options.has("allow-missing-modules")
+		lines.append("%s modules missing: %s" % ["WARN" if allowed else "FAIL", ", ".join(PackedStringArray(missing))])
+		modules_ok = allowed
+	var audio_ok := _smoke_audio(world, lines)
+	lines.append("events_received=%d expected=%d" % [received.size(), expected])
+	lines.append(phase_line(Simulation.state))
+	lines.append("frames=%d wall_seconds=%.2f avg_fps=%.1f" % [frames, elapsed, frames / maxf(elapsed, 0.001)])
+	var mission := Mission.evaluate(Simulation.emitted_events(), Simulation.scenario)
+	lines.append("mission_objectives=%d/%d" % [Mission.completed_count(mission), mission.size()])
+	ok = ok and modules_ok and audio_ok and received.size() == expected and Simulation.state.is_complete() \
+		and Mission.completed_count(mission) == mission.size()
+	ok = await _smoke_living_requests(world, lines) and ok
+	# Pause holds; seek is refused; reset recomposes.
+	Simulation.reset()
+	await get_tree().process_frame
+	Simulation.start()
+	for i in 5:
+		await get_tree().process_frame
+	Simulation.pause()
+	var paused_at := Simulation.time
+	for i in 10:
+		await get_tree().process_frame
+	var pause_holds := is_equal_approx(paused_at, Simulation.time) and Simulation.status == EventTimeline.Status.PAUSED
+	Simulation.seek(paused_at + 30.0)
+	var seek_refused := is_equal_approx(paused_at, Simulation.time)
+	var before: Node = world.modules.get("LivingInteraction") if world else null
+	Simulation.reset()
+	var after: Node = world.modules.get("LivingInteraction") if world else null
+	var recomposed := world != null and before != null and after != null and before != after \
+		and world.missing_modules().size() == missing.size()
+	var reset_ok := Simulation.time == 0.0 and Simulation.state.phase_index() == 0 \
+		and Simulation.status == EventTimeline.Status.IDLE and recomposed
+	ok = ok and pause_holds and seek_refused and reset_ok
+	lines.append("pause_holds=%s seek_refused=%s reset_ok=%s recomposed=%s" % [pause_holds, seek_refused, reset_ok, recomposed])
+	await get_tree().process_frame
+	ok = await _smoke_ui(lines) and ok
+	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
+	_write_report(lines)
+	_quit(0 if ok else 1)
+
+
+## Sends SMOKE_LIVING_REQUESTS and checks their reports and the configuration round trip.
+func _smoke_living_requests(world: WorldScript, lines: PackedStringArray) -> bool:
+	var node: Node = world.modules.get("LivingInteraction") if world else null
+	var li := node as LivingInteraction
+	if li == null:
+		lines.append("FAIL interaction: no LivingInteraction module")
+		return false
+	var config := li.config
+	var snap: Variant = config.snapshot()
+	var values_before := config.values()
+	config.reset()
+	li.bind_miku()
+	lines.append("interaction executor=%s provider=%s" % ["miku" if li.is_bound() else "null",
+		"available" if li.router.port.is_available() else "unavailable"])
+	var reports: Array[Dictionary] = []
+	var on_report := func(r: Dictionary) -> void: reports.append(r)
+	Session.interaction_reported.connect(on_report)
+	var ok := true
+	var done := 0
+	for req: Array in SMOKE_LIVING_REQUESTS:
+		var count := reports.size()
+		if String(req[0]) == "click":
+			Session.click(StringName(req[1]))
+		else:
+			Session.open_call_line()
+			Session.submit_call(String(req[1]))
+		var until := Time.get_ticks_msec() + int(SMOKE_REQUEST_TIMEOUT * 1000.0)
+		while (reports.size() == count or li.router.busy()) and Time.get_ticks_msec() < until:
+			await get_tree().process_frame
+		if reports.size() == count:
+			lines.append("FAIL request %s %s: no report within %.0fs" % [req[0], req[1], SMOKE_REQUEST_TIMEOUT])
+			ok = false
+			continue
+		var r: Dictionary = reports[count]
+		var good := String(r["status"]) == String(req[2])
+		ok = ok and good
+		if good:
+			done += 1
+		lines.append("%srequest %s \"%s\" -> %s/%s %s plan=%d%s" % ["" if good else "FAIL ", req[0], req[1],
+			r["kind"], r["route"], r["status"], (r["plan"] as Array).size(),
+			(" %s %s->%s" % [r["path"], str(r["old_value"]), str(r["new_value"])]) if String(r["path"]) != "" else ""])
+	Session.interaction_reported.disconnect(on_report)
+	lines.append("requests=%d/%d" % [done, SMOKE_LIVING_REQUESTS.size()])
+	var height := float(config.get_value("appearance.height"))
+	var mutated := is_equal_approx(height, 1.04) and config.has_user_file()
+	lines.append("config_mutated=%s (appearance.height %.3f -> %.3f, shoulder_width %.3f)" % [mutated,
+		float(config.default_value("appearance.height")), height, float(config.get_value("appearance.shoulder_width"))])
+	config.restore_snapshot(snap)
+	li.bind_miku()
+	var reverted: bool = config.values() == values_before and config.snapshot() == snap
+	lines.append("config_reverted=%s" % reverted)
+	return ok and mutated and reverted
+
+
+## LIVING captures: plays from T+0 in real time (no seek), injects LivingScript.USER_CUES as real
+## input (LivingCuePlayer) and saves each CAPTURES_LIVING shot when Simulation.time reaches it.
+## The player's configuration is reset for the run (deterministic MIKU) and restored at the end.
+func _run_capture_living(abs_dir: String) -> void:
+	var main := get_parent()
+	if main and main.has_method(&"finish_fade"):
+		main.call(&"finish_fade")
+	var store := MikuConfig.new()
+	store.reload()
+	var snap: Variant = store.snapshot()
+	store.reset()
+	Simulation.reset()  # recomposes the scene: MIKU starts from the default configuration
+	Session.set_mode(SessionState.Mode.FORGE)
+	Session.set_cinematic(true)
+	Session.select(&"")
+	await _settle(1.5)
+	var cues := LivingCuePlayer.new()
+	add_child(cues)
+	var only := String(options.get("capture-only", ""))
+	Simulation.set_speed(1.0)
+	Simulation.start()
+	for c in CAPTURES_LIVING:
+		var t := float(c[1])
+		while Simulation.time < t and Simulation.status == EventTimeline.Status.PLAYING:
+			await get_tree().process_frame
+		if only != "" and not String(c[0]).begins_with(only):
+			continue
+		Session.set_hud_visible(bool(capture_options(c).get("hud", true)))
+		await RenderingServer.frame_post_draw
+		var img := get_viewport().get_texture().get_image()
+		var path := abs_dir.path_join("%s.png" % c[0])
+		img.save_png(path)
+		print("[capture] %s (t=%.1f, %s, hud=%s, %dx%d, quality=%s)" % [path, Simulation.time, Session.mode_name(),
+			Session.hud_visible, img.get_width(), img.get_height(), Quality.level_name()])
+	Session.set_hud_visible(true)
+	for r: Array in cues.results:
+		print("[capture] cue %s %s: %s" % [r[0][1], r[0][2], "real input" if r[1] else "fallback"])
+	store.restore_snapshot(snap)
 	_quit(0)
 
 

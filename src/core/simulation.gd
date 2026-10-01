@@ -3,7 +3,10 @@ extends Node
 ## The only producer of simulation events. Everything else listens to its signals
 ## or reads the derived state + `time` — nothing else mutates simulation state.
 ## One scenario plays at a time (`scenario`, `set_scenario()`; see Scenario): its events feed
-## `world` (ORIGIN CHAMBER) or `genesis` (GENESIS); `state` is whichever is active.
+## `world` (ORIGIN CHAMBER), `genesis` (GENESIS) or `living` (LIVING, Loop 5); `state` is whichever
+## is active. LIVING does not support seek (ADR-015: its character is real-time state): seek()
+## is refused there (warning, nothing changes) and reset() is the way back to the start (the
+## world recomposes the scene on world_rebuilt).
 
 signal event_emitted(event: SimEvent)
 ## Emitted after seek/reset/set_scenario: listeners must rebuild from the state and `emitted_events()`.
@@ -26,12 +29,22 @@ var world: WorldState
 ## GENESIS state. Fed only while GENESIS is the active scenario; otherwise it stays fresh (STILL).
 ## GENESIS visuals read `Simulation.genesis` + `Simulation.time`.
 var genesis: GenesisState
+## LIVING state (the prototype's work orders and test segments). Fed only while LIVING is active.
+var living: LivingState
+
+## One warning per run for refused seeks (a scrubbing UI would repeat them every frame).
+var _seek_refused_warned := false
 
 ## State of the active scenario (`world` or `genesis`), for scenario-agnostic readers
 ## (phase name, completion, Scenario.entity_status).
 var state: ScenarioState:
 	get:
-		return genesis if scenario == Scenario.GENESIS else world
+		match scenario:
+			Scenario.GENESIS:
+				return genesis
+			Scenario.LIVING:
+				return living
+		return world
 
 
 func _ready() -> void:
@@ -125,7 +138,14 @@ func reset() -> void:
 	playback_changed.emit(timeline.status)
 
 
+## Moves the playhead to `t` and rebuilds the active state. Refused (warning, nothing changes)
+## in scenarios without seek (Scenario.supports_seek: LIVING) — use reset() there.
 func seek(t: float) -> void:
+	if not Scenario.supports_seek(scenario):
+		if not _seek_refused_warned:
+			_seek_refused_warned = true
+			push_warning("Simulation: %s does not support seek (real-time character, ADR-015); use reset()." % scenario)
+		return
 	_fresh_states()
 	var events := timeline.seek(t)
 	if scenario == Scenario.GENESIS:
@@ -152,3 +172,4 @@ func duration() -> float:
 func _fresh_states() -> void:
 	world = WorldState.new()
 	genesis = GenesisState.new()
+	living = LivingState.new()

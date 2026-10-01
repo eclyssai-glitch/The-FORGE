@@ -2,14 +2,15 @@
 
 Dono: `game-engineer`. Responsabilidade: semântica e intenção narrativa dos eventos simulados.
 Fonte canônica de tempos e textos: `src/events/origin_chamber_script.gd` (ORIGIN CHAMBER) e
-`src/events/genesis_script.gd` (GENESIS). Procedimento para alterar: skill `demo-events`.
+`src/events/genesis_script.gd` (GENESIS) e `src/events/living_script.gd` (LIVING). Procedimento para alterar: skill `demo-events`.
 
 Todos os eventos são fictícios. Nenhum representa, imita ou prepara integração com serviços reais.
 
-Há dois cenários (`src/events/scenario.gd`, detalhes em `docs/ARCHITECTURE.md`): **ORIGIN CHAMBER**
-(padrão até a virada da Fase C do Loop 4) e **GENESIS** (`--scenario=genesis`). `SimEvent.ORIGIN_TYPES`
-e `SimEvent.GENESIS_TYPES` listam os tipos de cada roteiro; `SimEvent.ALL_TYPES` é a união (cada tipo
-uma vez). `session.opened` e `session.completed` são comuns aos dois.
+Há três cenários (`src/events/scenario.gd`, detalhes em `docs/ARCHITECTURE.md`): **ORIGIN CHAMBER**
+(padrão até a virada da Fase C do Loop 4), **GENESIS** (`--scenario=genesis`) e **LIVING**
+(`--scenario=living`, Loop 5). `SimEvent.ORIGIN_TYPES`, `SimEvent.GENESIS_TYPES` e `SimEvent.LIVING_TYPES`
+listam os tipos de cada roteiro; `SimEvent.ALL_TYPES` é a união (cada tipo uma vez). `session.opened` e
+`session.completed` são comuns aos três.
 
 ## ORIGIN CHAMBER
 
@@ -83,3 +84,49 @@ Helpers puros para o visual (`GenesisState`/`ScenarioState`): `progress(at, now,
 smoothstep; 0 antes do evento ou se não ocorreu), `since(at, now)`, `layer_progress(i, now, ramp)`,
 `moon_progress(i, now, ramp)`, `formation(now, ramp)` (0 antes da semente, 1 só com o planeta estável,
 monotônico), `layers_formed()`, `moons_formed()`, `layer_at(i)`, `moon_at(i)`.
+
+## LIVING (Loop 5 — protótipo MIKU LIVING CHARACTER)
+
+O `Simulation` emite as **ordens de trabalho** e seus desfechos; a mente de MIKU (animator) **reage** a eles
+em tempo real (ADR-015: sem seek; reset = recompor a cena). A vida dela (segmento 1) não tem eventos: é dela.
+Os testes 5–7 são abertos por marcos; o que acontece neles vem do usuário (sistema de interação,
+`docs/AGENT.md`). Tempos: constantes de `LivingScript` (`MILESTONE_TIMES`, `HAND_CUES`, `STEP_CUES`,
+`FAIL_CUES`, `T_*`, `USER_CUES`, `DURATION` = 140 s).
+
+| T (s) | Tipo | Rótulo | Significado | Efeito (`LivingState`) |
+|---|---|---|---|---|
+| 0 | `session.opened` | SESSION OPENED | Abre a sessão (simulada) | `session_at` |
+| 0,5 | `living.milestone` (1) | TEST 1 · LIFE | Ela vive antes de qualquer trabalho | `test`, fase LIFE |
+| 12 | `living.milestone` (2) | TEST 2 · PUPPET | Marionetes | fase PUPPET |
+| 13 / 19 / 25 | `living.hands` (1 / 2 / 4) | 1 HAND · 2 HANDS · 4 HANDS | O trabalho pede 1, 2, depois 4 mãos | `hands`, `hands_at` |
+| 31 | `living.milestone` (3) | TEST 3 · WORLD WORK | Construir um mundo | fase WORLD WORK |
+| 31,5 | `living.work_order` | WORK ORDER · CALYX | Ordem `wo-calyx`: 5 etapas (`payload.steps`) | `order_*` |
+| 33 / 39 / 45 / 51 | `living.work_step` (0–3) | GATHER · COMPRESS · MANTLE · CRUST | Reunir matéria, comprimir o núcleo, manto, crosta (`payload.hands` 2/2/3/4) | `step`, `step_name`, `attempt`, `step_times`, `hands` |
+| 57 | `living.milestone` (4) | TEST 4 · FAILURE | Algo dá errado | fase FAILURE |
+| 57,5 | `living.work_step` (4, tentativa 1) | SKY | Tecer o céu (2 mãos) | idem |
+| 61 | `living.work_failed` (1) | SKY FAILS | O céu rasga | `failures`, `failed_at` |
+| 64,5 | `living.work_step` (4, tentativa 2) | SKY · ATTEMPT 2 | Correção elegante (2 mãos) | idem |
+| 68 | `living.work_failed` (2) | SKY FAILS AGAIN | Falha de novo: ela perde a compostura | idem |
+| 70,5 | `living.work_dismantled` | TORN DOWN | O céu defeituoso é desmontado por 6 mãos (controle agressivo) | `dismantled_at`, `hands` = 6 |
+| 75 | `living.work_step` (4, tentativa 3) | SKY · ATTEMPT 3 | Refaz (4 mãos) | idem |
+| 79 | `living.work_recovered` | THE SKY HOLDS | O céu se sustenta: recuperação | `recovered_at` |
+| 83 | `living.world_complete` | CALYX IS WHOLE | O mundo está completo | `world_complete_at` |
+| 89 | `living.milestone` (5) | TEST 5 · USER ATTENTION | Janela para chamar MIKU (cue de automação: clique em MIKU em 90) | fase USER ATTENTION |
+| 101 | `living.milestone` (6) | TEST 6 · WORLD TARGET | Janela para indicar um mundo (cue: clique em VESPER em 102) | fase WORLD TARGET |
+| 114 | `living.milestone` (7) | TEST 7 · CONFIGURATION | Janela para mudar uma propriedade (cues: "Miku, aumente sua altura" em 115; pedido SEMANTIC sem provider em 130) | fase CONFIGURATION |
+| 140 | `session.completed` | SESSION COMPLETE | Fim; nada foi enviado ou recebido | fase COMPLETE |
+
+Fases (`LivingState.PHASE_NAMES`): STILLNESS → LIFE → PUPPET → WORLD WORK → FAILURE → USER ATTENTION →
+WORLD TARGET → CONFIGURATION → COMPLETE. `steps_done()` conta as etapas concluídas (a que falha só conta depois
+de `work_recovered`); `is_failing()` vale entre uma falha e a recuperação.
+
+Mundos (`LivingScript.WORLDS`, ids fictícios): **VESPER** (`world_vesper`, esquerda), **CALYX** (`world_calyx`,
+centro — o mundo da ordem roteirizada), **ORRIN** (`world_orrin`, direita), com âncoras padrão para o layout do
+animator. Entidades (`LivingCatalog`): `miku` + os três mundos; status: MIKU STILL → fase / STRAINED durante a
+falha; mundo WAITING / ORDERED / `<ETAPA> · n/5` / FAILING / WHOLE.
+
+`USER_CUES` só servem à automação (capturas, tour de gravação), que os injeta como **entrada real**
+(`LivingCuePlayer`); jogando, o usuário age quando quiser.
+
+Missão (`Mission.evaluate(emitted, &"living")`, `Mission.LIVING_TITLE`): 9 objetivos (vida, marionetes,
+ordem, 5 etapas, 2 falhas, desmontagem, recuperação, mundo inteiro, abrir os testes 5–7).

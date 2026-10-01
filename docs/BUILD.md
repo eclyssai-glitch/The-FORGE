@@ -43,6 +43,8 @@ ou outros templates mudam o binário.
 | Cenário GENESIS | `tools/smoke_test.sh --scenario=genesis`, `tools/capture_evidence.sh <dir> --scenario=genesis` |
 | Style frames GENESIS (≥ 6, HUD oculto, 1920×1080) | `tools/style_frames.sh <dir> [--quality=<nível>]` (HIGH por padrão) |
 | Vídeo do jogo real GENESIS com áudio (MP4 H.264 + AAC) | `tools/record_genesis.sh [--hud=off] [--resolution=WxH]` |
+| Cenário LIVING (Loop 5): roteiro + pedidos reais + config mutada e revertida | `tools/smoke_test.sh --scenario=living`, `tools/capture_evidence.sh <dir> --scenario=living` |
+| Vídeo do protótipo LIVING com interações reais e áudio | `tools/record_living.sh [--hud=off] [--resolution=WxH] [--until=<s>]` |
 
 O smoke reprova se: `RESULT=FAIL`, falta a linha `RESULT`, há `SCRIPT ERROR`/`Parse Error` no log,
 a linha `modules=N/M` tem N ≠ M (script de entidade, fx, áudio ou câmera do cenário ativo ausente/quebrado;
@@ -188,3 +190,34 @@ LRA 8,1 LU, pico −6,1 dBFS; tour `done t=60.52 sim=T+56.00 status=COMPLETE`; q
 detecção). Motivo (Loop 4 r1): sob Xvfb + llvmpipe o AUTO detecta CPU → LOW, e os quadros julgados pelo
 art-critic saíam em LOW (sem MSAA, sombra mais grossa) em vez do perfil-alvo (desktop com GPU dedicada). Cada
 linha `[capture]`/`[style-frame]` do log traz `quality=<nível>`. Smoke continua em AUTO.
+
+## LIVING (Loop 5): smoke, capturas e gravação com interações reais
+
+**Smoke** — `tools/smoke_test.sh --scenario=living`: o roteiro (140 s) a 8×, depois nove pedidos pelos caminhos
+reais da `Session` (clique em MIKU, clique em VESPER, "Miku!", "Miku, trabalhe no planeta da direita", "Miku,
+aumente sua altura", `appearance.height 1.04`, "Miku, ombros um pouco mais largos", "Miku, me dê asas", "Miku,
+fique mais curiosa, mas menos impulsiva"); cada um precisa terminar com o status esperado (`request ... ->
+KIND/ROUTE status`, `requests=9/9`), a configuração precisa mudar de verdade (`config_mutated=true`, altura
+1,000 → 1,040) e voltar exatamente ao estado do jogador (`config_reverted=true`, snapshot do arquivo de
+`user://miku`). Depois: pausa segura, `seek_refused=true`, `reset_ok=true recomposed=true` e a UI. Linha
+`interaction executor=miku|null provider=unavailable`. Enquanto os módulos do animator não existem,
+`SMOKE_ALLOW_MISSING_MODULES=1` (passa `--allow-missing-modules`) transforma a falta em `WARN` — nunca usar para
+validar a entrega integrada.
+
+**Capturas** — `tools/capture_evidence.sh <dir> --scenario=living`: sem seek, o cenário **joga em tempo real**
+desde T+0 e cada PNG de `CAPTURES_LIVING` (15: vida, 1/2/4 mãos, etapas, falha, compostura perdida, recuperação,
+atenção, alvo, arquivo de config, config aplicada, SEMANTIC recusado, HUD oculto) sai quando `Simulation.time`
+chega ao tempo dele; os `LivingScript.USER_CUES` são injetados como entrada real (`LivingCuePlayer`). A
+configuração do jogador é zerada para a execução e restaurada no fim. Limite padrão 2400 s (`--timeout`).
+
+**Gravação** — `tools/record_living.sh` (baseado em `record_genesis.sh`: Movie Maker 30 fps, `override.cfg`
+temporário, MP4 H.264 + AAC, EBU R128): `tools/review/living_tour.tscn` joga o protótipo com câmera
+cinematográfica e, nos testes 5–7, **injeta interações reais** por `Input.parse_input_event` (`InputInjector`):
+clique do mouse num ponto do corpo de seleção de MIKU que o `Picker` resolve para `miku` (T+90), clique em VESPER
+(T+102), Enter + "Miku, aumente sua altura" digitado caractere a caractere na linha de chamada + Enter (T+115) e o
+pedido SEMANTIC sem provider (T+130). Cada cue imprime `[living] cue ... real input` ou, se não houver corpo
+clicável/linha focada, `fallback` (o pedido entra pela `Session` e o log diz). A tomada sempre começa do MIKU
+versionado (configuração do jogador zerada e restaurada: `config_restored=true` na linha `[living] done`).
+Opções: `--hud=on|off`, `--resolution=WxH`, `--until=<s>` (prévia), `--quality=`, `--crf=`,
+`--timeout=`/`LIVING_TIMEOUT` (9000 s), `LIVING_GRACE` (120 s). Saída:
+`build/review/living_<W>x<H>_hud-<on|off>[_preview].{avi,mp4,log}`.

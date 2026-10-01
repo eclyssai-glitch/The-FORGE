@@ -8,10 +8,16 @@ Dono: `game-engineer`. Responsabilidade: camadas, fluxo de dados, estrutura de d
 src/events   (RefCounted puro)   SimEvent · EventTimeline · Scenario · ScenarioState · Mission
                                   ORIGIN: OriginChamberScript · WorldState · EntityCatalog
                                   GENESIS: GenesisScript · GenesisState · GenesisCatalog
+                                  LIVING: LivingScript · LivingState · LivingCatalog
+src/agent    (RefCounted puro)   sistema de interação de MIKU (ADR-016): ActionVocabulary · Intent ·
+                                  LocalParser · ProviderPort · StructuredPatch · ConfigSchema ·
+                                  ConfigValidator · MikuConfig · ActionExecutor/MikuNodeExecutor ·
+                                  InteractionRouter (docs/AGENT.md)
      ▲
 src/core     (autoloads)          Simulation (relógio + eventos)   Session (modo, seleção, foco, HUD)
                                   Shortcuts (teclado → autoloads) · InputTuning (limiar clique × arrasto)
-src/world    (autoload + mundo)   Quality (perfil gráfico) · composição do mundo 3D
+src/world    (autoload + mundo)   Quality (perfil gráfico) · composição do mundo 3D ·
+                                  LivingInteraction (entrada diegética do cenário living)
      ▲                    ▲
 3D: src/world, src/entities, src/animation, src/fx, src/procedural, src/style
 UI: src/ui (Control nativo), src/style (tema)
@@ -40,7 +46,7 @@ UI: src/ui (Control nativo), src/style (tema)
 Um cenário = roteiro de eventos + estado derivado + missão + catálogo de entidades, registrados em
 `src/events/scenario.gd` (`Scenario`: `IDS`, `DEFAULT`, `build_events(id)`, `types(id)`, `new_state(id)`,
 `derive(id, events)`, `entity_ids/entity_info/entity_status`). Hoje: `&"origin_chamber"` (padrão até
-a virada da Fase C) e `&"genesis"`.
+a virada da Fase C), `&"genesis"` e `&"living"` (Loop 5).
 
 `Simulation` toca **um** cenário por vez:
 
@@ -51,7 +57,8 @@ a virada da Fase C) e `&"genesis"`.
 | `set_scenario(id) -> bool` | | troca roteiro (IDLE em 0, velocidade mantida) e estados; emite `scenario_changed(id)`, `world_rebuilt`, `playback_changed`. Mesmo id = nada muda; id desconhecido = `false` + aviso |
 | `world` | `WorldState` | estado do ORIGIN CHAMBER |
 | `genesis` | `GenesisState` | estado do GENESIS |
-| `state` | `ScenarioState` (getter) | o estado do cenário ativo (`world` ou `genesis`) |
+| `living` | `LivingState` | estado do LIVING (Loop 5) |
+| `state` | `ScenarioState` (getter) | o estado do cenário ativo (`world`, `genesis` ou `living`) |
 
 Decisão (Fase A, aditiva): `world` **continua `WorldState`** em vez de virar o estado do cenário
 ativo. Motivo: ~40 leitores atuais (entidades, fx, câmera, UI, testes) fazem `var w := Simulation.world`
@@ -62,7 +69,7 @@ Leitores independentes de cenário (fase, fim de sessão, status de entidade) us
 (`ScenarioState`: `apply`, `phase_index`, `phase_name`, `is_complete`, `session_at`, `completed_at`,
 estáticos `since`/`progress`). Na Fase C, quando o visual do ORIGIN sair, `world` pode ser retipado.
 
-Linha de comando: `--scenario=<origin_chamber|genesis>`, lido pelo próprio autoload `Simulation` no
+Linha de comando: `--scenario=<origin_chamber|genesis|living>`, lido pelo próprio autoload `Simulation` no
 `_ready` (`Simulation.scenario_from_args`; autoloads ficam prontos antes da cena principal, então o mundo
 já compõe o cenário pedido, sem montar e desmontar o ORIGIN). O smoke é agnóstico de cenário
 (`tools/smoke_test.sh --scenario=genesis`): conta eventos do roteiro ativo, `Simulation.state.is_complete()`,
@@ -104,6 +111,9 @@ Seleção 3D: `Picker` faz raycast na camada de colisão 2 e escreve em `Session
 | Diretório | Conteúdo | Escritor |
 |---|---|---|
 | `src/events` | Lógica pura de eventos, mundo, missão, entidades | game-engineer |
+| `src/agent` | Sistema de interação de MIKU: vocabulário, intents, parser, porta de provider, configuração, roteador | game-engineer |
+| `config` | Configuração padrão versionada de MIKU (`miku_default.json`) | game-engineer |
+| `src/miku` | Runtime da personagem viva (mente, corpo procedural, execução das ações) | animator |
 | `src/core` | Autoloads Simulation/Session, main, atalhos, automação, style frames | game-engineer |
 | `src/world` | Quality, composição do mundo por cenário, ambiente GENESIS, universo ORIGIN (céu + sementes), seleção (Picker) | game-engineer |
 | `src/procedural` | Blueprints e builders de malha | procedural-modeler |
@@ -113,3 +123,38 @@ Seleção 3D: `Picker` faz raycast na camada de colisão 2 e escreve em `Session
 | `tests/unit`, `tests/integration` | GUT | dono de cada área |
 | `tools` | Scripts de teste, captura, export, setup | game-engineer |
 | `addons/gut` | GUT 9.7.0 vendorizado (MIT) — não editar | — |
+
+## Cenário LIVING e sistema de interação (Loop 5)
+
+Exceção registrada (ADR-015): no `&"living"` a personagem, as mãos e os fios são **estado em tempo real**
+(molas, mente; relógio `MotionClock`), não função de `Simulation.time`. O `Simulation` continua o único produtor
+de eventos (ordens de trabalho do roteiro, `LivingScript`); a mente **reage** a eles e às intervenções do usuário.
+Consequências no código:
+
+- `Scenario.supports_seek(&"living") == false`: `Simulation.seek()` é recusado ali (um aviso por execução,
+  nada muda); `Simulation.reset()` emite `world_rebuilt` e o `World` **recompõe** a cena (mente, mãos e mundos
+  novos; o `LivingInteraction` antigo cancela o que não foi aplicado). Ao trocar para o `living` a recomposição
+  não se repete (`_skip_rebuild`).
+- Ambiente: o `living` reaproveita o céu/ambiente GENESIS (`World.uses_nebula_environment()`).
+- Módulos (`World.LIVING_MODULES`, por caminho, ausentes listados em `missing_modules()`): `LivingLightRig`
+  (`src/entities/living/living_light_rig.gd`), `Miku` (`src/miku/miku.gd`), `HandPool`, `IntentThreads`,
+  `WorkWorld` (`src/entities/living/*`), `CausalParticles` (`src/fx/living/causal_particles.gd`) — do animator —
+  e por último `LivingInteraction` (`src/world/living_interaction.gd`, game-engineer). A câmera narrativa é do
+  `CameraDirector`.
+
+**Character ≠ Provider ≠ Worker** (ADR-016): `USER → INTENT → LOCAL|PROVIDER → PATCH → VALIDATION → MUTATION →
+GAME STATE`, com um plano de ações do vocabulário executado pelo corpo de MIKU. Detalhes, APIs e contratos em
+`docs/AGENT.md`.
+
+Entrada diegética, só por autoloads (`Session`):
+
+| Membro de `Session` | Papel |
+|---|---|
+| `entity_clicked(id)` / `click(id)` | o `Picker` chama `click(id)` em todo clique numa entidade (emite sempre, depois `select(id)`); clique no vazio continua `select(&"")` |
+| `call_line_open`, `call_line_changed(open)`, `open_call_line()`, `close_call_line()` | linha de chamada; `Shortcuts` abre com Enter (ação `call_line`) só no `living` |
+| `call_submitted(text)`, `submit_call(text)` | texto da linha (fecha a linha antes; vazio só fecha; máx. `CALL_MAX_CHARS`) |
+| `interaction_reported(report)`, `report_interaction(report)` | resultado de cada pedido para retorno diegético da UI |
+
+O `LivingInteraction` escuta `entity_clicked` (MIKU = chamar atenção; mundo = indicar) e `call_submitted`
+(texto → roteador). A linha de chamada final é da UI (grupo `living_call_line_ui`); sem ela aparece o placeholder
+mínimo `LivingCallLine` (CanvasLayer + LineEdit, cores da `Palette`). Não há painel nem menu de configuração.

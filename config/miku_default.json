@@ -1,0 +1,24 @@
+{
+	"format": "korium-universe/miku-config",
+	"version": 1,
+	"identity": {
+		"temperament": 0.35,
+		"curiosity": 0.7,
+		"patience": 0.6,
+		"pride": 0.55
+	},
+	"appearance": {
+		"height": 1.0,
+		"shoulder_width": 1.0,
+		"neck_length": 1.0,
+		"chest_volume": 0.5,
+		"halo_radius": 1.0,
+		"glow": 0.5
+	},
+	"behaviour": {
+		"frustration_threshold": 0.55,
+		"aggression_peak": 0.7,
+		"recovery_speed": 0.5,
+		"interruption_tolerance": 0.5
+	}
+}

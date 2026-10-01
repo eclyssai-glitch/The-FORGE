@@ -7,6 +7,7 @@ extends Node
 ##   deselect (Esc) -> Session.select(&"")           toggle_fullscreen (F11) -> window mode
 ##   toggle_cinematic (V) -> Session.set_cinematic(not Session.cinematic)
 ##   toggle_hud (H) -> Session.toggle_hud() (emits Session.hud_visibility_changed)
+##   call_line (Enter) -> Session.open_call_line() — LIVING scenario only (elsewhere not handled)
 ## Uses `_unhandled_input`: whatever the UI consumes never gets here. While a text or value
 ## control of the UI (LineEdit, TextEdit, Range: Slider/SpinBox) has keyboard focus, shortcuts
 ## are ignored and the event is left untouched (not marked as handled). A shortcut that fires
@@ -17,7 +18,7 @@ extends Node
 const ACTIONS: Array[StringName] = [
 	&"demo_toggle", &"demo_reset",
 	&"mode_universe", &"mode_forge", &"mode_observatory",
-	&"deselect", &"toggle_fullscreen", &"toggle_cinematic", &"toggle_hud",
+	&"deselect", &"toggle_fullscreen", &"toggle_cinematic", &"toggle_hud", &"call_line",
 ]
 
 
@@ -57,7 +58,8 @@ static func blocks_shortcuts(focus_owner: Control) -> bool:
 	return focus_owner is LineEdit or focus_owner is TextEdit or focus_owner is Range
 
 
-## Runs `action` against the autoloads. Returns false for an unknown action.
+## Runs `action` against the autoloads. Returns false for an unknown action (or one that does not
+## apply to the active scenario: call_line outside LIVING).
 static func apply(action: StringName) -> bool:
 	match action:
 		&"demo_toggle":
@@ -78,6 +80,10 @@ static func apply(action: StringName) -> bool:
 			Session.set_cinematic(not Session.cinematic)
 		&"toggle_hud":
 			Session.toggle_hud()
+		&"call_line":
+			if Simulation.scenario != Scenario.LIVING:
+				return false
+			Session.open_call_line()
 		_:
 			return false
 	return true

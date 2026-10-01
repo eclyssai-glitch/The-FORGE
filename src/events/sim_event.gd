@@ -32,6 +32,24 @@ const LINKS_WOVEN := &"links.woven"
 ## payload: {"name": String}
 const PLANET_STABLE := &"planet.stable"
 
+# LIVING (Loop 5, MIKU LIVING CHARACTER prototype). Payloads documented in LivingScript.
+## payload: {"test": 1..7, "name": String} — a test segment of the prototype starts.
+const LIVING_MILESTONE := &"living.milestone"
+## payload: {"count": int, "world": StringName} — the work asks for `count` puppet hands (0 = release).
+const LIVING_HANDS := &"living.hands"
+## payload: {"order": StringName, "world": StringName, "steps": Array[String]}
+const LIVING_WORK_ORDER := &"living.work_order"
+## payload: {"order", "world", "step": int, "name": String, "attempt": int, "hands": int}
+const LIVING_WORK_STEP := &"living.work_step"
+## payload: {"order", "world", "step": int, "name": String, "attempt": int}
+const LIVING_WORK_FAILED := &"living.work_failed"
+## payload: {"order", "world", "step": int, "name": String, "hands": int}
+const LIVING_WORK_DISMANTLED := &"living.work_dismantled"
+## payload: {"order", "world", "step": int, "name": String}
+const LIVING_WORK_RECOVERED := &"living.work_recovered"
+## payload: {"order", "world", "name": String}
+const LIVING_WORLD_COMPLETE := &"living.world_complete"
+
 ## Types scripted by the ORIGIN CHAMBER scenario (OriginChamberScript).
 const ORIGIN_TYPES: Array[StringName] = [
 	SESSION_OPENED, CORE_ACTIVATION, CORE_ONLINE, FRAGMENTS_EMITTED, STRUCTURE_SEEDED,
@@ -45,6 +63,13 @@ const GENESIS_TYPES: Array[StringName] = [
 	MOON_FORMED, RING_FORMED, BELT_FORMED, LINKS_WOVEN, PLANET_STABLE, SESSION_COMPLETED,
 ]
 
+## Types scripted by the LIVING scenario (LivingScript).
+const LIVING_TYPES: Array[StringName] = [
+	SESSION_OPENED, LIVING_MILESTONE, LIVING_HANDS, LIVING_WORK_ORDER, LIVING_WORK_STEP,
+	LIVING_WORK_FAILED, LIVING_WORK_DISMANTLED, LIVING_WORK_RECOVERED, LIVING_WORLD_COMPLETE,
+	SESSION_COMPLETED,
+]
+
 ## Every known type, each once (union of the scenario lists; a test keeps them coherent).
 const ALL_TYPES: Array[StringName] = [
 	SESSION_OPENED, CORE_ACTIVATION, CORE_ONLINE, FRAGMENTS_EMITTED, STRUCTURE_SEEDED,
@@ -52,6 +77,8 @@ const ALL_TYPES: Array[StringName] = [
 	VERIFICATION_PASSED, STRUCTURE_FINALIZED, SESSION_COMPLETED,
 	MIKU_AWAKEN, HANDS_SUMMONED, DUST_GATHERED, PLANET_SEEDED, PLANET_LAYER,
 	MOON_FORMED, RING_FORMED, BELT_FORMED, LINKS_WOVEN, PLANET_STABLE,
+	LIVING_MILESTONE, LIVING_HANDS, LIVING_WORK_ORDER, LIVING_WORK_STEP, LIVING_WORK_FAILED,
+	LIVING_WORK_DISMANTLED, LIVING_WORK_RECOVERED, LIVING_WORLD_COMPLETE,
 ]
 
 var id: StringName

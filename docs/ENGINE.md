@@ -366,3 +366,22 @@ monotônico (também o filtro), 4 cascatas em todos os níveis, atlas ≥ 4096 e
 quadro da troca; quadro a quadro a 30 fps monotônico e ≤ 8 % da diferença por quadro; chega ao alvo em
 `MODE_BLEND`; `snap_environment` aplica direto), trim de exposição (suave, limitado, zerado na recomposição),
 helpers de mistura e argumentos do `genesis_tour` (HUD, nível, tamanho, 0,5 + 56 + 4 s).
+
+## Cenário LIVING (Loop 5)
+
+- Composição: `World.LIVING_MODULES` (animator: `LivingLightRig`, `Miku`, `HandPool`, `IntentThreads`,
+  `WorkWorld`, `CausalParticles`; game-engineer: `LivingInteraction` por último). `missing_modules()` lista os
+  ausentes; o smoke reprova neles (exceto com `SMOKE_ALLOW_MISSING_MODULES=1`).
+- Ambiente: o mesmo do GENESIS (céu de nebulosa, AgX, glow contido, névoa leve; misturas de modo, trim de
+  exposição e `motion_time` do céu) — `World.uses_nebula_environment()` vale para GENESIS e LIVING; a qualidade
+  aplica `GenesisEnvironment.apply_quality`. Enquadramento de reserva sem `CameraDirector`:
+  `FALLBACK_SHOTS_LIVING`.
+- Tempo real (ADR-015): sem seek; `Simulation.world_rebuilt` (reset) recompõe os módulos do cenário (os
+  persistentes — `AudioDirector`, `CameraDirector`, `Picker` — ficam); seleção, hover e linha de chamada são
+  limpos.
+- Seleção: o `Picker` agora chama `Session.click(id)` (emite `entity_clicked` em todo clique, depois `select`);
+  os corpos de seleção do `living` usam a camada 2 e a meta `entity_id` (`miku`, `world_vesper`, `world_calyx`,
+  `world_orrin`).
+- Linha de chamada: Enter (`call_line`, KEY_ENTER / KP_ENTER) abre só no `living`; placeholder
+  `LivingCallLine` (CanvasLayer 6) quando nenhuma UI do grupo `living_call_line_ui` existe. Sistema de interação:
+  `docs/AGENT.md`.
