@@ -116,8 +116,10 @@ func _run() -> void:
 	cam.current = true
 	var views: Array = JSON.parse_string(FileAccess.get_file_as_string(_args["views"]))
 	for v: Dictionary in views:
-		var pos := xf * _v(v["pos"])
-		var tgt := xf * _v(v["target"])
+		# "world": true -> pos/target are world coordinates (in-game camera positions)
+		var w := bool(v.get("world", false))
+		var pos := _v(v["pos"]) if w else xf * _v(v["pos"])
+		var tgt := _v(v["target"]) if w else xf * _v(v["target"])
 		var upv: Vector3 = (xf.basis * _v(v["up"])).normalized() if v.has("up") else Vector3.UP
 		cam.look_at_from_position(pos, tgt, upv)
 		cam.fov = float(v.get("fov", 35.0))

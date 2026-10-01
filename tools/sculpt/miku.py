@@ -375,7 +375,7 @@ def _arm(side):
     fa = S.frame_from(au, front_a)
     fb = S.frame_from(bu, front_b)
     out_a = fa[:, 0] * side
-    upper = S.tube([sh, sh + a * 0.3, sh + a * 0.66, el], [0.098, 0.094, 0.082, 0.068])
+    upper = S.tube([sh, sh + a * 0.3, sh + a * 0.66, el], [0.102, 0.099, 0.086, 0.07])
     upper = S.blend(upper, [
         (S.ellipsoid(sh + au * 0.1 + out_a * 0.03, (0.108, 0.2, 0.102), fa), 0.07),     # deltoid
         (S.ellipsoid(sh + a * 0.56 + front_a * 0.03, (0.066, 0.21, 0.064), fa), 0.07),  # biceps
