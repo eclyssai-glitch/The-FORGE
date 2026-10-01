@@ -274,21 +274,34 @@ rad do indicador ao mínimo), flexão crescente para o mínimo, fusão só na ba
 
 ## Mãos gigantes — `assets/meshes/hand_left.obj`, `hand_right.obj` + `.json`
 
-Anatômicas e estilizadas: eminências tenar/hipotenar e oco da palma, arco transversal, nós dos
-dedos, falanges com almofadas palmares e nós dorsais, vincos palmares suaves, unha insinuada (plano
-raso com borda de cutícula macia), tendões extensores suaves (refino: mais finos e mais fundos,
-fillet maior), nós dos dedos (cabeças dos metacarpos) mais salientes no dorso, estiloides do punho,
-antebraço fusiforme que se afina num fim macio (fica na névoa). Pulso → ponta do médio
-**desdobrado = 7,0 u**; na pose a corda é 6,58 (esq.) / 6,49 (dir.) — campo `wrist_to_middle_tip`.
+Anatômicas e estilizadas: eminências tenar/hipotenar e oco da palma, arco transversal, falanges
+esculpidas, vincos palmares suaves, tendões extensores suaves, cabeças dos metacarpos em bloco
+arredondado no dorso, estiloides do punho, antebraço fusiforme que se afina num fim macio (fica na
+névoa). Pulso → ponta do médio **desdobrado = 7,0 u**; na pose a corda é 6,54 (esq.) / 6,47 (dir.) —
+campo `wrist_to_middle_tip`.
+
+**Dedos (rodada de correção do Loop 4: nada de "salsicha segmentada")** — cada falange é um
+`_phalanx` (`hand.py`): cone arredondado no referencial do dedo com **seção elíptica** (1,07 × a
+espessura, achatada para 0,83 no dorso), **dorso mais plano e haste levemente cintada no meio**
+(achatamento −0,10 e largura −0,06 no meio da falange) — as articulações leem como **planos de nós**
+onde as hastes planas se encontram, sem contas/esferas nas juntas (as esferas dorsais e as caixas
+de nó testadas antes viravam "anéis"); **afunilamento** extra por junta `TIP_TAPER` (1, 0,97, 0,92,
+0,80 — a ponta fica com 80% do raio antigo); almofadas palmares baixas (elipsoide 0,78 × 0,66 do raio
+médio); vincos palmares rasos (cápsula 0,04, k 0,12); **unha insinuada** como leito plano rebaixado
+(plano a 0,83 do raio da ponta, mais estreito que o dedo: 0,72 r de cada lado, k 0,12) — dobras
+laterais macias, sem corte retangular. O fim do antebraço afina para 0,24 (antes 0,20 num coto
+mais curto; 0,12 lia "cenoura"). As mãos pequenas de MIKU (`detail=False`) continuam com o núcleo
+de cones arredondados.
 
 Poses próprias (a direita **não** é espelho da esquerda — o teste compara as pontas):
 - **esquerda** embala por baixo: palma para cima, arco transversal forte, dedos curvos em concha
   rasa (flexão crescente do indicador ao mínimo), polegar aberto e erguido formando a borda.
-- **direita** — gesto de escultor, modela por cima: palma para baixo; o **indicador lidera**, quase
-  estendido e levemente curvo (flexão 0,12/0,20/0,13 rad); **médio, anelar e mínimo em cascata**
-  (0,30/0,44/0,28 → 0,46/0,62/0,36 → 0,62/0,76/0,42) com leque leve; **polegar em oposição**, vindo
-  para a frente sob o indicador como quem belisca a argila; antebraço mais curto antes do corte
-  (2,4 u, antes 3,6).
+- **direita** — **gesto de tecer** (substitui o indicador estendido que remetia à "Criação de
+  Adão"): palma para baixo; **dedos entreabertos** em leque (abertura +0,20 / +0,05 / −0,12 / −0,30
+  rad do indicador ao mínimo), **curvos em profundidades escalonadas** como quem passa fios entre
+  eles (flexão indicador 0,24/0,30/0,18, médio 0,34/0,40/0,24, anelar 0,27/0,34/0,20, mínimo
+  0,40/0,46/0,28 — o anelar menos curvo que o médio quebra a cascata), **polegar aberto e solto** ao
+  lado do indicador (sem pinça); arco 0,30; antebraço curto (2,4 u).
 
 Referencial de exportação, **origem = centro da palma** (na superfície palmar):
 
@@ -298,18 +311,23 @@ Referencial de exportação, **origem = centro da palma** (na superfície palmar
 | direita | −X | −Y (−0,017, −1,000, 0,004) | +X (0,954, 0,286, −0,095) | +Z |
 
 Outras âncoras: `wrist_center` (esq. (−2,05, −0,42, 0), dir. (2,05, 0,43, 0)), `forearm_end`,
-`tip_thumb/index/middle/ring/little`. Bounds esq. 9,82 × 3,27 × 3,74 (inclui ~3,6 u de antebraço);
-dir. 8,56 × 3,40 × 3,13 (antes 9,71 × 4,15 × 3,61; ~2,4 u de antebraço). **57 998 triângulos**
-cada (29 001 vértices), grade 0,022 u; OBJ 4,3 MB cada; Euler 2.
+`tip_thumb/index/middle/ring/little`. Bounds esq. 9,79 × 3,27 × 3,71 (inclui ~3,6 u de antebraço);
+dir. 8,40 × 3,27 × 4,24 (antes 8,56 × 3,40 × 3,13: o polegar aberto aumenta a profundidade).
+**57 998 triângulos** cada (29 001 vértices), grade 0,022 u; OBJ 4,3 MB cada; Euler 2; lascas 0.
 
-Âncoras da mão direita que mudaram (antes → depois): `forearm_end` (5,323, 1,514, −0,362) →
-(4,179, 1,170, −0,248); `tip_thumb` (−1,252, −2,348, 1,630) → (−1,804, −1,738, 0,685);
-`tip_index` (−4,356, −0,346, 1,458) → (−4,344, −0,415, 1,381); `tip_middle` (−4,202, −1,399,
-0,386) → (−4,138, −1,483, 0,358); `tip_ring` (−3,727, −1,523, −0,488) → (−3,178, −1,917, −0,429);
-`tip_little` (−2,757, −1,325, −1,157) → (−1,939, −1,692, −0,944). A mão esquerda só mudou no
-relevo (tendões/nós), âncoras iguais a menos de 0,001. Na cena do contrato (esq. ≈ (−3,0, −1,5, 4,6), dir. ≈ (3,2, 3,4, 4,8), planeta
-(0, 1, 4)), com rotação identidade a esquerda aponta os dedos para o planeta com a palma para cima e
-a direita paira sobre ele com a palma para baixo; ajuste fino girando `palm_normal` para o planeta.
+Âncoras que mudaram na rodada de correção (antes → depois; `palm_center`, `palm_normal`,
+`wrist_center`, `forearm_dir`, `forearm_end` iguais a menos de 0,001):
+- esquerda (só afunilamento): `tip_index` (4,026, 1,086, −1,097) → (3,992, 1,052, −1,098);
+  `tip_middle` (4,277, 1,343, −0,317) → (4,246, 1,304, −0,318); `tip_ring` (3,873, 1,406, 0,436) →
+  (3,848, 1,367, 0,437); `tip_little` (2,907, 1,248, 1,054) → (2,889, 1,212, 1,058); `tip_thumb` igual.
+- direita (gesto de tecer): `tip_thumb` (−1,804, −1,738, 0,685) → (−1,497, −1,730, 2,424);
+  `tip_index` (−4,344, −0,415, 1,381) → (−4,032, −0,938, 1,539); `tip_middle` (−4,138, −1,483,
+  0,358) → (−4,121, −1,466, 0,467); `tip_ring` (−3,178, −1,917, −0,429) → (−4,091, −1,068, −0,652);
+  `tip_little` (−1,939, −1,692, −0,944) → (−2,846, −1,231, −1,395).
+
+`AuxiliaryHands` lê as pontas do JSON (foco/rótulo), sem constantes a ajustar. Na cena, a esquerda
+aponta os dedos para o planeta com a palma para cima e a direita paira sobre ele com a palma para
+baixo; ajuste fino girando `palm_normal` para o planeta.
 
 ## Geradores em runtime — `src/procedural/` (RefCounted, estáticos, determinísticos)
 
@@ -317,6 +335,26 @@ Convenções: 1 superfície, triângulos indexados com frente horária (Godot), 
 UV em [0,1]. Construir uma vez; nunca por frame.
 
 **`HairRibbons`**
+- **`nebula(root, direction, seed, tufts := 9, length := 10.0, link_ends := PackedVector3Array(),
+  options := {}) -> Dictionary`** (rodada de correção do Loop 4) — o cabelo como **uma massa de
+  nebulosa**: todos os fios nascem na **raiz única** (`root_radius` 0,035), saem por `direction`
+  (para trás) e sobem numa **curva em S** (o rumo gira para o UP do mundo em `lift` rad ao longo do
+  fio, com ondulação em S `s_amount`: sobe, recua, sobe); agrupados em `tufts` **tufos de 5–10 fios**
+  (`strands_min/max`) que compartilham o caminho do tufo; **comprimentos variados** (tufo 0,55–1,15 ×
+  `length`, fio 0,6–1,0 do tufo); **pontas que se abrem** em filamentos (afastamento quadrático até
+  `tip_open` · comprimento do tufo) e onda lateral pequena por fio. Rumos dos tufos distribuídos
+  por ângulo num cone de meia-abertura `spread` 0,38 (sem aglomerados). Retorna `{"curves":
+  Array[PackedVector3Array], "links": PackedInt32Array, "groups": PackedInt32Array}`.
+  **Fios de link**: para cada ponto de `link_ends` (mesmo referencial de `root`) acrescenta um fio
+  longo que sai da raiz dentro do tufo cuja ponta aponta mais para o ponto, segue o S do tufo e
+  **termina exatamente no ponto** (`link_curve`); `links[i]` é o índice desse fio em `curves`. Uso
+  previsto: `link_ends` = início de cada fio de relação (`RelationThreads.HAIR_SOURCES`), assim o
+  fio de luz do grafo continua o fio de cabelo. `options` sobrescreve `NEBULA_DEFAULTS`.
+  Custo: tufos × ~7,5 fios × `2·(samples−1)` t (×2 cruzado); ex. 10 tufos + 4 links, 56 amostras,
+  cruzado ≈ 79 fios × 110 × 2 ≈ 17,4k t.
+- `s_path(root, heading, length, points, lift := 0.75, s_amount := 0.42, phase := 0.0)` — o caminho
+  em S de um tufo; `link_curve(root, heading, end_point, points := 16, lift, s_amount, phase)` —
+  mesmo S na raiz (tangente preservada) com correção suave (smootherstep) até `end_point`.
 - `curve_point(points, t)`, `sample_curve(points, samples)` — Catmull-Rom.
 - `generate_curves(root, direction, count, seed, length := 10.0, points := 9, spread := 0.5,
   wave_amplitude := 0.45, waves := 1.4, rise := 0.9, root_radius := 0.05) -> Array[PackedVector3Array]`
@@ -328,6 +366,12 @@ UV em [0,1]. Construir uma vez; nunca por frame.
   **alfa = opacidade** (0,55–1 por fio → 0 na ponta), como `miku_hair()` espera; TANGENT ao longo
   do fio; referencial por transporte paralelo. `crossed` duplica cada fio a 90° (não some de
   perfil). Custo `2·(samples−1)` t por fio (×2 cruzado): 64 fios × 48 amostras = 6 016 t.
+  Parâmetros finais opcionais (compatíveis): `links: PackedInt32Array` (fios de link: mantêm
+  `LINK_TIP_RATIO` 0,55 da largura e alfa `LINK_TIP_ALPHA` 0,8 na ponta — o fio de relação continua
+  dali; os demais fios somem na ponta como antes) e `groups: PackedInt32Array` (tufo de cada fio).
+  **CUSTOM0** (RGBA float, sempre presente) = (1 se fio de link senão 0, tufo / (tufos − 1),
+  comprimento do fio / maior fio, 0) — para o shader diferenciar fios de link e variar por tufo
+  (`miku_hair` atual só usa `COLOR.a`; a máscara está disponível ao art-director).
 
 **`OrbitLine`** (plano XZ; fase p → ângulo 2πp a partir de +Z para +X)
 - `point(rx, rz, phase)`, `outward(rx, rz, phase)`.

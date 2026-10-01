@@ -111,9 +111,10 @@ def face_relief(x, y):
     z = z + 0.006 * _g(x, y, 0.0, -0.13, 0.05, 0.035)          # muzzle
     z = z - 0.002 * _g(ax, y, 0.006, -0.108, 0.004, 0.01)       # philtrum
     y_up_lip = -0.123 + 0.004 * np.exp(-((ax - 0.011) / 0.008) ** 2)
-    z = z + 0.012 * np.exp(-(x / 0.03) ** 4 - ((y - y_up_lip) / 0.0085) ** 2)
+    # (lip heights taper towards the corners: rounded, never a box)
+    z = z + 0.011 * np.exp(-(x / 0.027) ** 2 - ((y - y_up_lip) / (0.0085 * (1.0 - 0.45 * (x / 0.04) ** 2))) ** 2)
     z = z - 0.0025 * _g(x, y, 0.0, -0.1345, 0.028, 0.0035)      # parting
-    z = z + 0.014 * np.exp(-(x / 0.026) ** 4 - ((y + 0.146) / 0.0105) ** 2)
+    z = z + 0.013 * np.exp(-(x / 0.023) ** 2 - ((y + 0.146) / (0.0105 * (1.0 - 0.5 * (x / 0.035) ** 2))) ** 2)
     z = z - 0.004 * _g(ax, y, 0.034, -0.136, 0.009, 0.011)      # mouth corners
     z = z - 0.004 * _g(x, y, 0.0, -0.17, 0.035, 0.011)          # under the lower lip
     # small, defined chin; below the jaw line the relief turns under (submental plane)
@@ -172,8 +173,8 @@ _ROOT_WORLD = normalize((0.0, math.sin(math.radians(ROOT_ELEV)), -math.cos(math.
 ROOT_DIR = R_HEAD.T @ _ROOT_WORLD   # the same direction in head coordinates
 KNOT_T = (0.05, 0.13)
 TAIL_LEN = 0.13
-HAIR_LOCKS = 17        # broad locks around the head (meridians to the knot)
-HAIR_LOCK_AMP = 0.011  # lock relief (ridge above groove)
+HAIR_LOCKS = 21        # broad locks around the head (meridians to the knot)
+HAIR_LOCK_AMP = 0.0095 # lock relief (ridge above groove)
 HAIR_STRAND_AMP = 0.0018
 
 
@@ -240,7 +241,7 @@ def _hair():
         phi = np.arctan2(a1, a2)
         # distance travelled from the face towards the knot (angle about the knot centre)
         along = np.arccos(np.clip(-(q @ pole) / np.maximum(np.linalg.norm(q, axis=1), 1e-6), -1, 1))
-        wav = phi + 0.075 * np.sin(7.0 * along + 2.0 * phi)
+        wav = phi + 0.1 * np.sin(6.0 * along + 2.0 * phi)
         u = wav * HAIR_LOCKS / (2.0 * math.pi)
         fr = u - np.floor(u)
         ridge = 1.0 - (2.0 * fr - 1.0) ** 2
@@ -282,7 +283,7 @@ def _torso(skip=()):
     torso = S.blend(base, parts)
     if "hollows" not in skip:
         for s in (-1.0, 1.0):   # supraclavicular hollows: the clavicle reads as a bone
-            torso = S.subtract(torso, S.ellipsoid((s * 0.17, 0.925, 0.03), (0.085, 0.03, 0.05)), 0.045)
+            torso = S.subtract(torso, S.ellipsoid((s * 0.17, 0.93, 0.025), (0.08, 0.024, 0.036)), 0.06)
     if "spine" not in skip:
         torso = S.subtract(torso, S.capsule((0, 0.08, -0.183), (0, 0.80, -0.207), 0.02), 0.07)
     return torso

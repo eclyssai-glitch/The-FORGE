@@ -9,6 +9,22 @@ extends SceneTree
 
 var _args := {}
 
+## Mirrors of the animator's constants (GenesisLightRig, Miku.HAIR_DIRECTION,
+## RelationThreads.HAIR_SOURCES): those scripts need the autoloads, which a --script run does not
+## compile against, so the values are copied here (update when the rig changes).
+const BACK_DIR := Vector3(0.05, -0.28, 1.0)
+const RIM_DIR := Vector3(-0.85, -0.45, 0.6)
+const KEY_DIR := Vector3(0.9, -0.5, -0.28)
+const FILL_DIR := Vector3(-0.4, 0.35, -1.0)
+const KEY_SHADOW_MAX_DISTANCE := 60.0
+const KEY_SHADOW_BLUR := 1.6
+const KEY_SHADOW_NORMAL_BIAS := 1.4
+const PLANET_RANGE := 7.5
+const PLANET_ATTENUATION := 1.6
+const HAIR_DIRECTION := Vector3(-0.25, 0.22, -0.94)
+const HAIR_SOURCES: Array[Vector3] = [Vector3(-1.1, 2.2, -1.6), Vector3(0.35, 3.2, -2.8),
+	Vector3(0.9, 2.6, -2.0), Vector3(-1.6, 3.0, -2.4)]
+
 
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -62,6 +78,33 @@ func _dir_light(root: Node3D, c: Color, dir: Vector3, e: float) -> DirectionalLi
 	return l
 
 
+## Proof of HairRibbons.nebula on the sculpture: one mass from hair_root (JSON anchors), heading
+## like miku.gd (sculpt tangent blended with its HAIR_DIRECTION), with link strands ending at
+## RelationThreads.HAIR_SOURCES (relative to the root).
+func _add_hair(body: MeshInstance3D) -> void:
+	var meta: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_args["hair_json"]))
+	var a: Dictionary = meta["anchors"]
+	var root := Vector3(a["hair_root"][0], a["hair_root"][1], a["hair_root"][2])
+	var tan := Vector3(a["hair_root_tangent"][0], a["hair_root_tangent"][1], a["hair_root_tangent"][2])
+	var dir := (tan + HAIR_DIRECTION.normalized() * 1.5).normalized()
+	var ends := PackedVector3Array()
+	for e in HAIR_SOURCES:
+		ends.append(e)
+	var layers := [[10, 7101, 9.0, 0.11, 0.45], [8, 7202, 12.0, 0.06, 0.4]]
+	for li in layers.size():
+		var L: Array = layers[li]
+		var m := HairRibbons.nebula(Vector3.ZERO, dir, int(L[1]), int(L[0]), float(L[2]),
+			ends if li == 0 else PackedVector3Array())
+		var hm := MeshInstance3D.new()
+		hm.mesh = HairRibbons.build(m["curves"], float(L[3]), 0.2, 56, Vector3.BACK, true, m["links"], m["groups"])
+		var mat := MaterialLibrary.miku_hair().duplicate() as ShaderMaterial
+		mat.set_shader_parameter("intensity", float(L[4]))
+		mat.set_shader_parameter("seed", float(li) * 1.37 + 0.2)
+		hm.material_override = mat
+		hm.position = root
+		body.add_child(hm)
+
+
 func _run() -> void:
 	var root := Node3D.new()
 	get_root().add_child(root)
@@ -87,27 +130,30 @@ func _run() -> void:
 	mi.transform = xf
 	root.add_child(mi)
 
+	if _args.has("hair_json"):
+		_add_hair(mi)
+
 	var sky := GenesisEnvironment.make_sky_material()
 	var env := GenesisEnvironment.make_environment(sky)
 	env.ambient_light_energy = 0.26
 	var we := WorldEnvironment.new()
 	we.environment = env
 	root.add_child(we)
-	_dir_light(root, Palette.DUSK_ROSE, GenesisLightRig.BACK_DIR, 2.3).light_specular = 0.25
-	_dir_light(root, Palette.ICE, GenesisLightRig.RIM_DIR, 1.25)
-	var key := _dir_light(root, Palette.PEARL, GenesisLightRig.KEY_DIR, 1.05)
+	_dir_light(root, Palette.DUSK_ROSE, BACK_DIR, 2.3).light_specular = 0.25
+	_dir_light(root, Palette.ICE, RIM_DIR, 1.25)
+	var key := _dir_light(root, Palette.PEARL, KEY_DIR, 1.05)
 	key.light_volumetric_fog_energy = 0.0
 	key.shadow_enabled = true
 	key.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	key.directional_shadow_max_distance = GenesisLightRig.KEY_SHADOW_MAX_DISTANCE
-	key.shadow_blur = GenesisLightRig.KEY_SHADOW_BLUR
-	key.shadow_normal_bias = GenesisLightRig.KEY_SHADOW_NORMAL_BIAS
-	_dir_light(root, Palette.NEBULA, GenesisLightRig.FILL_DIR, 0.12).light_specular = 0.0
+	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DISTANCE
+	key.shadow_blur = KEY_SHADOW_BLUR
+	key.shadow_normal_bias = KEY_SHADOW_NORMAL_BIAS
+	_dir_light(root, Palette.NEBULA, FILL_DIR, 0.12).light_specular = 0.0
 	var glow := OmniLight3D.new()
 	glow.position = GenesisLayout.PLANET_CENTER
 	glow.light_color = Palette.GOLD
-	glow.omni_range = GenesisLightRig.PLANET_RANGE
-	glow.omni_attenuation = GenesisLightRig.PLANET_ATTENUATION
+	glow.omni_range = PLANET_RANGE
+	glow.omni_attenuation = PLANET_ATTENUATION
 	glow.light_energy = 0.6
 	root.add_child(glow)
 
