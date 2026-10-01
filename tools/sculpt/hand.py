@@ -35,6 +35,9 @@ RADII = {  # at MCP, PIP, DIP, tip (the giant hands taper more: see TIP_TAPER)
 # sculpted (detail) fingers: radius multipliers per joint -- slimmer towards the tip
 TIP_TAPER = (1.0, 0.97, 0.92, 0.8)
 DEBUG_PARTS: dict = {}
+# joint chains of the last ``build_hand`` call (authoring frame), for the rig bake (rig_*.py):
+# name -> (pts [base, j1, j2, end], frames [3 x (3, 3)], radii, tip); "thumb" starts at the CMC
+JOINTS: dict = {}
 THUMB_LENGTHS = (1.40, 1.06, 0.90)
 THUMB_RADII = (0.46, 0.405, 0.36, 0.29)
 
@@ -131,6 +134,7 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
     squeeze = pose.get("mcp_squeeze", 1.0)  # < 1 brings the knuckles (and fingers) together
     # ---------------------------------------------------------------- fingers
     finger_frames = {}
+    JOINTS.clear()
     for name in FINGERS:
         spread, roll, flex = pose["fingers"][name]
         mx, my = MCP[name]
@@ -149,6 +153,7 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
         finger_sdfs.append(S.blend(parts[0][0], parts[1:]))
         cuts += _finger_cuts(pts, frames, LENGTHS[name], radii, detail, pose.get("nails", True))
         finger_frames[name] = (pts, frames)
+        JOINTS[name] = (pts, frames, radii, tip)
         anchors[f"tip_{name}"] = tip
     # ---------------------------------------------------------------- thumb
     th = pose["thumb"]
@@ -157,6 +162,7 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
     t_parts, t_pts, t_frames, t_tip = _finger(cmc, tframe, THUMB_LENGTHS, THUMB_RADII,
                                               (0.0,) + tuple(th["flex"]), detail)
     thumb_sdf = S.blend(t_parts[0][0], t_parts[1:])
+    JOINTS["thumb"] = (t_pts, t_frames, THUMB_RADII, t_tip)
     cuts += _finger_cuts(t_pts, t_frames, THUMB_LENGTHS, THUMB_RADII, detail, pose.get("nails", True))
     anchors["tip_thumb"] = t_tip
     # ---------------------------------------------------------------- palm mass

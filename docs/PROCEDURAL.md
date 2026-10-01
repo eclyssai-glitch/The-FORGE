@@ -480,3 +480,167 @@ presentes, dentro dos bounds e com a orientação do contrato; mãos com origem 
 pulso→médio 5,6–7,2, palma para cima/baixo, direita não-espelho. Geradores: mesma seed ⇒ mesmos
 arrays, seed diferente ⇒ outros; UV em [0,1]; sem degenerados; frente horária; contagens;
 tangentes = SurfaceTool; transforms dentro do anel; alfa do cabelo; variantes cruzadas/tubo.
+
+# Rig (Loop 5) — esqueleto + pesos do manequim
+
+**Status: protótipo/spike.** A escultura é manequim técnico e será substituída; o que vale como
+contrato para o modelo futuro são os **nomes dos ossos, a hierarquia, as convenções de eixo e o
+mapeamento `appearance`**. A execução de movimento migra para a pilha nativa do Godot 4.7.2
+(Skeleton3D + SkeletonModifier3D/IK/SpringBone/AnimationTree): este rig é um `Skeleton3D` comum
+com `Skin`, sem deformadores ou solvers próprios.
+
+## Pipeline offline — `tools/sculpt/rig_*.py`
+
+| arquivo | papel |
+|---|---|
+| `rig_core.py` | genérico: leitura exata do OBJ, `Skeleton` (bases globais de repouso), pesos (rótulo duro → espalhamento geodésico), LBS de verificação, escritor. |
+| `rig_miku.py` | juntas de MIKU **a partir da construção SDF** (`miku.py`): cadeia da coluna no referencial `R_CHEST`, cabeça = `R_CHEST·R_HEAD` no atlas, braços = `ARMS[lado]`, dedos = `hand.JOINTS` (mão autoral × `HAND_SCALE`, espelhada à direita, posta com `_hand_frame`), saia no eixo do vestido (`R_PELVIS`). |
+| `rig_hand.py` | mão angelical genérica sobre `hand_left.obj` (cadeias `hand.JOINTS` de `POSE_LEFT` no referencial de exportação de `giant_hands.py`). |
+| `rig_bake.py` | `/opt/korium-py/bin/python tools/sculpt/rig_bake.py [--only miku\|hand] [--out DIR]` (≈ 3 s cada). |
+| `rig_check.py` | métricas de deformação em poses-limite (LBS em numpy = skinning do Godot). |
+| `preview/rig_preview.gd` | provas no renderizador real (abaixo). |
+
+`hand.py` passou a registrar `JOINTS` (cadeias de juntas da última `build_hand`), sem mudar a SDF
+(os OBJ não mudam).
+
+**Pesos.** (1) **rótulo duro** por vértice: parte = argmin das SDFs de parte da própria escultura
+(cabeça+cabelo, tronco+corpete, vestido, braço E, braço D — as costuras são os vincos da escultura);
+no ombro, plano pela junta normal ao braço (a capa do deltoide segue o braço); tronco/vestido por
+planos de junta (bissetriz dos eixos) ao longo de coluna/saia; faixa lateral sobre cada clavícula →
+`clavicle`; resto do peito → `ribcage`; braço por planos de cotovelo/punho; mão = argmin das SDFs da
+mão (palma, cada dedo, polegar) + planos MCP/PIP; filtro de maioria (3 passadas). (2) cada osso
+espalha influência **pela superfície** (Dijkstra nas arestas): `w = (1 − D/W)²`, `W` = largura do
+osso (MIKU: hips 0,20 · spine 0,15 · ribcage 0,14 · neck 0,09 · head 0,07 · clavicle 0,10 ·
+upper_arm 0,16 · forearm 0,07 · hand 0,035 · dedo 0,018–0,03 · skirt 0,40/0,50/0,55; mão: wrist 0,55 ·
+palm 0,32 · thumb.0 0,34 · falanges 0,17); 2 passadas de suavização (vizinhança), normaliza, **4
+maiores**, renormaliza. Geodésico ⇒ nada pula vãos (dedos, braço × saia); pesos em vértices
+compartilhados ⇒ a superfície não rasga. Determinístico (bytes iguais em duas execuções, verificado).
+
+## Formato — `assets/meshes/<rig>.json` + `<rig>.skin.json`
+
+- `miku_rig.json` (24 KB) / `hand_rig.json` (11 KB): legível — ossos (`name`, `parent`, `head`,
+  `tail`, `basis_x/y/z` globais de repouso, `deform`, `side`, `blend_width`), `source_sha256` do OBJ,
+  estatísticas, contagem por osso; MIKU também `anchors_local` (âncoras de `miku_body.json` no
+  referencial do osso que as carrega).
+- `*.skin.json` (MIKU 2,8 MB, mão 1,2 MB): arrays little-endian zlib + base64 — `vertex`/`normal`
+  float32×3, `color` float32×4 (AO), `bones` int32×4, `weights` float32×4, `index` int32 (já em
+  horário). JSON puro ⇒ vai no export como os demais metadados (sem filtro novo). Vértices **idênticos
+  ao OBJ** (mesma ordem e valores): repouso = escultura. Rebake obrigatório se o OBJ mudar (o teste
+  compara o `source_sha256`).
+- MIKU 59 001 vértices / 117 998 t, 49 ossos (37 deformantes); mão 29 001 / 57 998 t, 23 ossos (17
+  deformantes). Influências médias 1,52 (MIKU) / 1,36 (mão); 53% / 68% dos vértices rígidos.
+
+## Runtime — `src/procedural/`
+
+`RigData` (carrega/cacheia; `mesh()`/`skin()` construídos uma vez e **compartilhados** por todas as
+instâncias — cada instância só tem seu `Skeleton3D`; bind i = inversa do repouso global do osso i,
+índice de osso = índice de bind), `MikuRig`, `HandRig`.
+
+```
+MikuRig.build(material: Material = null) -> Node3D        # "MikuRig" > "Skeleton3D" > "Mesh"
+MikuRig.get_skeleton(rig) -> Skeleton3D ; get_mesh_instance(rig) -> MeshInstance3D
+MikuRig.bone_index(name) -> int ; side_sign(name) -> float (+1 .L/centro, -1 .R)
+MikuRig.attach(rig, bone, node := null) -> BoneAttachment3D
+MikuRig.anchor(rig, "hair_root"|"forehead"|"palm_left"|...) -> Vector3   # pose atual
+MikuRig.apply_appearance(rig, {height, shoulder_width, neck_length, chest_volume}) -> Dictionary
+HandRig.build(side: HandRig.Side.LEFT|RIGHT, material := null) -> Node3D  # "HandRig" > ...
+HandRig.get_skeleton / get_mesh_instance / bone_index / attach ; HandRig.pose_finger(rig, f, curl, spread)
+RigData.pose_local(sk, bone, euler)        # pose = rotação de repouso · from_euler(euler) (YXZ)
+RigData.rotate_global(sk, bone, axis, ang) # rotação no espaço do esqueleto, filhos acompanham
+RigData.global_poses(sk) ; RigData.skin_vertices(poses, stride)   # LBS em CPU (testes/ferramentas)
+```
+
+Custo: primeira `MikuRig.build()` ≈ 95 ms (decodificação), primeira mão ≈ 60 ms (a direita espelha
+uma vez); seguintes só criam o `Skeleton3D`.
+
+## Ossos e convenções (para o animator)
+
+Bases de repouso: **+Y ao longo do osso** (junta → junta filha), **+Z para o lado em que a junta
+dobra**, **+X = Y × Z**. ⇒ **rotação positiva em +X local sempre flexiona**: cabeça/pescoço/coluna
+inclinam para a frente, cotovelo dobra, punho flexiona para a palma, dedos fecham, saia balança
+para a frente. Lados .L/.R (e mão direita) são espelhos com X invertido: **+X flexiona dos dois
+lados; Y (torção) e Z (abdução/inclinação lateral) giram espelhados** — multiplique por
+`MikuRig.side_sign(osso)` para espelhar um movimento de .L em .R (na mão, `HandRig.pose_finger`
+já trata o sinal do afastamento).
+
+MIKU (referencial do mesh: +Y cima, +Z frente, origem = centro da cintura, esquerda dela = +X = .L):
+
+| osso | pai | junta (cabeça) | +Z (dobra) | notas |
+|---|---|---|---|---|
+| `root` | — | origem | frente | não deforma; `height` = escala |
+| `hips` | root | pelve (y −0,18) | frente | cintura/quadril |
+| `spine` | hips | cintura (R_CHEST·(0; 0,04)) | frente | |
+| `chest` | spine | (0; 0,46) | frente | **estrutural, não deforma** — sua pele é de `ribcage` |
+| `ribcage` | chest | centro do peito (0; 0,62) | frente | folha deformante: `chest_volume` |
+| `neck` | chest | base do pescoço (0; 0,92) | frente | |
+| `head` | neck | atlas (0; 1,30) | rosto | base = referencial da cabeça esculpida (curvada 17°) |
+| `hair_root` | head | ponta do coque | ⟂ | não deforma; **+Y = tangente de saída do cabelo** |
+| `clavicle.L/R` | chest | esternoclavicular | frente | +X protrai; Z eleva (sinal espelhado) |
+| `upper_arm.L/R` | clavicle | ombro (±0,40; 0,76) | lado de dobra do cotovelo | Z: abdução (espelhada) |
+| `forearm.L/R` | upper_arm | cotovelo | dobra | +X flexiona o cotovelo |
+| `hand.L/R` | forearm | punho | palma | Y → MCP do médio |
+| `thumb.0/1.L/R` | hand / `.0` | CMC / MCP | palma do polegar | `.0` metacarpo, `.1` as duas falanges |
+| `index/middle/ring/little.0/1.L/R` | hand / `.0` | MCP / PIP | palma | `.0` proximal, `.1` média+distal |
+| `<dedo>.tip.L/R` | `.1` | ponta | | não deforma (fios de intenção) |
+| `skirt.0/1/2` | hips / skirt.N | eixo do vestido y −0,62 / −1,75 / −2,90 | frente | **+Y para baixo**; +X leva a barra para a frente |
+
+Mão genérica (referencial: dedos → +X, palma → +Y, origem = centro da palma; polegar −Z na
+esquerda, +Z na direita; punho → ponta do médio ≈ 7 u): `wrist` (raiz, junta do punho, carrega o coto
+do antebraço) > `palm` (flexão do punho) > `palm_center` (âncora na palma: +Y normal da palma, +Z para
+os dedos) e `thumb.0` (metacarpo) > `.1` > `.2` > `thumb.tip`; `index/middle/ring/little.0`
+(proximal) > `.1` (média) > `.2` (distal) > `.tip`. Um rig para N instâncias; direita = espelho
+z → −z em runtime (bases `M·B·N`, M = diag(1,1,−1), N = diag(−1,1,1): rotações próprias, +X ainda
+flexiona).
+
+Cabelo: `MikuRig.attach(rig, "hair_root", hair)` e construir `HairRibbons` em torno de
+`Vector3.ZERO` no referencial do osso (direção do mesh `d` → `get_bone_global_rest(i).basis.inverse() * d`);
+provado em `rig_miku_head_turn_tilt.jpg` e no teste (o anexo segue a cabeça girada).
+
+## `appearance` → ossos
+
+Aplicado ao **repouso** do osso (+ posição/escala da pose): sobrevive a `reset_bone_poses()`, nunca
+mexe nas rotações da pose; idempotente (sempre relativo ao repouso assado); valores fora da faixa são
+limitados (`MikuRig.APPEARANCE`). O animator só escreve **rotações** nesses ossos.
+
+| chave | faixa segura | ossos | efeito |
+|---|---|---|---|
+| `height` | 0,85–1,15 | `root` escala uniforme | figura inteira a partir da cintura |
+| `shoulder_width` | 0,90–1,15 | `upper_arm.L/R` posição ao longo da clavícula × fator | ombros para fora; estica a costura clavícula/braço |
+| `neck_length` | 0,85–1,30 | `neck` sobe metade da variação no próprio eixo, `head` a outra metade | as duas costuras do pescoço esticam; cabeça sobe `(f−1)·L` |
+| `chest_volume` | 0,85–1,20 | `ribcage` escala (f, 1, f) no centro do peito | largura e profundidade do corpete |
+
+## Provas (Godot real) — `tools/sculpt/previews/rig_*.jpg`
+
+`tools/_display.sh tools/godot.sh --path . --script res://tools/sculpt/preview/rig_preview.gd --
+--out=tools/sculpt/previews [--only=miku|hand]` (argila × AO, duas vistas por imagem, 26 JPEG,
+1,9 MB): `rig_miku_weights{,_bust}` (cores de peso), `rest`, `head_turn_tilt` (com cabelo preso a
+`hair_root`), `head_up_back`, `arms_up{,_shoulder}`, `arms_cross{,_elbows}`, `torso_bend_twist`,
+`skirt_swing`, `fingers_fist_L`, `fingers_open_R`, `appearance_min|max`; `rig_hand_weights`,
+`rig_hand_{left,right}_{open,fist,pinch,cup,wrist}`. Inspecionadas: sem rasgos; ombro erguido e
+braços cruzados mantêm o volume; saia balança como pano; punho e pinça (polegar encontra o indicador)
+fecham sem interpenetração grave.
+
+Métricas (`rig_check.py`, LBS; estiramento máx. de aresta / triângulos invertidos / variação de
+volume): cabeça girada+inclinada 2,3 / 0,03% / −0,1%; cotovelos 110° 2,0 / 0,16% / −0,2%; braços
+erguidos 4,1 (axila) / 0,13% / +1,5%; braços cruzados 2,5 / 0,24% / −0,9%; punhos de MIKU 2,6 /
+0,06%; tronco 1,6; saia 1,5; mão em punho 3,6 nos nós (7,6 só numa lasca de 0,0009 u) / 1,4% /
+−1,4%; punho flexionado 2,4 / 0,4%.
+
+**Limites conhecidos** (LBS linear, aceitável para o manequim): vinco e perda leve de volume no lado
+interno do cotovelo e do punho acima de 90°; "candy-wrapper" se o antebraço/mão girar em Y (não há
+ossos de torção — o substituto nativo seria `BoneTwistDisperser3D`); a axila estica ~4× com o braço
+acima da cabeça; nos dedos de MIKU a DIP não tem osso (`.1` = média+distal; mão pequena com ~50
+vértices por segmento) e o polegar fechado em punho fica para fora (só pose); `chest_volume` e
+`neck_length` abaixo de 0,9 mostram uma prega leve no trapézio.
+
+## Testes — `tests/unit/test_procedural_rig.gd`
+
+Ossos do contrato e hierarquia (MIKU e mão nos dois lados); árvore/skin/material e malha+skin
+compartilhadas; bases de repouso com det 1, +Y para a próxima junta; pesos com soma 1, ≤ 4, sem
+órfão, só ossos deformantes, todo osso deformante usado, e ainda normalizados após o empacotamento
+16 bits do Godot; **repouso = OBJ** (sha256 da fonte, todos os vértices < 1e-4, LBS do repouso
+< 1e-4); +X flexiona (cotovelo, cabeça, cada dedo nos dois lados), palma +Y, polegar −Z/+Z; direita =
+espelho (vértices, ossos, enrolamento); `appearance` move/escala o que deve, limita faixas, preserva
+rotações e sobrevive a reset, default = escultura; poses-limite sem aresta esticada > 5×; anexo em
+`hair_root` segue a cabeça e `anchor()` concorda; determinismo (decodificação, repousos, cache do
+espelho).
