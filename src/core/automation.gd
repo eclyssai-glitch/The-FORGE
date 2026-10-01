@@ -73,8 +73,8 @@ const CAPTURES_LIVING: Array = [
 	["l11_world_target", 105.0, SessionState.Mode.FORGE],
 	["l12_config_file", 120.0, SessionState.Mode.FORGE],
 	["l13_config_applied", 127.0, SessionState.Mode.FORGE],
-	["l14_semantic_declined", 133.5, SessionState.Mode.FORGE],
-	["l15_hud_hidden", 138.0, SessionState.Mode.FORGE, {"hud": false}],
+	["l14_semantic_declined", 136.5, SessionState.Mode.FORGE],
+	["l15_hud_hidden", 139.0, SessionState.Mode.FORGE, {"hud": false}],
 ]
 ## LIVING smoke: requests sent through the real Session paths (clicks: Session.click; text:
 ## Session.submit_call) -> [kind ("click"|"say"), argument, expected InteractionRouter status].

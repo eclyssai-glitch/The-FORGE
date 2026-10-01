@@ -69,7 +69,7 @@ Leitores independentes de cenário (fase, fim de sessão, status de entidade) us
 (`ScenarioState`: `apply`, `phase_index`, `phase_name`, `is_complete`, `session_at`, `completed_at`,
 estáticos `since`/`progress`). Na Fase C, quando o visual do ORIGIN sair, `world` pode ser retipado.
 
-Linha de comando: `--scenario=<origin_chamber|genesis>`, lido pelo próprio autoload `Simulation` no
+Linha de comando: `--scenario=<origin_chamber|genesis|living>`, lido pelo próprio autoload `Simulation` no
 `_ready` (`Simulation.scenario_from_args`; autoloads ficam prontos antes da cena principal, então o mundo
 já compõe o cenário pedido, sem montar e desmontar o ORIGIN). O smoke é agnóstico de cenário
 (`tools/smoke_test.sh --scenario=genesis`): conta eventos do roteiro ativo, `Simulation.state.is_complete()`,
