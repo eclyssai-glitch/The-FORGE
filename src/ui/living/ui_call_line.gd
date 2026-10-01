@@ -36,7 +36,7 @@ const STRIP_HEIGHT := 96.0
 const LINE_INSET := 12.0
 const FIELD_HEIGHT := 30.0
 ## How far (px) the sent words rise while they dissolve.
-const SENT_RISE := 18.0
+const SENT_RISE := 12.0
 
 var field: LineEdit
 var echo: Label
@@ -117,6 +117,7 @@ func open() -> void:
 		return
 	_open = true
 	field.text = ""
+	field.placeholder_text = PLACEHOLDER
 	field.visible = true
 	hint.visible = false
 	if field.is_inside_tree():
@@ -133,6 +134,8 @@ func close() -> void:
 	if field.has_focus():
 		field.release_focus()
 	field.text = ""
+	# The retracting line shows nothing (no placeholder ghost under the rising words).
+	field.placeholder_text = ""
 	hint.visible = true
 	_animate_open(false)
 	closed.emit()
@@ -275,8 +278,8 @@ func _rise(text: String) -> void:
 		return
 	sent.modulate.a = 1.0
 	_sent_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_sent_tween.tween_property(sent, "position:y", y0 - SENT_RISE, Palette.T_CALL_CLOSE * 1.6)
-	_sent_tween.tween_property(sent, "modulate:a", 0.0, Palette.T_CALL_CLOSE * 1.6).set_ease(Tween.EASE_IN_OUT)
+	_sent_tween.tween_property(sent, "position:y", y0 - SENT_RISE, Palette.T_CALL_CLOSE * 1.3)
+	_sent_tween.tween_property(sent, "modulate:a", 0.0, Palette.T_CALL_CLOSE * 1.3).set_ease(Tween.EASE_IN_OUT)
 
 
 func _layout() -> void:

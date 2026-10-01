@@ -191,3 +191,49 @@ a ≤ 5 Hz (ou manter estático no LOW); o passe de radiância não tem estrelas
 Fase B: mãos e planeta usam `k_voronoi2` (mesmo laço 3×3×3, guarda também o id da 2ª célula); o planeta
 ganhou 3 amostras de ruído de deformação; o céu, 3 cristas (filamentos) — custo fixo, sem novos laços.
 A UI GENESIS desenha só enquanto há algo visível (rótulos: ≤ 11 projeções por quadro, sem nós extras).
+
+## 12. LIVING (Loop 5, protótipo MIKU LIVING CHARACTER)
+
+Prioridade: vida, causalidade e personalidade. Os materiais abaixo são **placeholders funcionais** na família da
+bíblia (sem neon, sem cyberpunk, sem UI corporativa) e carregam **estado** de forma legível; o manequim não é
+polido (será substituído pela nova direção visual do Owner). Nenhuma cor nova: só tokens v2. Mesmas convenções da
+seção 3 (cache compartilhado, `.duplicate()` por corpo com estado, `motion_time` no lugar de `TIME`, cores de
+`Palette`, NaN-safe). Shaders em `src/style/shaders/living/`; lookdev: `docs/art/lookdev/living_materials.jpg`
+(16 estados) e `living_call_line.jpg` (linha de chamada sobre uma composição viva, 1600×900 + estados a 1280×720).
+
+| Getter | Aparência | Controles (0..1 salvo indicação) |
+|---|---|---|
+| `angelic_hand()` | porcelana pérola/marfim luminosa e translúcida (BACKLIGHT BLUSH, especular largo), rim frio suave, **luz interna** vista dentro da porcelana (paralaxe): em repouso pérola fria e tênue; sob tensão junta-se em filamentos ouro-pálido que fluem ao longo de `flow_axis` (a energia chegando pelo fio) e esfria ao soltar. Uma família para N mãos: a função vem da animação. Convocação: condensa em grãos a partir de `presence_origin` com lábio quente | `drive`, `presence`, `select`, `motion_time`, `hand_size` (unidades pulso→ponta; todas as escalas seguem), `flow_axis`, `presence_origin`, `presence_reach`, `wrist_point`/`forearm_end`/`wrist_fade` (`set_hand_wrist`) |
+| `intent_thread()` | fio de vontade, aditivo, **largura constante em pixels** (o vértice alarga uma fita de linha central na tela). Frouxo: largo, tênue, irregular (a curva frouxa é geometria do animador); tenso: fino, claro, brilhos correndo de MIKU para a mão, leve zumbido (onda estacionária presa nas pontas). `presence` fia a partir da origem (frente = grão claro); `release` dissolve em grãos começando pela origem; `anger` = mais frio/branco, núcleo duro, pouco brilho, tremor rápido. Sai de MIKU com `hair_link_tip()` | `tension`, `presence`, `release`, `anger`, `seed`, `motion_time`, `intensity`, `width_px` (frouxo, tenso), `glow_px`, `vibration_px`, `ribbon_px` |
+| `config_artifact()` | folha de luz de bordas esfumadas (sem moldura, sem cantos de aparelho), filete no topo e margem tênue; três seções (cabeçalhos nas linhas 0, 4, 8) de `chave · valor` em **escrita assêmica** (arcos, hastes, pontos — nunca letras). `presence` desenrola do topo e escreve as linhas; `edit` = cursor de luz atravessando `edit_row`: atrás dele os glifos novos, à frente os antigos, em volta eles se rearranjam; a linha sobe, o resto recua. `validated` (rampa de `Palette.T_CONFIRM`) = varredura curta de luz e um selo ouro-pálido na linha (algo mudou); em 1 a folha está calma | `presence`, `edit`, `validated`, `edit_row`, `aspect`, `rows`, `seed`, `motion_time`, `intensity` |
+| `work_world()` | mundo **construído**, não acretado: `formation` assenta fiadas ao longo de `build_axis` e em cada fiada as peças crescem do centro com borda GOLD; casca aberta mostra núcleo quente (nunca um buraco no espaço). `compression`: achata ao longo de `press_dir` (dois polos), juntas fecham, pedra escurece, anéis de pressão correm para os polos. `stress`: juntas abrem em fissuras incandescentes (núcleo branco-quente, borda MAGMA, cintilação instável) e placas soltas se levantam. `heal`: fissuras fecham em **kintsugi** (manter `stress` no pico durante a cura) | `formation`, `compression`, `stress`, `heal`, `build_axis`, `press_dir`, `seed`, `courses`, `tile_scale`, `detail` (Quality), `select`, `motion_time` |
+
+Contrato de malha do fio (o dono do fio a constrói; codificador de referência `IntentThreadStrip.fill`): para cada
+amostra P_i da curva (≥ 2, origem primeiro) **dois vértices no mesmo ponto**, UV (u_i, 0) e (u_i, 1) com u por
+comprimento de arco (0 na origem, 1 na mão), NORMAL = tangente; faixa de triângulos; `custom_aabb` com margem.
+
+Riscos conhecidos: em malhas com skinning os padrões vivem no espaço do objeto já deformado (mantidos de baixa
+frequência para ler como luz interna, não textura deslizando); placas levantadas do `work_world` esticam triângulos
+nas bordas das células (lido como ruptura).
+
+### UI do LIVING (`src/ui/living/`)
+
+MIKU é a interface: sem painéis, menus, palavras de modo ou sussurros de evento. O `Hud` tem três dialetos
+(`Hud.dialect_for`: ORIGIN `chrome`, `GenesisHud`, `LivingHud` para o cenário `&"living"`); o selo DEMO MODE
+(dialeto v2) fica sempre visível; H esconde o resto. `LivingHud` = configurações discretas (teclas próprias),
+transporte do roteiro **sem seek** (ADR-015; `UiOrbitTransport.seekable = false`) e a **linha de chamada**:
+
+- em repouso, só um fio perolado curto no centro inferior (`UI_CALL_REST`, `UI_CALL_FROM_BOTTOM`, acima da zona do
+  transporte); Enter (ou clique no fio) o estende (`T_CALL_OPEN`, senoide) até `UI_CALL_WIDTH` e recebe palavras em
+  tinta pérola minúscula, sem espaçamento (`CallField`, placeholder "miku, …"); Enter envia: as palavras sobem um
+  pouco e se dissolvem na cena enquanto o fio recolhe (`T_CALL_CLOSE`); Esc ou Enter vazio soltam;
+- acima do fio, um sussurro curto do que MIKU entendeu (`CallEcho`; `T_CALL_ECHO_*`), um por vez (o anterior se
+  dissolve primeiro). Tinta por tipo: `applied` plena, `recognized` suave com "→ ", `refused`/`heard` apagada.
+  Nunca GOLD, nunca caixa.
+
+Contrato com o sistema de interação (lógica do game-engineer): nó no grupo **`living_call_line`** (`UiCallLine`);
+sinais **`submitted(text: String)`** (sem espaços nas pontas, não vazio, ≤ 120 caracteres), `opened`, `closed`;
+métodos **`show_feedback(kind: StringName, text: String)`** (`&"recognized"`, `&"applied"`, `&"refused"`,
+`&"heard"`; desconhecido → `&"heard"`), `submit(text)` (injeção para automação/gravação, igual a digitar),
+`open()`, `close()`, `is_open()`, `feedback_text()`. Só com a linha aberta o campo segura o foco do teclado
+(`Shortcuts` e as teclas de câmera ficam quietos enquanto se escreve); fechada, nada toma o foco.
