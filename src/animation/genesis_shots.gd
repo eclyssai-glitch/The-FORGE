@@ -277,10 +277,10 @@ static func style_frame_poses() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	out.append(_pose("sf_01_hero", 55.0, SessionState.Mode.FORGE,
 		rig_position(FORGE_TARGET, FORGE_YAW + 0.02, FORGE_PITCH, FORGE_DISTANCE - 1.0), FORGE_TARGET, FORGE_FOV))
-	# Statuary distance, a little from below: head, shoulders and the hair mass rising behind against
-	# the sky (never an extreme close; the older worlds' orbits stay under the frame).
+	# A bust at statuary distance, a little from below: head, shoulders and the hair mass flowing behind
+	# against the sky (never an extreme close; the older worlds' orbits stay under the frame).
 	out.append(_pose("sf_02_portrait", 12.0, SessionState.Mode.FORGE,
-		brow + Vector3(3.0, -2.2, 6.4), brow + Vector3(-0.5, -0.35, -0.6), 31.0))
+		brow + Vector3(3.0, -2.2, 6.4), brow + Vector3(-0.55, -0.3, -0.6), 26.0))
 	# The cradle station of the cinematic path: low, looking up — the molten world between the hands,
 	# MIKU whole above it against the warm core.
 	var cp: Vector3 = CRADLE_POSE[0]
