@@ -408,9 +408,11 @@ foco); a ORIGIN continua com `CameraShots` sem mudança. Troca de cenário = sna
 - **Limites**: pitch −0,55…1,35, distância por modo, alvo dentro de `FLY_RADIUS` (50), câmera nunca
   abaixo da névoa (`MIN_CAMERA_Y`).
 - **Foco**: qualquer entidade GENESIS em qualquer modo (`focus_shot`: mantém lente e yaw, preenche
-  `FOCUS_FILL`). Raiz de cada entidade no grupo `entity_<id>` com `focus_bounds` quando a malha não basta.
+  `FOCUS_FILL`; pitch dentro de `FOCUS_PITCH` 0,36–0,8 — um pouco de cima: o foco baixo no mundo deixava só
+  a barra do vestido no topo do quadro). Raiz de cada entidade no grupo `entity_<id>` com `focus_bounds` quando a malha não basta.
 - **Style frames**: `CameraDirector.style_frame_poses()` → `GenesisShots.style_frame_poses()` (8 poses:
-  herói, retrato a distância de estatuária — cabeça, ombros e a massa do cabelo, um pouco de baixo —,
+  herói, retrato em busto a distância de estatuária — cabeça, ombros e a massa do cabelo, um pouco de
+  baixo, sem close extremo do rosto —,
   berço = a estação `CRADLE_POSE` do caminho, detalhe do mundo, fios, sistema, silhueta, plano aberto).
 
 ### Seleção, rótulos e áudio
