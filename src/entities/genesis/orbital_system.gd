@@ -25,6 +25,8 @@ const MOON_ORBIT_TUBE := 0.016
 const FAR_ORBIT_TUBE := 0.03
 const FAR_MOON_ORBIT_TUBE := 0.014
 const ORBIT_INTENSITY := 0.42
+## The orbit line opens around its body: gap = body radius × ORBIT_GAP (orbit_line `body_gap`).
+const ORBIT_GAP := 2.2
 const FAR_ORBIT_INTENSITY := 0.16
 ## Distant worlds: at rest, a little heat left in the cracks.
 const FAR_HEAT := 0.08
@@ -122,7 +124,7 @@ func _build_moons() -> void:
 		frame.rotation = GenesisLayout.MOON_TILTS[i]
 		add_child(frame)
 		var r := GenesisLayout.MOON_ORBITS[i]
-		var line := _orbit_line(frame, r, MOON_ORBIT_TUBE, ORBIT_INTENSITY)
+		var line := _orbit_line(frame, r, MOON_ORBIT_TUBE, ORBIT_INTENSITY, GenesisLayout.MOON_RADII[i] * ORBIT_GAP)
 		moon_orbits.append(line)
 		_moon_orbit_mats.append(line.material_override as ShaderMaterial)
 		var pivot := Node3D.new()
@@ -241,7 +243,8 @@ func _build_far() -> void:
 		frame.position = GenesisLayout.FAR_CENTER
 		frame.rotation = GenesisLayout.FAR_TILTS[i]
 		add_child(frame)
-		var line := _orbit_line(frame, GenesisLayout.FAR_ORBITS[i], FAR_ORBIT_TUBE, FAR_ORBIT_INTENSITY)
+		var line := _orbit_line(frame, GenesisLayout.FAR_ORBITS[i], FAR_ORBIT_TUBE, FAR_ORBIT_INTENSITY,
+			GenesisLayout.FAR_RADII[i] * ORBIT_GAP)
 		far_orbits.append(line)
 		_far_orbit_mats.append(line.material_override as ShaderMaterial)
 		var pivot := Node3D.new()
@@ -263,12 +266,15 @@ func _build_far() -> void:
 		body.name = "Body"
 		body.mesh = PlanetSphere.build(1.0, 64, 32)
 		body.scale = Vector3.ONE * fr
+		body.layers = 1 | GenesisLayout.PLANET_KEY_LAYER
 		var mat := MaterialLibrary.planet_forming().duplicate() as ShaderMaterial
 		mat.set_shader_parameter("seed", FAR_SEEDS[i])
 		mat.set_shader_parameter("formation", 1.0)
 		mat.set_shader_parameter("heat", FAR_HEAT)
 		mat.set_shader_parameter("crust", 1.0)
 		mat.set_shader_parameter("atmosphere", 1.0)
+		# Each older world has its own family (NAUVE-2 ICE bands, KESTRE-4 rose dust).
+		MaterialLibrary.set_far_world_style(mat, i)
 		body.material_override = mat
 		body.rotation = Vector3(0.3 * (i + 1), 0.0, -0.2)
 		world.add_child(body)
@@ -279,7 +285,8 @@ func _build_far() -> void:
 		mframe.name = "MoonOrbit"
 		mframe.rotation = Vector3(0.25 - 0.4 * i, 0.0, 0.15)
 		world.add_child(mframe)
-		var mline := _orbit_line(mframe, mr, FAR_MOON_ORBIT_TUBE, FAR_ORBIT_INTENSITY * 0.8)
+		var mline := _orbit_line(mframe, mr, FAR_MOON_ORBIT_TUBE, FAR_ORBIT_INTENSITY * 0.8,
+			GenesisLayout.FAR_MOON_RADII[i] * ORBIT_GAP)
 		_far_orbit_mats.append(mline.material_override as ShaderMaterial)
 		var mpivot := Node3D.new()
 		mpivot.name = "Pivot"
@@ -324,7 +331,8 @@ func _build_far() -> void:
 			m2frame.rotation = FAR_MOON2_TILT
 			world.add_child(m2frame)
 			var r2 := fr * FAR_MOON2_ORBIT
-			var m2line := _orbit_line(m2frame, r2, FAR_MOON_ORBIT_TUBE, FAR_ORBIT_INTENSITY * 0.6)
+			var m2line := _orbit_line(m2frame, r2, FAR_MOON_ORBIT_TUBE, FAR_ORBIT_INTENSITY * 0.6,
+				FAR_MOON2_RADIUS * ORBIT_GAP)
 			m2line.name = "OrbitLine2"
 			far_moon2_pivot = Node3D.new()
 			far_moon2_pivot.name = "Pivot"
@@ -342,12 +350,16 @@ func _build_far() -> void:
 			far_moon2_pivot.add_child(moon2)
 
 
-func _orbit_line(parent: Node3D, r: float, tube: float, intensity: float) -> MeshInstance3D:
+## Orbit line of radius `r` (OrbitLine tube of section `tube`); the line thins out and vanishes
+## within `gap` world units of the body it carries (orbit_line `body_gap`).
+func _orbit_line(parent: Node3D, r: float, tube: float, intensity: float, gap: float) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = "OrbitLine"
 	mi.mesh = OrbitLine.build_tube(r, r, tube, clampi(int(r * 48.0), 160, 720), 4)
 	var mat := MaterialLibrary.orbit_line().duplicate() as ShaderMaterial
 	mat.set_shader_parameter("intensity", intensity)
+	mat.set_shader_parameter("tube_radius", tube)
+	mat.set_shader_parameter("body_gap", gap)
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
@@ -416,13 +428,12 @@ func _update(delta: float) -> void:
 	# Ring.
 	var rf := GenesisChoreography.ring(g, t)
 	if _changed("ring", rf):
-		# The ring condenses outward from the world (swell + fade). The shader's angular sweep
-		# (`formation` < 1) is not used yet: its leading edge raises a negative base to a power
-		# (NaN on llvmpipe and several drivers) — reported to the art-director.
+		# The ring is laid down by the shader's angular sweep (warm leading edge) while it swells
+		# out from the world a little and fades in at the start.
 		ring.visible = rf > 0.001
-		ring.scale = Vector3.ONE * lerpf(RING_SWELL_FROM, 1.0, rf)
-		ring.transparency = 1.0 - rf if rf < 0.999 else 0.0
-		_ring_mat.set_shader_parameter("formation", 1.0)
+		ring.scale = Vector3.ONE * lerpf(RING_SWELL_FROM, 1.0, Motion.eased(minf(rf * 1.6, 1.0)))
+		ring.transparency = 1.0 - minf(rf * 4.0, 1.0) if rf < 0.25 else 0.0
+		_ring_mat.set_shader_parameter("formation", rf)
 		_ring_body.collision_layer = 2 if rf > 0.5 else 0
 	ring.rotation.y = TAU * fposmod(m / RING_TURN, 1.0)
 	# Belt.

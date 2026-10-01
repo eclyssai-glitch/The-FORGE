@@ -35,6 +35,21 @@ const PLANET_SPECULAR := 0.35
 const PLANET_SKY_COLOR := Palette.PEARL
 const PLANET_SKY_ICE := 0.45
 const PLANET_CLIMAX_REACH := 5.0
+## Planet key: a PEARL key of the worlds' own (only GenesisLayout.PLANET_KEY_LAYER), from the left
+## and a little above and in front of the hero camera — a three-quarter side light, so the formed
+## world shows a lit crescent with its ICE limb, the DUSK_ROSE terminator across the disc and its
+## continents, instead of the backlit night side. Warmed a little with DUSK_ROSE.
+const PLANET_KEY_DIR := Vector3(0.9, -0.3, -0.3)
+const PLANET_KEY_COLOR := Palette.PEARL
+const PLANET_KEY_WARMTH := 0.18
+## Planet rim: an ICE light of the worlds' own from behind and to the right of the hero camera (only
+## PLANET_KEY_LAYER) — the atmosphere's lit ring on the far limb; it grows with the sky and peaks at
+## the climax (GenesisChoreography light level "planet_rim").
+const PLANET_RIM_DIR := Vector3(-0.75, -0.2, 0.62)
+const PLANET_RIM_COLOR := Palette.ICE
+## At the climax the planet glow scatters less in the haze (no milky bubble over the world).
+const PLANET_FOG_CLIMAX := 0.3
+const PLANET_FOG_CAP := 1.3
 ## Directional haze energy (<= GenesisEnvironment.DIRECTIONAL_FOG_ENERGY).
 const DIRECTIONAL_FOG := 0.04
 ## Key shadow (the only caster): reach covers the hands and the planet from every hero shot; soft
@@ -55,6 +70,8 @@ var rim: DirectionalLight3D
 var key: DirectionalLight3D
 var fill: DirectionalLight3D
 var planet_glow: OmniLight3D
+var planet_key: DirectionalLight3D
+var planet_rim: DirectionalLight3D
 
 var _levels := {}
 var _ambient_written := -1.0
@@ -72,6 +89,14 @@ func _ready() -> void:
 	# The key is the only shadow caster: in the haze its shadows draw dark shafts across the sky
 	# (the hands and MIKU cut long black bands). It lights surfaces only; the haze gets the others.
 	key.light_volumetric_fog_energy = 0.0
+	planet_key = _directional("PlanetKey", PLANET_KEY_COLOR.lerp(Palette.DUSK_ROSE, PLANET_KEY_WARMTH), PLANET_KEY_DIR)
+	planet_key.light_cull_mask = GenesisLayout.PLANET_KEY_LAYER
+	planet_key.light_volumetric_fog_energy = 0.0
+	planet_key.light_specular = 0.3
+	planet_rim = _directional("PlanetRim", PLANET_RIM_COLOR, PLANET_RIM_DIR)
+	planet_rim.light_cull_mask = GenesisLayout.PLANET_KEY_LAYER
+	planet_rim.light_volumetric_fog_energy = 0.0
+	planet_rim.light_specular = 1.0
 	planet_glow = OmniLight3D.new()
 	planet_glow.name = "PlanetGlow"
 	planet_glow.position = GenesisLayout.PLANET_CENTER
@@ -109,6 +134,14 @@ func _update() -> void:
 	var sky_share := GenesisChoreography.PLANET_LIGHT_CLIMAX * float(_levels["climax"]) / maxf(pe, 1e-3)
 	planet_glow.light_color = PLANET_COLOR.lerp(PLANET_HOT_COLOR, 0.35 * heat).lerp(PLANET_SKY_COLOR.lerp(Palette.ICE, PLANET_SKY_ICE), clampf(sky_share, 0.0, 1.0))
 	planet_glow.omni_range = PLANET_RANGE + PLANET_CLIMAX_REACH * float(_levels["climax"])
+	# The haze around the world never turns milky: its scatter is capped to the molten glow's and
+	# drops further at the climax (the world itself must read, not a fog bubble in front of it).
+	planet_glow.light_volumetric_fog_energy = PLANET_FOG * minf(1.0, PLANET_FOG_CAP / maxf(pe, 1e-3)) \
+		* lerpf(1.0, PLANET_FOG_CLIMAX, float(_levels["climax"]))
+	planet_key.light_energy = _levels["planet_key"]
+	planet_key.visible = planet_key.light_energy > 0.002
+	planet_rim.light_energy = _levels["planet_rim"]
+	planet_rim.visible = planet_rim.light_energy > 0.002
 	planet_glow.visible = pe > 0.002
 	if environment == null:
 		return

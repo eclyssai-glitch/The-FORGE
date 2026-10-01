@@ -64,6 +64,8 @@ var _press_travel := -1.0
 var _focus_goal := CameraShots.Shot.new()
 var _focusing := false
 var _focus_id: StringName = &""
+## Exposure trim last asked of the world (GENESIS cinematic path; 1 = the mode's exposure).
+var _trim := 1.0
 
 
 func _ready() -> void:
@@ -336,6 +338,24 @@ func _apply() -> void:
 	camera.transform = Transform3D(Basis.IDENTITY, pos).looking_at(_rig.target, Vector3.UP)
 	camera.fov = _rig.fov
 	camera.h_offset = _rig.h_offset(_aspect())
+	_update_trim()
+
+
+## GENESIS: asks the world for the exposure trim of the cinematic path (GenesisShots.cue_trim) while
+## the story camera runs, 1 otherwise; only when it changes (the world eases towards it).
+func _update_trim() -> void:
+	if not _genesis():
+		return
+	var story := Session.cinematic and Session.mode == SessionState.Mode.FORGE and not _user
+	var k := GenesisShots.cue_trim(Simulation.genesis, Simulation.time) if story else 1.0
+	var world := get_parent()
+	if world == null or not world.has_method(&"set_exposure_trim"):
+		return
+	# Compared with the world's own target: a recomposition resets it to 1.
+	if is_equal_approx(k, _trim) and is_equal_approx(float(world.call(&"exposure_trim_target")), k):
+		return
+	_trim = k
+	world.call(&"set_exposure_trim", k)
 
 
 func _aspect() -> float:

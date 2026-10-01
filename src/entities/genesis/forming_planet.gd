@@ -50,6 +50,8 @@ func _ready() -> void:
 	body.set_meta(CameraDirector.FOCUS_BOUNDS_META, AABB(-Vector3.ONE, Vector3.ONE * 2.0))
 	body.set_meta(&"label_radius", GenesisLayout.PLANET_RADIUS)
 	body.visible = false
+	# Lit by the rig's planet key too (a key of its own: the formed world is the most beautiful body).
+	body.layers = 1 | GenesisLayout.PLANET_KEY_LAYER
 	pivot.add_child(body)
 
 	pick_body = StaticBody3D.new()
