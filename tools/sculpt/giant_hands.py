@@ -1,6 +1,6 @@
 """The two monumental auxiliary hands (GENESIS). Poses from docs/contracts/loop-04.md:
-left cradles from below (palm up, shallow shell), right shapes from above (palm down, fingers
-hovering, index more extended). Each hand has its own pose; the right is not a mirror copy.
+left cradles from below (palm up, shallow shell), right weaves from above (palm down, fingers
+parted and softly curled at staggered depths, threads of light running between them). Each hand has its own pose; the right is not a mirror copy.
 
 Export frame (mesh space), origin = palm centre (on the palm surface):
   left : fingers -> +X, palm normal -> +Y (up), forearm towards -X
@@ -34,21 +34,21 @@ POSE_LEFT = {
 }
 
 POSE_RIGHT = {
-    # the sculptor's gesture: the index leads, gently curved; middle, ring and little follow in a
-    # cascade of growing flexion and a slight fan; the thumb comes forward in opposition, under
-    # the index, as if pinching the clay
-    "arch": 0.26,
+    # the weaver's gesture: palm down, fingers parted and softly curled at staggered depths, as
+    # if threads of light were running between them (no pointing index); the thumb rests open
+    # beside the index, not pinching
+    "arch": 0.3,
     "fingers": {
-        "index": (0.12, 0.06, (0.12, 0.2, 0.13)),
-        "middle": (0.01, 0.0, (0.3, 0.44, 0.28)),
-        "ring": (-0.1, -0.07, (0.46, 0.62, 0.36)),
-        "little": (-0.21, -0.15, (0.62, 0.76, 0.42)),
+        "index": (0.2, 0.06, (0.24, 0.3, 0.18)),
+        "middle": (0.05, 0.0, (0.34, 0.4, 0.24)),
+        "ring": (-0.12, -0.06, (0.27, 0.34, 0.2)),
+        "little": (-0.3, -0.14, (0.4, 0.46, 0.28)),
     },
     "thumb": {
         "cmc": (0.80, 0.92, -0.34),
-        "dir": (0.3, 0.86, -0.42),
-        "dorsal": (0.9, -0.15, 0.4),
-        "flex": (0.34, 0.44),
+        "dir": (0.6, 0.72, -0.36),
+        "dorsal": (0.6, -0.2, 0.78),
+        "flex": (0.2, 0.26),
     },
     "forearm_dir": (-0.10, -1.0, 0.30),
     "forearm_len": 2.4,          # short: the wrist dissolves into the mist soon after

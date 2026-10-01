@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 
 import sdf as S
-from sdf import v3, normalize, rot_axis
+from sdf import v3, normalize, rot_axis, smoothstep
 
 FINGERS = ("index", "middle", "ring", "little")
 
@@ -26,12 +26,14 @@ LENGTHS = {
     "ring": (1.46, 0.95, 0.72),
     "little": (1.12, 0.72, 0.62),
 }
-RADII = {  # at MCP, PIP, DIP, tip
+RADII = {  # at MCP, PIP, DIP, tip (the giant hands taper more: see TIP_TAPER)
     "index": (0.35, 0.31, 0.276, 0.240),
     "middle": (0.362, 0.32, 0.284, 0.25),
     "ring": (0.34, 0.30, 0.265, 0.231),
     "little": (0.295, 0.26, 0.23, 0.203),
 }
+# sculpted (detail) fingers: radius multipliers per joint -- slimmer towards the tip
+TIP_TAPER = (1.0, 0.97, 0.92, 0.8)
 DEBUG_PARTS: dict = {}
 THUMB_LENGTHS = (1.40, 1.06, 0.90)
 THUMB_RADII = (0.46, 0.405, 0.36, 0.29)
@@ -49,23 +51,45 @@ def _finger(base, frame, lengths, radii, flex, detail, scale_k=1.0):
         frames.append(np.stack([X, Y, Z], axis=1))
         pts.append(pts[-1] + Y * lengths[i])
     parts = []
-    core = S.union(*[S.round_cone(pts[i], pts[i + 1], radii[i], radii[i + 1]) for i in range(3)])
-    parts.append((core, 0.0))
-    if detail:
+    if not detail:
+        core = S.union(*[S.round_cone(pts[i], pts[i + 1], radii[i], radii[i + 1]) for i in range(3)])
+        parts.append((core, 0.0))
+    else:
+        # sculpted phalanges: wider than thick, tapering to the tip; each shaft is flattened on
+        # the back and slightly waisted, so the joints read as squarish knuckle PLANES where the
+        # flat shafts meet (no beads, no sausage links); pads stay low on the palm side
+        segs = [_phalanx(pts[i], frames[i], lengths[i], radii[i], radii[i + 1]) for i in range(3)]
+        parts.append((S.union(*segs, k=0.06 * scale_k), 0.0))
         for i in range(3):
             fr = frames[i]
             mid = 0.5 * (pts[i] + pts[i + 1])
             rm = 0.5 * (radii[i] + radii[i + 1])
             # palmar pad: the finger is fuller on the palm side than on the back
-            pad_c = mid - fr[:, 2] * rm * 0.24 + fr[:, 1] * lengths[i] * 0.04
-            parts.append((S.ellipsoid(pad_c, (rm * 0.80, lengths[i] * 0.43, rm * 0.8), fr),
-                          0.10 * scale_k))
-        for i in (1, 2):
-            fr = frames[i - 1]
-            # dorsal knuckle of the PIP / DIP joint
-            parts.append((S.sphere(pts[i] + fr[:, 2] * radii[i] * 0.2, radii[i] * 0.86), 0.08 * scale_k))
+            pad_c = mid - fr[:, 2] * rm * 0.3 + fr[:, 1] * lengths[i] * 0.05
+            parts.append((S.ellipsoid(pad_c, (rm * 0.78, lengths[i] * 0.4, rm * 0.66), fr),
+                          0.12 * scale_k))
     tip = pts[3] + frames[2][:, 1] * radii[3]
     return parts, pts, frames, tip
+
+
+def _phalanx(a, fr, L, ra, rb, width=1.07, flat=0.83):
+    """One phalanx: a round cone in the finger frame (x across, y along, z dorsal) whose section
+    is an ellipse ``width`` x 1 on the palm side and flattened to ``flat`` on the back."""
+    a = v3(a)
+    fr = np.asarray(fr, dtype=np.float64)
+
+    def f(p):
+        q = (p - a) @ fr
+        h = np.clip(q[:, 1] / L, 0.0, 1.0)
+        r = ra + (rb - ra) * h
+        mid = 4.0 * h * (1.0 - h)
+        fl = flat - 0.1 * mid
+        sz = fl + (1.0 - fl) * smoothstep(0.3, -0.3, q[:, 2] / r)
+        dx = q[:, 0] / (width - 0.06 * mid)
+        dz = q[:, 2] / sz
+        dy = q[:, 1] - h * L
+        return (np.sqrt(dx * dx + dy * dy + dz * dz) - r) * (flat - 0.1)
+    return S.with_bound(f, a + fr[:, 1] * L * 0.5, 0.5 * L + max(ra, rb) * 1.2)
 
 
 def _finger_cuts(pts, frames, lengths, radii, detail, nails=True):
@@ -77,7 +101,7 @@ def _finger_cuts(pts, frames, lengths, radii, detail, nails=True):
         fr = frames[i - 1]
         X, Z = fr[:, 0], fr[:, 2]
         c = pts[i] - Z * radii[i] * 1.02
-        cuts.append((S.capsule(c - X * radii[i] * 0.5, c + X * radii[i] * 0.5, 0.055), 0.13))
+        cuts.append((S.capsule(c - X * radii[i] * 0.45, c + X * radii[i] * 0.45, 0.04), 0.12))
     if nails:
         fr = frames[2]
         r3 = radii[3]
@@ -86,15 +110,16 @@ def _finger_cuts(pts, frames, lengths, radii, detail, nails=True):
 
         def nail(p, P=pts[2], R=R, r3=r3, L=L):
             q = (p - P) @ R
-            z0 = r3 * 0.93
+            z0 = r3 * 0.83
             y0 = L * 0.30
-            # bounded slab: above the nail plane, from the cuticle to past the tip, one finger wide
+            # bounded slab: above the nail plane, from the cuticle to past the tip, narrower than
+            # the finger -- a sunken flat nail bed with soft lateral folds
             d = np.maximum(z0 - q[:, 2], y0 - q[:, 1])
-            d = np.maximum(d, np.abs(q[:, 0]) - r3 * 1.15)
+            d = np.maximum(d, np.abs(q[:, 0]) - r3 * 0.72)
             d = np.maximum(d, q[:, 1] - (L + r3 * 2.0))
             return np.maximum(d, q[:, 2] - r3 * 2.5)
         S.with_bound(nail, pts[2] + fr[:, 1] * L * 0.6 + fr[:, 2] * r3, L + 3.0 * r3)
-        cuts.append((nail, 0.1))
+        cuts.append((nail, 0.12))
     return cuts
 
 
@@ -119,9 +144,10 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
         Rr = rot_axis(Y0, roll)
         X0, Z0 = Rr @ X0, Rr @ Z0
         frame = np.stack([X0, Y0, Z0], axis=1)
-        parts, pts, frames, tip = _finger(base, frame, LENGTHS[name], RADII[name], flex, detail)
+        radii = tuple(r * (t if detail else 1.0) for r, t in zip(RADII[name], TIP_TAPER))
+        parts, pts, frames, tip = _finger(base, frame, LENGTHS[name], radii, flex, detail)
         finger_sdfs.append(S.blend(parts[0][0], parts[1:]))
-        cuts += _finger_cuts(pts, frames, LENGTHS[name], RADII[name], detail, pose.get("nails", True))
+        cuts += _finger_cuts(pts, frames, LENGTHS[name], radii, detail, pose.get("nails", True))
         finger_frames[name] = (pts, frames)
         anchors[f"tip_{name}"] = tip
     # ---------------------------------------------------------------- thumb
@@ -161,7 +187,10 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
         # metacarpal heads (knuckles) and dorsal extensor tendons
         for name in FINGERS:
             pts, frames = finger_frames[name]
-            parts.append((S.sphere(pts[0] + frames[0][:, 2] * 0.1, RADII[name][0] + 0.02), 0.15))
+            # metacarpal head: a broad rounded block -- the knuckle planes of a clenched-in hand
+            r0 = RADII[name][0]
+            parts.append((S.round_box(pts[0] + frames[0][:, 2] * 0.12, (r0 * 0.98, r0 * 0.78, r0 * 0.8),
+                                      r0 * 0.5, frames[0]), 0.15))
         for name in FINGERS:
             # extensor tendons: only a soft relief over the middle of the dorsum
             mx, my = MCP[name]
@@ -179,7 +208,7 @@ def build_hand(pose: dict, detail: bool = True, forearm: bool = True):
         # spindle-shaped forearm fragment: narrow wrist, muscle belly, long soft taper
         L = pose.get("forearm_len", 3.6)
         spindle = S.tube([(0, 0.0, 0), (0, L * 0.4, 0.05), (0, L * 0.78, 0.02), (0, L, 0.0)],
-                         [0.56, 0.66, 0.5, 0.2])
+                         [0.56, 0.64, 0.46, 0.24])
         flat = S.scale(spindle, (1.5, 1.0, 1.0))
         stump = S.place(flat, (0, 0.35, 0), S.frame_from(fa_dir, (0, 0, 1)))
         parts.append((stump, 0.55))

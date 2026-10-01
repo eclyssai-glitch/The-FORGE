@@ -167,17 +167,18 @@ versionadas em `assets/meshes/`.
 | arquivo | papel |
 |---|---|
 | `sdf.py` | biblioteca SDF vetorizada: `sphere`, `ellipsoid`, `capsule`, `round_cone` (exato), `round_box`, `halfspace`, `tube` (cadeia de round cones); `smin`/`smax` polinomiais com k em unidades de mundo; `union`, `blend`, `subtract`, `intersect`, `sculpt` (lista ordenada de add/sub); `place` (rotação + translação), `mirror_x`, `scale` (uniforme/por eixo), `bend`, `twist`, `cup` (arco transversal), `displace`, `offset`, `shell`. Cada forma carrega uma esfera envolvente (`f.bound`) e as booleanas só avaliam uma parte onde ela pode mudar o resultado (cull). |
-| `mesher.py` | amostragem em banda estreita **hierárquica** (passos 16→8→4→2→1 da grade fina; só células a < 2 diagonais da superfície são subdivididas), `skimage.measure.marching_cubes` com `mask` (só células ativas), maior componente conexa (sem ilhas), **decimação QEM** vetorizada em lotes (com **importância** por vértice opcional), projeção dos vértices de volta à SDF (Newton), **normais = gradiente da SDF** (4 taps), **AO por vértice**, **`RadialWarp`** (refino local da grade) e escritor OBJ determinístico. |
-| `hand.py` | mão paramétrica: palma, polegar, 4 dedos de 3 falanges, almofadas, nós, tendões, vincos, unha insinuada, antebraço fusiforme. |
+| `mesher.py` | limpeza de lascas `clean_slivers`; amostragem em banda estreita **hierárquica** (passos 16→8→4→2→1 da grade fina; só células a < 2 diagonais da superfície são subdivididas), `skimage.measure.marching_cubes` com `mask` (só células ativas), maior componente conexa (sem ilhas), **decimação QEM** vetorizada em lotes (com **importância** por vértice opcional), projeção dos vértices de volta à SDF (Newton), **normais = gradiente da SDF** (4 taps), **AO por vértice**, **`RadialWarp`** (refino local da grade) e escritor OBJ determinístico. |
+| `hand.py` | mão paramétrica: palma, polegar, 4 dedos de 3 falanges esculpidas (`_phalanx`: seção elíptica, dorso plano, haste cintada, afunilamento `TIP_TAPER`), almofadas, metacarpos, tendões, vincos, leito de unha, antebraço fusiforme. |
 | `giant_hands.py` | poses das mãos gigantes e referencial de exportação. |
-| `miku.py` | a escultura de MIKU (rosto em relevo `face_relief`, calota e coque, braços, mãos, vestido), o cálculo das âncoras e `bake_spec()` (refino local da cabeça + importância da QEM). |
+| `miku.py` | a escultura de MIKU (rosto em relevo `face_relief`, massa de cabelo `_hair` + coque `_knot`, tronco, corpete drapeado `_bodice`, braços, mãos, vestido), o cálculo das âncoras e `bake_spec()` (refino local da cabeça + importância da QEM). |
 | `bake_all.py` / `bake_all.sh` | regenera tudo: `tools/sculpt/bake_all.sh` (≈ 14 min, MIKU ≈ 11,5 min; `--only hand_left`, `--quick` para iteração, `--out DIR`). |
-| `preview/` | `render_previews.sh` + `preview.gd` + `views.py`: previews no Godot real (seção Previews). |
+| `preview/` | `render_previews.sh` + `preview.gd` (argila) + `game_look.gd` (material real, ambiente e rig GENESIS) + `views.py`: previews no Godot real (seção Previews). |
 
 Determinismo: BLAS fixado em 1 thread, ordem de iteração fixa, números com casas fixas (`-0.0`
 normalizado), JSON com chaves ordenadas. Verificado: duas execuções completas independentes
-produziram os mesmos SHA-256 nos 6 arquivos (reverificado após o refino do Loop 4, com warp e
-importância: `miku_body.obj` ce357962…, `hand_left.obj` 4adf4e9e…, `hand_right.obj` 4f05fb89…).
+produzem os mesmos SHA-256 (reverificado na rodada de correção do Loop 4, com corpete, cabelo,
+falanges e `clean_slivers`: `miku_body.obj` 79ab78ab…, `hand_left.obj` 450812d7…, `hand_right.obj`
+b9ca9eba…).
 
 Algoritmos:
 - **QEM em lote**: a cada passada calcula custo/posição ótima de todas as arestas (quádricas
@@ -199,6 +200,11 @@ Algoritmos:
 - **AO**: em 6 escalas h (MIKU 0,012–0,45; mãos 0,06–1,4) amostra a SDF ao longo da normal e de 4
   direções num cone de 31°: `occ += w·clamp((h − d)/h)`; `ao = 1 − occ/Σw`. Guardado **linear** em
   cinza (R = G = B), 1 = aberto.
+- **Limpeza de lascas (`clean_slivers`, rodada de correção do Loop 4)**: depois da projeção final,
+  faces de área ~0 (< 0,002 × aresta média²) ou cuja normal de enrolamento discorda das normais da
+  SDF nos vértices (cos < 0,2) têm só os seus vértices relaxados para o centróide do 1-anel e
+  reprojetados na SDF (até 6 passadas, determinístico). MIKU 459 → 2, mãos 78–80 → 0; contagem nos
+  `stats` do bake (`slivers_before`, `slivers`).
 - Garantias por peça, checadas no bake (aborta se falharem): 0 arestas de borda, 0 não-manifold,
   1 componente; os bakes finais têm Euler 2 (gênero 0).
 
@@ -217,78 +223,108 @@ Metadados: `JSON.parse_string(FileAccess.get_file_as_string("res://assets/meshes
 
 ## MIKU — `assets/meshes/miku_body.obj` + `.json`
 
-Estátua sacra estilizada original (abstração tipo Brancusi, "Musa adormecida" / mármore art déco),
-não anime: ~11 cabeças (cabeça 0,53 u do queixo ao alto), cabeça curvada ~17° para a frente/baixo,
-levemente inclinada e girada; pescoço longo, clavículas e esternocleidomastoides suaves, busto
-discreto, contrapposto (ombros e quadril inclinados em sentidos opostos, tronco girado), braços
-longos abertos para a frente e para baixo. Da cintura: vestido em sino alongado (quadril, leve
-estreitamento, alargamento final), pregas verticais com torção lenta, leve varrida para trás, perna
-relaxada insinuada sob o tecido, **aberto embaixo** (casca de 3–4 cm, domo interno em y ≈ −1,7)
-com barra irregular suave. Sem pés, sem pernas.
+Estátua sacra estilizada original — **estatuária votiva** (korai, mármore art déco), não anime nem
+manequim: ~11 cabeças (cabeça 0,53 u do queixo ao alto, sem o cabelo), cabeça curvada ~17° para a
+frente/baixo, levemente inclinada e girada; pescoço longo, contrapposto (ombros e quadril inclinados
+em sentidos opostos, tronco girado), braços longos abertos para a frente e para baixo. Veste um
+único vestido: **corpete drapeado** do ombro à cintura que continua, sem costura nem cós, no sino
+alongado da saia (pregas verticais com torção lenta, leve varrida para trás, perna relaxada
+insinuada), **aberto embaixo** (casca de 3–4 cm, domo interno em y ≈ −1,7) com barra irregular
+suave. Sem pés, sem pernas.
 
-**Rosto (refino do Loop 4)** — um único oval contínuo, sem aresta dura. O rosto é um **relevo**
-(campo de altura z = f(x, y) no referencial da cabeça, com distância normalizada pelo gradiente)
-sobre um oval em ovo com queixo afinado; toda feição é uma elevação ou depressão gaussiana suave:
-testa lisa e cheia; arcada superciliar sutil que flui para a raiz do nariz; nariz fino e reto
-(projeção ≈ 0,04 u, ponta pequena); cavidade orbital rasa com a **pálpebra fechada em amêndoa**
-(borda superior macia, linha dos cílios em arco suave para baixo, pálpebra inferior leve); maçãs e
-bochechas suaves, têmporas levemente recuadas; boca só como relevo de lábios (divisão quase
-imperceptível); queixo pequeno e delicado; a linha da mandíbula sobe do queixo para a orelha (corte
-inclinado atrás), sem papada. Todo limite (clamp) do relevo é suave: uma quina no campo aparece como
-costura nas normais. Perfil: testa 0,22 · glabela 0,224 · raiz 0,22 · ponta do nariz 0,253 ·
-subnasal 0,215 · lábios 0,222/0,21 · queixo 0,21 (z no referencial da cabeça).
+**Rodada de correção do Loop 4 (art-critic: "manequim/alienígena careca")** — o que mudou:
+- **Rosto como massa**: a arcada superciliar é um plano contínuo da testa à raiz do nariz (perfil
+  grego) com o rebordo orbital em **massa** que avança sobre o olho (+0,011) e faz sombra; cavidade
+  mais funda sob a arcada; a **pálpebra fechada é uma amêndoa convexa** (+0,012, borda inferior
+  macia) sobre o globo, sem sulco de cílio; **lábios como volumes** (superior com arco do cupido,
+  inferior mais cheio, altura afinando para os cantos — nada de "caixa"), divisão só onde as duas
+  massas se encontram, cantos recolhidos e leve concavidade sob o lábio inferior; queixo definido.
+- **Massa de cabelo esculpida** (`_hair`, `_knot`): espessura real sobre o crânio (2,0 cm na linha do
+  cabelo → +2,0 no alto, +3,0 nas faixas que cobrem as orelhas, +1,2 atrás; 1 cm ≈ 0,023 u), linha
+  do cabelo com rolo macio (rampa 0,087 u), **21 mechas largas** penteadas para trás (meridianos em
+  torno do eixo rosto → coque, ondulação 0,1 rad, relevo 0,0095 entre crista e sulco) com 3 fios
+  finos por mecha; convergem num **coque enrolado alto** na parte de trás da cabeça (elipsoide
+  0,105 × 0,088 × 0,085 com torção em espiral) que termina numa **cauda curta** de 0,13 u ao longo
+  da saída das fitas (50° acima da horizontal, para trás): `hair_root` é a ponta dessa cauda — onde
+  a escultura vira a nebulosa de luz (`HairRibbons.nebula`). A cabeça ganhou volume nobre na
+  silhueta e não lê careca em nenhum ângulo.
+- **Ombros caídos com clavícula**: trapézio numa linha longa e descendente do pescoço (y 1,07) a um
+  ombro baixo e estreito (articulação em (±0,40, 0,76), antes (±0,42, 0,79); jugo 0,33 de largura,
+  antes 0,40); clavículas afinando (0,021 → 0,017) com as fossas supraclaviculares suaves acima.
+- **Sem seios modelados**: o peito é um **corpete drapeado** (`_bodice`) — o tecido passa como um
+  plano do ombro à cintura (casca 1,1 cm sobre o tronco + volume de drapeado frontal), decote
+  em concha suave abaixo das clavículas (mais baixo nas costas), **swags em U** do cowl sob o decote
+  (0,013) e **pregas largas** (7, amplitude 0,017) que nascem dos ombros em diagonal e convergem na
+  cintura, acalmando sobre o peito e os ombros. Sem cava recortada (os braços se fundem sobre o
+  tecido no ombro: uma borda de tecido junto à pele fechava túneis na axila).
+- **Sem cós**: removida a faixa da cintura; acima da cintura a saia mergulha sob o corpete (máximo
+  suave de y, 0,6 × y) e a união usa k 0,07 — uma superfície contínua, sem lábio. O quadril da saia
+  ficou mais macio (0,13 em vez de 0,17, sem o estreitamento de "saia lápis").
+- **Braços**: ombro→cotovelo→punho mais afastados do corpo (cotovelos (±0,78, 0,0), punhos (1,10,
+  −0,47) / (−1,10, −0,40)) — o braço não "derrete" no quadril de perfil; braço 0,102 → 0,07 no
+  cotovelo; **antebraço mais cheio** (tubo 0,07 → 0,086 → 0,07 → 0,048 + dois ventres musculares,
+  antes 0,068 → 0,078 → 0,062 → 0,045). Mãos de MIKU com leque um pouco mais aberto (+0,12 → −0,24
+  rad) — os dedos não se tocam na grade (gênero 0).
 
-**Cabelo** — calota presa ao crânio (espessura 0,9 cm na frente → 2,6 cm atrás), com rampa larga na
-linha do cabelo (sem ressalto/faixa na testa); a linha do cabelo é função do azimute: testa → têmpora
-→ desce na frente da orelha (não modelada) até o meio dela → contorna por trás → nuca, cobrindo a
-orelha e deixando a mandíbula livre (sem capuz). 22 sulcos rasos de penteado (0,15 cm) varrem da
-testa para trás e convergem, escondidos, sob um **coque baixo** (elipsoide largo na região
-occipital + fluxo curto) de onde partem as fitas (`hair_root`); sem chifre, sem mecha lateral.
-
-**Braços** — anatomia estilizada mantendo o alongamento: deltoide cheio, ventres do bíceps e do
-tríceps, cotovelo macio, massa do antebraço logo abaixo do cotovelo afunilando para um **punho fino
-e achatado** (fino na direção da palma). Raios ≈ 0,10 (ombro/deltoide) → 0,068 (cotovelo) → 0,08
-(antebraço) → 0,045 × 0,035 (punho); antes 0,10 → 0,064 → 0,071 → 0,046 em tubo liso.
-
-**Mãos de MIKU** — dedos separados e legíveis à distância: leque pequeno (abertura +0,09 → −0,19
-rad do indicador ao mínimo), flexão crescente para o mínimo, fusão só na base (`fuse_k` 0,05, antes
-0,28, que dava uma "luva"); polegar solto. Gênero 0 verificado.
+**"Buraco escuro" no tronco e braço "derretendo" (sf_05/g12)** — investigado: a malha não tem furo
+(0 arestas de borda, Euler 2, 1 componente) nem normais invertidas na região; a mancha é a **sombra
+projetada do braço direito pela key** (vinda do lado direito dela) sobre o flanco, com o serrilhado
+do mapa de sombra; o "derreter" era o braço quase encostado ao quadril na projeção. Prova:
+`game_look.gd --shadows=0` no mesmo enquadramento do `sf_05` remove a mancha (seção Previews). Com
+os braços mais afastados, a sombra cai mais na saia; o resto é do rig (animator/game-engineer:
+sombra suave/sem escada ou MIKU sem auto-sombra da key).
 
 - Referencial: +Y para cima, **frente +Z**, **origem no centro da cintura**; mão esquerda dela em +X.
-- Bounds: min (−1,444, −4,334, −1,610), max (1,424, 1,760, 1,191) → **6,09 u de altura** (barra
-  irregular: −4,15 ± 0,19).
+- Bounds: min (−1,458, −4,334, −1,623), max (1,494, 1,791, 1,175) → **6,12 u de altura** (barra
+  irregular: −4,15 ± 0,19); antes (−1,444, −4,334, −1,610) / (1,424, 1,760, 1,191), 6,09 u.
 - **117 998 triângulos**, 59 001 vértices, grade 0,0072 u (0,004 efetiva na cabeça, `RadialWarp`
-  m = 1,8), marching cubes 2,13 M → QEM com importância (rosto ≈ sem simplificação); OBJ 8,9 MB.
-  AO mín 0,11, média 0,82. Euler 2 (gênero 0), 1 componente, 0 arestas de borda. Bake ≈ 11,5 min.
+  m = 1,8), marching cubes 2,17 M → QEM com importância (rosto ≈ sem simplificação); OBJ 8,9 MB.
+  AO mín 0,12, média 0,83. Euler 2 (gênero 0), 1 componente, 0 arestas de borda; lascas 459 → 2
+  (`clean_slivers`). Bake ≈ 16 min (o corpete avalia o tronco duas vezes).
 
-| âncora (mesh) | valor | antes do refino |
-|---|---|---|
-| `head_top` | (−0,023, 1,729, 0,263) — topo ao longo do eixo da cabeça curvada | (−0,021, 1,771, 0,278) |
-| `forehead` | (0,001, 1,515, 0,417) — semente de luz | (0,002, 1,516, 0,423) |
-| `hair_root` | (−0,081, 1,584, −0,152) — fim do coque baixo | (−0,078, 1,726, −0,113) |
-| `hair_root_tangent` | (−0,074, 0,703, −0,708) — 45° acima da horizontal, para trás | (−0,070, 0,845, −0,531) |
-| `palm_left` / `palm_left_normal` | (1,204, −0,584, 0,892) / (0,680, −0,150, −0,718) | igual |
-| `palm_right` / `palm_right_normal` | (−1,028, −0,611, 0,991) / (−0,722, −0,232, −0,652) | igual |
-| `chest` | (−0,015, 0,610, 0,207) | igual |
-| `gown_hem_center` / `gown_hem_radius` | (−0,180, −4,116, −0,344) / 1,161 | igual |
+Âncoras (coordenadas do mesh) — **antes → depois** da rodada de correção:
+
+| âncora | antes | depois | por quê |
+|---|---|---|---|
+| `head_top` | (−0,023, 1,729, 0,263) | (−0,022, 1,752, 0,271) | volume do cabelo no alto |
+| `forehead` | (0,001, 1,515, 0,417) | igual | semente de luz no mesmo lugar |
+| `hair_root` | (−0,081, 1,584, −0,152) | **(−0,077, 1,750, −0,118)** | coque alto + cauda (≈ o valor de fallback dos consumidores, (−0,08, 1,73, −0,11)) |
+| `hair_root_tangent` | (−0,074, 0,703, −0,708) | **(−0,072, 0,795, −0,603)** | saída 50° acima da horizontal, para trás |
+| `palm_left` / `_normal` | (1,204, −0,584, 0,892) / (0,680, −0,150, −0,718) | (1,265, −0,589, 0,867) / (0,655, −0,162, −0,738) | braços afastados do corpo |
+| `palm_right` / `_normal` | (−1,028, −0,611, 0,991) / (−0,722, −0,232, −0,652) | (−1,101, −0,622, 0,974) / (−0,697, −0,244, −0,674) | idem |
+| `chest` | (−0,015, 0,610, 0,207) | (−0,012, 0,608, 0,259) | superfície do corpete (5 cm à frente) |
+| `gown_hem_center` / `_radius` | (−0,180, −4,116, −0,344) / 1,161 | (−0,180, −4,116, −0,345) / 1,174 | saia sem cós, quadril mais macio |
 
 ## Mãos gigantes — `assets/meshes/hand_left.obj`, `hand_right.obj` + `.json`
 
-Anatômicas e estilizadas: eminências tenar/hipotenar e oco da palma, arco transversal, nós dos
-dedos, falanges com almofadas palmares e nós dorsais, vincos palmares suaves, unha insinuada (plano
-raso com borda de cutícula macia), tendões extensores suaves (refino: mais finos e mais fundos,
-fillet maior), nós dos dedos (cabeças dos metacarpos) mais salientes no dorso, estiloides do punho,
-antebraço fusiforme que se afina num fim macio (fica na névoa). Pulso → ponta do médio
-**desdobrado = 7,0 u**; na pose a corda é 6,58 (esq.) / 6,49 (dir.) — campo `wrist_to_middle_tip`.
+Anatômicas e estilizadas: eminências tenar/hipotenar e oco da palma, arco transversal, falanges
+esculpidas, vincos palmares suaves, tendões extensores suaves, cabeças dos metacarpos em bloco
+arredondado no dorso, estiloides do punho, antebraço fusiforme que se afina num fim macio (fica na
+névoa). Pulso → ponta do médio **desdobrado = 7,0 u**; na pose a corda é 6,54 (esq.) / 6,47 (dir.) —
+campo `wrist_to_middle_tip`.
+
+**Dedos (rodada de correção do Loop 4: nada de "salsicha segmentada")** — cada falange é um
+`_phalanx` (`hand.py`): cone arredondado no referencial do dedo com **seção elíptica** (1,07 × a
+espessura, achatada para 0,83 no dorso), **dorso mais plano e haste levemente cintada no meio**
+(achatamento −0,10 e largura −0,06 no meio da falange) — as articulações leem como **planos de nós**
+onde as hastes planas se encontram, sem contas/esferas nas juntas (as esferas dorsais e as caixas
+de nó testadas antes viravam "anéis"); **afunilamento** extra por junta `TIP_TAPER` (1, 0,97, 0,92,
+0,80 — a ponta fica com 80% do raio antigo); almofadas palmares baixas (elipsoide 0,78 × 0,66 do raio
+médio); vincos palmares rasos (cápsula 0,04, k 0,12); **unha insinuada** como leito plano rebaixado
+(plano a 0,83 do raio da ponta, mais estreito que o dedo: 0,72 r de cada lado, k 0,12) — dobras
+laterais macias, sem corte retangular. O fim do antebraço afina para 0,24 (antes 0,20 num coto
+mais curto; 0,12 lia "cenoura"). As mãos pequenas de MIKU (`detail=False`) continuam com o núcleo
+de cones arredondados.
 
 Poses próprias (a direita **não** é espelho da esquerda — o teste compara as pontas):
 - **esquerda** embala por baixo: palma para cima, arco transversal forte, dedos curvos em concha
   rasa (flexão crescente do indicador ao mínimo), polegar aberto e erguido formando a borda.
-- **direita** — gesto de escultor, modela por cima: palma para baixo; o **indicador lidera**, quase
-  estendido e levemente curvo (flexão 0,12/0,20/0,13 rad); **médio, anelar e mínimo em cascata**
-  (0,30/0,44/0,28 → 0,46/0,62/0,36 → 0,62/0,76/0,42) com leque leve; **polegar em oposição**, vindo
-  para a frente sob o indicador como quem belisca a argila; antebraço mais curto antes do corte
-  (2,4 u, antes 3,6).
+- **direita** — **gesto de tecer** (substitui o indicador estendido que remetia à "Criação de
+  Adão"): palma para baixo; **dedos entreabertos** em leque (abertura +0,20 / +0,05 / −0,12 / −0,30
+  rad do indicador ao mínimo), **curvos em profundidades escalonadas** como quem passa fios entre
+  eles (flexão indicador 0,24/0,30/0,18, médio 0,34/0,40/0,24, anelar 0,27/0,34/0,20, mínimo
+  0,40/0,46/0,28 — o anelar menos curvo que o médio quebra a cascata), **polegar aberto e solto** ao
+  lado do indicador (sem pinça); arco 0,30; antebraço curto (2,4 u).
 
 Referencial de exportação, **origem = centro da palma** (na superfície palmar):
 
@@ -298,18 +334,23 @@ Referencial de exportação, **origem = centro da palma** (na superfície palmar
 | direita | −X | −Y (−0,017, −1,000, 0,004) | +X (0,954, 0,286, −0,095) | +Z |
 
 Outras âncoras: `wrist_center` (esq. (−2,05, −0,42, 0), dir. (2,05, 0,43, 0)), `forearm_end`,
-`tip_thumb/index/middle/ring/little`. Bounds esq. 9,82 × 3,27 × 3,74 (inclui ~3,6 u de antebraço);
-dir. 8,56 × 3,40 × 3,13 (antes 9,71 × 4,15 × 3,61; ~2,4 u de antebraço). **57 998 triângulos**
-cada (29 001 vértices), grade 0,022 u; OBJ 4,3 MB cada; Euler 2.
+`tip_thumb/index/middle/ring/little`. Bounds esq. 9,79 × 3,27 × 3,71 (inclui ~3,6 u de antebraço);
+dir. 8,40 × 3,27 × 4,24 (antes 8,56 × 3,40 × 3,13: o polegar aberto aumenta a profundidade).
+**57 998 triângulos** cada (29 001 vértices), grade 0,022 u; OBJ 4,3 MB cada; Euler 2; lascas 0.
 
-Âncoras da mão direita que mudaram (antes → depois): `forearm_end` (5,323, 1,514, −0,362) →
-(4,179, 1,170, −0,248); `tip_thumb` (−1,252, −2,348, 1,630) → (−1,804, −1,738, 0,685);
-`tip_index` (−4,356, −0,346, 1,458) → (−4,344, −0,415, 1,381); `tip_middle` (−4,202, −1,399,
-0,386) → (−4,138, −1,483, 0,358); `tip_ring` (−3,727, −1,523, −0,488) → (−3,178, −1,917, −0,429);
-`tip_little` (−2,757, −1,325, −1,157) → (−1,939, −1,692, −0,944). A mão esquerda só mudou no
-relevo (tendões/nós), âncoras iguais a menos de 0,001. Na cena do contrato (esq. ≈ (−3,0, −1,5, 4,6), dir. ≈ (3,2, 3,4, 4,8), planeta
-(0, 1, 4)), com rotação identidade a esquerda aponta os dedos para o planeta com a palma para cima e
-a direita paira sobre ele com a palma para baixo; ajuste fino girando `palm_normal` para o planeta.
+Âncoras que mudaram na rodada de correção (antes → depois; `palm_center`, `palm_normal`,
+`wrist_center`, `forearm_dir`, `forearm_end` iguais a menos de 0,001):
+- esquerda (só afunilamento): `tip_index` (4,026, 1,086, −1,097) → (3,992, 1,052, −1,098);
+  `tip_middle` (4,277, 1,343, −0,317) → (4,246, 1,304, −0,318); `tip_ring` (3,873, 1,406, 0,436) →
+  (3,848, 1,367, 0,437); `tip_little` (2,907, 1,248, 1,054) → (2,889, 1,212, 1,058); `tip_thumb` igual.
+- direita (gesto de tecer): `tip_thumb` (−1,804, −1,738, 0,685) → (−1,497, −1,730, 2,424);
+  `tip_index` (−4,344, −0,415, 1,381) → (−4,032, −0,938, 1,539); `tip_middle` (−4,138, −1,483,
+  0,358) → (−4,121, −1,466, 0,467); `tip_ring` (−3,178, −1,917, −0,429) → (−4,091, −1,068, −0,652);
+  `tip_little` (−1,939, −1,692, −0,944) → (−2,846, −1,231, −1,395).
+
+`AuxiliaryHands` lê as pontas do JSON (foco/rótulo), sem constantes a ajustar. Na cena, a esquerda
+aponta os dedos para o planeta com a palma para cima e a direita paira sobre ele com a palma para
+baixo; ajuste fino girando `palm_normal` para o planeta.
 
 ## Geradores em runtime — `src/procedural/` (RefCounted, estáticos, determinísticos)
 
@@ -317,6 +358,26 @@ Convenções: 1 superfície, triângulos indexados com frente horária (Godot), 
 UV em [0,1]. Construir uma vez; nunca por frame.
 
 **`HairRibbons`**
+- **`nebula(root, direction, seed, tufts := 9, length := 10.0, link_ends := PackedVector3Array(),
+  options := {}) -> Dictionary`** (rodada de correção do Loop 4) — o cabelo como **uma massa de
+  nebulosa**: todos os fios nascem na **raiz única** (`root_radius` 0,035), saem por `direction`
+  (para trás) e sobem numa **curva em S** (o rumo gira para o UP do mundo em `lift` rad ao longo do
+  fio, com ondulação em S `s_amount`: sobe, recua, sobe); agrupados em `tufts` **tufos de 5–10 fios**
+  (`strands_min/max`) que compartilham o caminho do tufo; **comprimentos variados** (tufo 0,55–1,15 ×
+  `length`, fio 0,6–1,0 do tufo); **pontas que se abrem** em filamentos (afastamento quadrático até
+  `tip_open` · comprimento do tufo) e onda lateral pequena por fio. Rumos dos tufos distribuídos
+  por ângulo num cone de meia-abertura `spread` 0,38 (sem aglomerados). Retorna `{"curves":
+  Array[PackedVector3Array], "links": PackedInt32Array, "groups": PackedInt32Array}`.
+  **Fios de link**: para cada ponto de `link_ends` (mesmo referencial de `root`) acrescenta um fio
+  longo que sai da raiz dentro do tufo cuja ponta aponta mais para o ponto, segue o S do tufo e
+  **termina exatamente no ponto** (`link_curve`); `links[i]` é o índice desse fio em `curves`. Uso
+  previsto: `link_ends` = início de cada fio de relação (`RelationThreads.HAIR_SOURCES`), assim o
+  fio de luz do grafo continua o fio de cabelo. `options` sobrescreve `NEBULA_DEFAULTS`.
+  Custo: tufos × ~7,5 fios × `2·(samples−1)` t (×2 cruzado); ex. 10 tufos + 4 links, 56 amostras,
+  cruzado ≈ 79 fios × 110 × 2 ≈ 17,4k t.
+- `s_path(root, heading, length, points, lift := 0.75, s_amount := 0.42, phase := 0.0)` — o caminho
+  em S de um tufo; `link_curve(root, heading, end_point, points := 16, lift, s_amount, phase)` —
+  mesmo S na raiz (tangente preservada) com correção suave (smootherstep) até `end_point`.
 - `curve_point(points, t)`, `sample_curve(points, samples)` — Catmull-Rom.
 - `generate_curves(root, direction, count, seed, length := 10.0, points := 9, spread := 0.5,
   wave_amplitude := 0.45, waves := 1.4, rise := 0.9, root_radius := 0.05) -> Array[PackedVector3Array]`
@@ -328,6 +389,12 @@ UV em [0,1]. Construir uma vez; nunca por frame.
   **alfa = opacidade** (0,55–1 por fio → 0 na ponta), como `miku_hair()` espera; TANGENT ao longo
   do fio; referencial por transporte paralelo. `crossed` duplica cada fio a 90° (não some de
   perfil). Custo `2·(samples−1)` t por fio (×2 cruzado): 64 fios × 48 amostras = 6 016 t.
+  Parâmetros finais opcionais (compatíveis): `links: PackedInt32Array` (fios de link: mantêm
+  `LINK_TIP_RATIO` 0,55 da largura e alfa `LINK_TIP_ALPHA` 0,8 na ponta — o fio de relação continua
+  dali; os demais fios somem na ponta como antes) e `groups: PackedInt32Array` (tufo de cada fio).
+  **CUSTOM0** (RGBA float, sempre presente) = (1 se fio de link senão 0, tufo / (tufos − 1),
+  comprimento do fio / maior fio, 0) — para o shader diferenciar fios de link e variar por tufo
+  (`miku_hair` atual só usa `COLOR.a`; a máscara está disponível ao art-director).
 
 **`OrbitLine`** (plano XZ; fase p → ângulo 2πp a partir de +Z para +X)
 - `point(rx, rz, phase)`, `outward(rx, rz, phase)`.
@@ -359,14 +426,23 @@ UV em [0,1]. Construir uma vez; nunca por frame.
 
 ## Previews (Godot real, Forward+ via xvfb)
 
-`tools/sculpt/previews/` (26 PNG 1600×900, 4,7 MB): `miku_{front,q34,side,back,low,bust_q34}`,
+`tools/sculpt/previews/` (1600×900): 26 PNG de argila — `miku_{front,q34,side,back,low,bust_q34}`,
 `miku_head_{face,q34l,sidel}` (frente, ¾ e perfil **no referencial da cabeça**, luz de estúdio),
 `miku_head_soft` (luz lateral suave, sombra de penumbra larga), `miku_head_hard` (luz dura quase
 frontal, sem fill — expõe qualquer vinco), `miku_hand_left`, `hand_{left,right}_{q34,front,top,
 under,low,soft,hard}` — argila neutra × AO do vértice. Estúdio: key quente com sombra, recorte frio
-forte, fill fraco. Regerar: `tools/sculpt/preview/render_previews.sh [MESH_DIR] [OUT_DIR]` (projeto
-Godot descartável próprio em `tools/sculpt/preview/`, ignorado pelo projeto principal via
-`.gdignore`; câmeras em `views.py`).
+forte, fill fraco. **Provas com o material real** (JPEG): `game_miku_{portrait,face,bust_q34,full,
+highside}` e `game_hand_{left,right}_{hero,close}` — `preview/game_look.gd`, rodado **dentro do
+projeto principal**: `MaterialLibrary.miku_body()` / `hand_stone()` (veins 0,35) desperto, ambiente
+GENESIS (céu de nebulosa, AgX, glow, névoa), rig GENESIS nos níveis despertos (back DUSK_ROSE 2,3,
+rim ICE 1,25, key PEARL 1,05 = única sombra, fill NEBULA 0,12, brilho do planeta), no transform do
+jogo (`GenesisLayout`); MIKU com a prova do cabelo `HairRibbons.nebula` (2 camadas + 4 fios de link
+até `RelationThreads.HAIR_SOURCES`). Diagnóstico: `--shadows=0` (sem a sombra da key) e `--clay=1`;
+`diag_sf05_key_shadow_on_off.png` = enquadramento do `sf_05`, com/sem a sombra da key (a mancha
+escura do flanco some). `ingame_sf_0{1,2,5}*.jpg`: quadros do jogo real (`tools/style_frames.sh`)
+com as malhas desta rodada. ~7 MB no total. Regerar: `tools/sculpt/preview/render_previews.sh
+[MESH_DIR] [OUT_DIR]` (projeto Godot descartável próprio em `tools/sculpt/preview/` para a argila,
+ignorado pelo projeto principal via `.gdignore`; câmeras em `views.py`).
 
 Sombras das previews = as do jogo (`LightRig`): **PCF** suavizado por `shadow_blur` (dura 1,0,
 estúdio 1,8, lateral suave 3,0), `shadow_normal_bias` 2,0, `soft_shadow_filter_quality` 3 e
@@ -377,18 +453,27 @@ sobre o pescoço, nariz sobre a bochecha, entre os dedos das mãos gigantes). Di
 continua com AO desligado, some com sombra desligada ou com PCF, e não depende de bias. A malha foi
 inspecionada na mesma região (pescoço/mandíbula e bochecha): qualidade de triângulo p1 0,39/0,49,
 normal do vértice × normal da face ≥ 0,79 (p0,1), AO sem ruído entre vizinhos. Malhas **não** mudaram.
-Resíduo conhecido, sem efeito visível (sub-pixel): lascas de marching cubes sem área — MIKU 26
-faces de área ~0 e 20 com normal de vértice oposta à face (barra/mãos), mãos 4–8 e 5–19.
+Lascas de marching cubes (antes: MIKU 26 faces de área ~0 e 20 com normal de vértice oposta à
+face; mãos 4–8 e 5–19): tratadas por `clean_slivers` (acima).
 
-Inspeção (refino do Loop 4): a faixa/vinco da testa sumiu; testa lisa, olhos fechados lidos como
-amêndoas serenas, perfil com nariz fino, lábios e queixo delicado, calota com coque baixo sem capuz.
-Limites conhecidos: sob luz dura e close extremo a linha dos cílios mostra leve serrilhado (feição
-de ~2 células da grade fina); a borda da unha do polegar da mão direita marca como um traço sob luz
-dura; a mandíbula em perfil ainda é cheia (estilização).
+Inspeção (rodada de correção do Loop 4, argila + material real + jogo real): MIKU lê como estátua
+votiva vestida — cabelo esculpido com mechas onduladas e coque (não lê careca em nenhum ângulo; no
+retrato do jogo a massa de cabelo emoldura o rosto sob as fitas), pálpebras/arcada/lábios como
+volumes, ombros caídos com clavículas, corpete com cowl e decote, vestido contínuo sem cós; de
+perfil o braço não encosta no quadril. Mãos gigantes: dedos afunilados com dorso plano e juntas
+discretas, leito de unha; a direita tece (dedos entreabertos em profundidades escalonadas).
+Limites conhecidos: sob luz dura/close extremo as cristas das mechas acima da orelha mostram
+pequenas facetas (sulco em V + QEM fora da zona de importância máxima); o material atual
+(`miku_body`, rim por limiar) contorna toda borda de relevo e serrilha a silhueta — correção do
+art-director; a sombra da key em MIKU tem escada — rig (animator/game-engineer); o fim do antebraço
+das mãos gigantes depende do fade no pulso de `hand_stone` (art-director).
 
 ## Testes — `tests/unit/test_procedural_genesis.gd`
 
-Esculturas: carregam como `Mesh` de 1 superfície; triângulos ≤ orçamento (120k / 60k); cor de
+Cabelo-nebulosa: `nebula` determinística por seed, 5–10 fios por tufo, raiz única, todos sobem e
+recuam, comprimentos variados (maior/menor > 1,6), pontas abrem (> 3× o afastamento na raiz), S com
+≥ 2 inflexões; fios de link terminam exatamente no ponto, saem com a massa, CUSTOM0 marca link/tufo,
+fios comuns somem e fios de link ficam visíveis na ponta. Esculturas: carregam como `Mesh` de 1 superfície; triângulos ≤ orçamento (120k / 60k); cor de
 vértice presente, cinza e com contraste; normais unitárias; enrolamento coerente com as normais
 (< 0,1% de exceções); AABB = `bounds` do JSON; altura de MIKU 5,8–6,2 com a origem dentro; âncoras
 presentes, dentro dos bounds e com a orientação do contrato; mãos com origem na palma, corda

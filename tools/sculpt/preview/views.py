@@ -59,3 +59,31 @@ def hands(side, sx, sy):
 
 json.dump(hands("left", 1, 1), open(os.path.join(D, "views_final_left.json"), "w"))
 json.dump(hands("right", -1, -1), open(os.path.join(D, "views_final_right.json"), "w"))
+
+
+# proofs with the game's look (game_look.gd, run in the main project): real materials, GENESIS
+# environment and light rig; MIKU in her object space (with the nebula hair proof), the giant
+# hands from in-game camera positions (world)
+hc = miku._head_point(v3(0, 0, 0))
+game_miku = [
+    {"name": "game_miku_portrait", "pos": (hc + v3(0.3, -0.6, 2.2)).tolist(),
+     "target": (hc + v3(0, -0.3, 0)).tolist(), "fov": 30},
+    {"name": "game_miku_face", "pos": (hc + v3(0.25, -0.35, 1.6)).tolist(), "target": hc.tolist(), "fov": 24},
+    {"name": "game_miku_bust_q34", "pos": [2.6, 0.9, 3.8], "target": [0.1, 0.6, 0.2], "fov": 38},
+    {"name": "game_miku_full", "pos": [0.5, 0.0, 10.5], "target": [0, -1.0, 0], "fov": 38},
+    {"name": "game_miku_highside", "pos": [7.5, 5.5, -2.5], "target": [0, -1.0, 0.2], "fov": 40},
+]
+json.dump(game_miku, open(os.path.join(D, "views_game_miku.json"), "w"))
+
+
+def ghands(side, c):
+    p = "game_hand_" + side
+    return [
+        {"name": p + "_hero", "pos": [0.5, 3.0, 17.0], "target": c, "fov": 32, "world": True},
+        {"name": p + "_close", "pos": [c[0] + 1.5, c[1] + 1.0, c[2] + 7.5], "target": c, "fov": 34,
+         "world": True},
+    ]
+
+
+json.dump(ghands("left", [-1.2, -2.5, 3.0]), open(os.path.join(D, "views_game_left.json"), "w"))
+json.dump(ghands("right", [2.4, 2.9, 3.2]), open(os.path.join(D, "views_game_right.json"), "w"))
