@@ -9,9 +9,9 @@ Definições oficiais: `.claude/agents/*.md` (subagentes do Claude Code) e `.cla
 | Agente | Especialização | Escreve em |
 |---|---|---|
 | `art-director` | Direção artística, bíblia visual, materiais/shaders (inclui céu de nebulosa), ambiente de luz, UI nativa | `src/style/**`, `src/ui/**`, `tests/unit/test_ui_*.gd`, `tests/unit/test_style_*.gd`, `assets/fonts/**`, `icon.svg`, `icon.png`, `docs/VISUAL_DIRECTION.md`, `docs/art/**` |
-| `game-engineer` | Engenharia de jogos 3D, eventos, mundo, qualidade, build | `project.godot`, `export_presets.cfg`, `scenes/**`, `src/core/**`, `src/events/**`, `src/world/**`, `tools/**` (exceto `tools/sculpt/**` e `tools/audio/**`), `tests/integration/**`, `tests/unit/test_event_system.gd`, `tests/unit/test_genesis_events.gd`, `tests/unit/test_quality_profiles.gd`, `licenses/**`, `.gitignore`, `.gitattributes`, `.gutconfig.json`, `docs/ARCHITECTURE.md`, `docs/ENGINE.md`, `docs/DEMO_EVENTS.md`, `docs/BUILD.md` |
-| `procedural-modeler` | Modelagem procedural e escultura offline (SDF → malha) | `src/procedural/**`, `tools/sculpt/**`, `assets/meshes/**`, `tests/unit/test_procedural_*.gd`, `docs/PROCEDURAL.md` |
-| `animator` | Câmeras, animação por eventos, VFX | `src/animation/**`, `src/entities/**`, `src/fx/**`, `tests/unit/test_animation_*.gd`, `docs/ANIMATION.md` |
+| `game-engineer` (INTERACTION_SYSTEM) | Engenharia de jogos 3D, eventos, mundo, qualidade, build; sistema de interação/agente (vocabulário, intents, configuração, porta de provider) | `project.godot`, `export_presets.cfg`, `scenes/**`, `src/core/**`, `src/events/**`, `src/world/**`, `tools/**` (exceto `tools/sculpt/**` e `tools/audio/**`), `tests/integration/**`, `src/agent/**`, `config/**`, `tests/unit/test_agent_*.gd`, `docs/AGENT.md`, `tests/unit/test_event_system.gd`, `tests/unit/test_genesis_events.gd`, `tests/unit/test_quality_profiles.gd`, `licenses/**`, `.gitignore`, `.gitattributes`, `.gutconfig.json`, `docs/ARCHITECTURE.md`, `docs/ENGINE.md`, `docs/DEMO_EVENTS.md`, `docs/BUILD.md` |
+| `procedural-modeler` | Modelagem procedural, escultura offline (SDF → malha) e rig/skinning do manequim | `src/procedural/**`, `tools/sculpt/**`, `assets/meshes/**`, `tests/unit/test_procedural_*.gd`, `docs/PROCEDURAL.md` |
+| `animator` (CHARACTER_MOTION) | Câmeras, animação por eventos, VFX; runtime da personagem viva (mente, corpo procedural, mãos-marionete, fios) | `src/animation/**`, `src/entities/**`, `src/fx/**`, `src/miku/**`, `tests/unit/test_animation_*.gd`, `docs/ANIMATION.md` |
 | `sound-designer` | Linguagem sonora, síntese offline, SFX/ambiência, mixagem, diretor de áudio | `src/audio/**`, `assets/audio/**`, `tools/audio/**`, `default_bus_layout.tres`, `tests/unit/test_audio_*.gd`, `docs/AUDIO.md` |
 | `technical-auditor` | Auditoria técnica e visual | nada (somente leitura + execução) |
 | `art-critic` | Crítica de arte independente (style frames, capturas, vídeo com áudio) | nada (somente leitura + execução) |
@@ -37,6 +37,12 @@ Não há orquestrador próprio: a coordenação usa apenas os subagentes nativos
 | `demo-events` | Criar/alterar eventos simulados | game-engineer |
 
 ## Pesquisa prévia
+
+Loop 5: busca no catálogo de skills por Godot/animação de personagem/sistemas de gameplay/arquitetura de agentes
+não retornou resultados (`/find-skills` não existe nesta sessão); nenhuma skill nova foi carregada. Os papéis
+CHARACTER_MOTION e INTERACTION_SYSTEM da diretiva são exercidos pelos agentes `animator` e `game-engineer`.
+
+### Loop 1
 
 Antes de criar as skills foi pesquisado o catálogo de skills e plugins disponível: não havia skill
 de Godot; os resultados eram de outros domínios ou dependiam de serviços remotos/comerciais

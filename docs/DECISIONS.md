@@ -106,3 +106,25 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
   tipos, estado e catálogo por id; `--scenario=` na linha de comando. Módulos GENESIS leem `Simulation.genesis`.
 - Consequência: mudança aditiva; na virada (Loop 4, Fase C) `world` pode ser retipado quando os consumidores da
   ORIGIN saírem.
+
+## ADR-015 — Personagem viva é estado em tempo real
+- Contexto: Loop 5 (MIKU LIVING CHARACTER). Vida, antecipação, follow-through e reações a intervenções do usuário
+  exigem dinâmica com estado (molas de segunda ordem, mente com emoção/compostura, agenda de micro-comportamentos),
+  incompatível com "visual = f(Simulation.time)" e com seek.
+- Decisão: no cenário `living`, a personagem e suas mãos/fios são uma simulação em tempo real dirigida por
+  `MotionClock` (determinística sob Movie Maker com `--fixed-fps`); o `Simulation` continua o único produtor de
+  eventos de demonstração (ordens de trabalho do roteiro); intervenções do usuário entram pelo sistema de interação.
+  Sem seek nesse cenário (reset = recompor). Variação de comportamento vem do estado, não de aleatoriedade; ruído
+  só com semente fixa.
+- Consequência: ORIGIN/GENESIS mantêm ADR-004/010; o cenário `living` documenta a exceção.
+
+## ADR-016 — Character ≠ Provider ≠ Worker; mutações só por patch validado
+- Contexto: o Owner prevê conectar MIKU a CLIs/providers (via provider registry da KORIUM) e configurá-la por
+  conversa, sem que MIKU vire "um provider com skin" e sem dar a providers acesso arbitrário a arquivos/internals.
+- Decisão: `src/agent/` define vocabulário de ações, intents, parser local determinístico, **porta** de provider
+  (interface sem implementação, sem registro próprio — a ligação futura é ao registry da KORIUM, que este projeto
+  não acessa nem conecta; regra de isolamento mantida), patch estruturado, esquema e validação de configuração
+  (`identity`/`appearance`/`behaviour`). Providers só devolvem ações + patch; a runtime de MIKU decide a execução.
+  `appearance` só expõe propriedades com suporte real (ossos/materiais); o resto é `REQUIRES_ASSET`.
+- Consequência: trocar/perder provider não muda a personagem; pedidos locais não gastam tokens; voz futura reusa o
+  mesmo input.

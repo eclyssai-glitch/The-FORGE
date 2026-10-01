@@ -107,7 +107,7 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   Quadros conferidos em todos os trechos do roteiro. Reproduzir: `tools/record_review.sh`.
 - Verificação: `tools/run_tests.sh` 193/193.
 
-## Loop 4 — ART DIRECTION RESET · em andamento
+## Loop 4 — ART DIRECTION RESET · pausado (superado pela diretiva MIKU LIVING CHARACTER)
 
 - Motivo: v0.1.0 aprovada tecnicamente, **reprovada na direção artística** (parece protótipo técnico; sem VFX/SFX
   memoráveis). Nova visão: MIKU (agente central original) suspensa no espaço, mãos auxiliares gigantes formando
@@ -126,3 +126,21 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   correção 1 integrada nas cinco áreas (`docs/contracts/loop-04-fixes.md`, merge `f192d16`; 362/362; smokes PASS).
   Próximo: gravação do jogo real com áudio (`tools/record_genesis.sh`) e revisão art-critic r2; depois Fase C
   (virada para GENESIS, export, auditoria técnica, checkpoint).
+- Pausa (diretiva do Owner "MIKU LIVING CHARACTER LOOP V1"): GENESIS passa a ser só referência do problema.
+  Checkpoint recuperável: commit `b9b8672` (no branch remoto; tag local `checkpoint/loop4-genesis-r1` — push de tag
+  recusado pelo proxy, 403). Revisão art-critic r2 não concluída (limite de uso). Gravação do estado:
+  `build/review/genesis_1280x720_hud-on.mp4` (não versionado).
+
+## Loop 5 — MIKU LIVING CHARACTER V1 · em andamento
+
+- Brief e contratos: `docs/contracts/loop-05.md`. Decisões: ADR-015 (personagem viva em tempo real), ADR-016
+  (Character ≠ Provider ≠ Worker; patch validado). Skills: busca sem resultados; nenhuma carregada.
+- Papéis: CHARACTER_MOTION = `animator`; INTERACTION_SYSTEM = `game-engineer`; rig do manequim = `procedural-modeler`;
+  materiais placeholder = `art-director`; revisão = `art-critic` + `technical-auditor`.
+- Perguntas de cada rodada (todas precisam ser SIM): 1 viva? 2 causa os acontecimentos? 3 mãos = marionetes?
+  4 peso? 5 antecipação? 6 overlap? 7 personalidade sem texto? 8 estado irritado claro? 9 recupera a compostura?
+  10 câmera ajuda a história? 11 mundo construído (não spawnado)? 12 interação do usuário convincente?
+- Reprovação: parada longa; idle em loop; mão sem gesto causal; fio decorativo; planeta pronto; partícula gratuita;
+  tween; erro = só cor/partícula; irritação genérica; câmera sem motivo; interação = botão; configuração = menu;
+  movimento brusco/sem peso.
+- Estado: rodada 1 — implementação em paralelo (rig, interação/agente, personagem/mãos/fios, materiais).

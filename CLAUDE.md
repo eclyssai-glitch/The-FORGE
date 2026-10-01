@@ -25,7 +25,10 @@ Novo addon/asset só com necessidade concreta, licença verificada, auditoria e 
 
 - `src/events` é lógica pura (RefCounted): sem nós, sem relógio, sem aleatoriedade.
 - O autoload `Simulation` é o único produtor de eventos; o visual é função de
-  `Simulation.world` + `Simulation.time` (pausa/seek/reset sempre consistentes).
+  `Simulation.world` + `Simulation.time` (pausa/seek/reset sempre consistentes). Exceção: a personagem viva
+  (cenário `living`) é simulação em tempo real com estado (ADR-015).
+- Character ≠ Provider ≠ Worker (ADR-016): providers só devolvem ações do vocabulário + patch estruturado validado;
+  porta de provider sem implementação e sem conexão (a KORIUM continua isolada).
 - `Session` guarda modo/seleção; `Quality` guarda o perfil gráfico. UI e mundo 3D só
   conversam por esses autoloads.
 - `src/style/palette.gd` é a única fonte de cor, tipografia e tempos de movimento.
