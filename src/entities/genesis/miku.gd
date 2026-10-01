@@ -82,7 +82,7 @@ const SEED_LIGHT_ENERGY := 0.04
 ## The light that reveals her: at the awakening the seed's light blooms this far (units) and this
 ## bright (GenesisChoreography.seed_bloom), then settles back to the small brow light.
 const SEED_BLOOM_RANGE := 3.4
-const SEED_BLOOM_ENERGY := 1.1
+const SEED_BLOOM_ENERGY := 0.7
 ## Asleep, the ember on her brow breathes (share of its brightness, period in seconds).
 const EMBER_BREATH := 0.22
 const EMBER_PERIOD := Palette.T_BREATH

@@ -68,7 +68,7 @@ const BELT_INNER := 16.0
 const BELT_OUTER := 19.0
 const BELT_THICKNESS := 0.9
 const BELT_TILT := Vector3(-0.42, 0.0, 0.1)
-const BELT_ROCKS := 760
+const BELT_ROCKS := 2400
 const BELT_PERIOD := 900.0
 ## Distant worlds (older subagents, already formed): orbit radius around MIKU, planet radius,
 ## orbit tilt, period (s), start phase, their own small moon (orbit radius, moon radius, period).

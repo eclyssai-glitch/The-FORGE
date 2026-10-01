@@ -78,9 +78,9 @@ const HERO_POSE := [Vector3(0.0, 4.6, 1.0), 0.0, -0.06, 23.5, 36.5]
 const CRADLE_DUR := 13.0
 const CRADLE_POSE := [Vector3(0.2, 0.8, 2.6), -0.45, -0.05, 12.5, 38.0]
 const RISE_DUR := 16.0
-const RISE_POSE := [Vector3(0.0, 5.4, 0.2), 0.4, 0.32, 33.0, 42.0]
+const RISE_POSE := [Vector3(0.0, 5.2, 0.6), 0.36, 0.24, 25.0, 42.0]
 const RECEDE_DUR := 3.0
-const RECEDE_POSE := [Vector3(0.0, 5.2, 0.6), 0.3, 0.26, 40.0, 42.0]
+const RECEDE_POSE := [Vector3(0.0, 4.9, 0.9), 0.2, 0.15, 30.0, 40.0]
 
 # --- Focus --------------------------------------------------------------------------------------
 const FOCUS_FILL := 0.55

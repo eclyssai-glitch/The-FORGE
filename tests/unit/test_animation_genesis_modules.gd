@@ -193,6 +193,13 @@ func test_the_stable_wave_lights_the_threads() -> void:
 	assert_gt(float(rt.threads[0].material_override.get_shader_parameter("intensity")), base * 1.5,
 		"the pulse lights MIKU's thread as it runs")
 	assert_true(rt.pulses.visible)
+	var glow: FormationGlow = _n["FormationGlow"]
+	await _seek(GenesisScript.T_STABLE - 0.5)
+	assert_false(glow.aura.visible, "no aura before the world holds")
+	await _seek(GenesisScript.DURATION)
+	assert_almost_eq(glow.aura_level(), GenesisChoreography.CLIMAX_REST, 1e-3, "the world's sky lights up")
+	var rig: GenesisLightRig = _n["GenesisLightRig"]
+	assert_gt(rig.planet_glow.light_energy, GenesisChoreography.PLANET_LIGHT_CLIMAX, "the sky light of the world")
 
 
 func test_universe_is_populated() -> void:

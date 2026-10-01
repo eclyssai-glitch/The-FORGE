@@ -39,11 +39,13 @@ const BELT_MIN_SHARE := 0.45
 ## turning with the rocks), a few of them GOLD glints of memory. Count, size, share of glints,
 ## glint HDR, alpha, thickness share of the belt.
 const BELT_DUST := 3200
-const BELT_DUST_SIZE := 0.16
+const BELT_DUST_SIZE := 0.085
 const BELT_GLINT_SHARE := 0.05
 const BELT_GLINT_HDR := 1.6
-const BELT_DUST_ALPHA := 0.32
+const BELT_DUST_ALPHA := 0.4
 const BELT_DUST_THICKNESS := 0.6
+## Grains closer to the lens than x are hidden, fully visible from y (no bokeh discs over the camera).
+const BELT_DUST_NEAR_FADE := Vector2(6.0, 14.0)
 ## The older worlds carry their own bodies: NAUVE-2 a thin ring (inner, outer as a share of its
 ## radius, tilt), KESTRE-4 a second moon (orbit share of the first, radius, period s, tilt).
 const FAR_RING := Vector2(1.45, 2.3)
@@ -208,7 +210,7 @@ func _build_belt() -> void:
 	# Fine dust between the rocks (static positions, turns with them; fades in with the belt).
 	belt_dust = MoteCloud.new()
 	belt_dust.name = "Dust"
-	belt_dust.setup(BELT_DUST, Palette.LILAC.lerp(Palette.PEARL, 0.45), BELT_DUST_SIZE, Vector2(2.0, 6.0), true,
+	belt_dust.setup(BELT_DUST, Palette.LILAC.lerp(Palette.PEARL, 0.45), BELT_DUST_SIZE, BELT_DUST_NEAR_FADE, true,
 		belt_rocks.custom_aabb)
 	belt_dust.min_visible = 600
 	belt_rocks.add_child(belt_dust)

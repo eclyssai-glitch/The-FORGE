@@ -323,32 +323,38 @@ do `.obj` (`GenesisLayout.anchors/anchor/bounds`). Refinada com os style frames 
 contrato: MIKU maior (escala 1,2 ≈ 7,4 u) e o mundo novo **abaixo e à frente da barra do vestido** — no
 layout inicial as mãos e o planeta ficavam diante do tronco e escondiam a figura. Leitura vertical do
 plano herói: cabelo (sai do quadro) → halo e rosto (terço superior) → vestido derramando poeira → o mundo
-entre as mãos (terço inferior). Mãos na escala 0,72 (punho→ponta ≈ 4,7 u, ≈ 1,5× o diâmetro final do
+entre as mãos (terço inferior). Rodada de correção 1 (art-critic): MIKU subiu (origem y 8,4) e a mão
+direita desceu para a direita (`HAND_RIGHT_POS`/`EULER`) — **espaço negativo**: no plano herói as pontas
+dos dedos ficam ~0,1 da altura do quadro abaixo da barra do vestido (antes tocavam a barra); NAUVE-2
+começa fora do quadro herói (`FAR_PHASES`). Mãos na escala 0,72 (punho→ponta ≈ 4,7 u, ≈ 1,5× o diâmetro final do
 planeta): monumentais diante do mundo que seguram, abaixo de MIKU na hierarquia; pontas dos dedos a
 ≥ 0,05 u da superfície final (quase-toque; teste). Cinturão r 16–19 inclinado (frente alta, fundo baixo)
-para a câmera herói nunca atravessar rochas; mundos antigos em r 30/42 (além da câmera herói: discretos
-no FORGE, inteiros no UNIVERSE).
+para a câmera herói nunca atravessar rochas; mundos antigos em r 30/42, raios 1,9/2,5 (além da câmera
+herói: discretos no FORGE, inteiros no UNIVERSE).
 
 ### Módulos (nomes de nó fixos; compostos por `world.gd` em `GENESIS_MODULES`)
 
 | Script | Nó | Papel |
 |---|---|---|
-| `entities/genesis/genesis_light_rig.gd` | `GenesisLightRig` | contraluz quente (DUSK_ROSE→GOLD com o calor), rim ICE, key PEARL ¾ lateral (única com sombra, por perfil; sem energia na névoa: as sombras na névoa desenhavam faixas escuras no céu), fill NEBULA mínimo, brilho do planeta (omni GOLD/MAGMA ∝ calor × formação; repouso de 30 % depois da crosta). Níveis de `GenesisChoreography.light_levels` (adormecida → desperta). Só escreve `environment.ambient_light_energy` (quando muda); direcionais com `light_volumetric_fog_energy` ≤ `GenesisEnvironment.DIRECTIONAL_FOG_ENERGY` |
-| `entities/genesis/miku.gd` | `Miku` | escultura + `miku_body()` (`awaken`, `breath`, `select`); cabelo em 3 camadas de `HairRibbons` saindo da coroa (âncora `hair_root`, para trás e para cima) + mechas das têmporas, cada camada balança com período próprio; o cabelo **desenrola por escala** a partir da coroa no despertar; halo `halo_arc()` num quad atrás da cabeça (uma volta por `T_HALO_TURN`); semente GOLD na testa (motes HDR contidos + omni fraca) que se acende e pulsa a cada ato de criação; flutuação de 8 s; vestido de luz = casca da saia (triângulos da escultura no envelope da saia, deslocados pela normal) com `miku_gown()` — **desligado** (`GOWN_VEIL`) até a correção do shader (ver "Pendências"); a dissolução em poeira é o rio do `Stardust` |
-| `entities/genesis/auxiliary_hands.gd` | `AuxiliaryHands` | duas esculturas + `hand_stone()` por mão; esperam na névoa (ocultas), sobem em `HANDS_RISE` com ease e pequeno assentamento (`hands_rise`), surgem da névoa por `transparency`; o trabalho (`hands_work`) aproxima-as do mundo; a direita pressiona e inclina a cada ato de formação (`sculpt_press`), a esquerda ergue-se para embalar; `veins` acende com trabalho e pressão; deriva lenta ambiente; névoa de motes NEBULA/LILAC em volta de cada antebraço |
+| `entities/genesis/genesis_light_rig.gd` | `GenesisLightRig` | contraluz quente (DUSK_ROSE→GOLD com o calor), rim ICE, key PEARL ¾ lateral (única com sombra, por perfil; sem energia na névoa: as sombras na névoa desenhavam faixas escuras no céu; filtro mais suave, `normal_bias` 2, cascatas mescladas; **MIKU não projeta sombra** — a escada da sombra no torso/vestido sumiu, AO assado + SSAO a modelam), fill NEBULA mínimo, brilho do planeta (omni GOLD/MAGMA ∝ calor × formação; repouso de 30 % depois da crosta; no clímax vira a luz do céu do mundo, PEARL/ICE, com alcance maior). Níveis de `GenesisChoreography.light_levels` (adormecida → desperta). Só escreve `environment.ambient_light_energy` (quando muda); direcionais com `light_volumetric_fog_energy` ≤ `GenesisEnvironment.DIRECTIONAL_FOG_ENERGY` |
+| `entities/genesis/miku.gd` | `Miku` | escultura + `miku_body()` (`awaken`, `breath`, `select`); cabelo em 3 camadas de `HairRibbons` saindo da coroa (âncora `hair_root`, para trás e para cima) + mechas das têmporas, cada camada balança com período próprio; o cabelo **desenrola por escala** a partir da coroa no despertar; halo `halo_arc()` num quad atrás da cabeça (uma volta por `T_HALO_TURN`); semente GOLD na testa (motes HDR contidos + omni fraca): brasa que respira no escuro antes do despertar, floresce (`seed_bloom`: a omni cresce para 4,3 u) e **revela a porcelana** (`body_presence` → `transparency`; oculta antes), depois pulsa a cada ato de criação; sem sombra própria (`cast_shadow` off); no clímax ergue a cabeça (`head_lift`: a figura inclina para trás na cintura) e o halo fecha o círculo (`halo_close` → `arc_span`/`inner_span`); flutuação de 8 s; vestido de luz = casca da saia (triângulos da escultura no envelope da saia, deslocados pela normal) com `miku_gown()` — **desligado** (`GOWN_VEIL`) até a correção do shader (ver "Pendências"); a dissolução em poeira é o rio do `Stardust` |
+| `entities/genesis/auxiliary_hands.gd` | `AuxiliaryHands` | duas esculturas + `hand_stone()` por mão; esperam na névoa (ocultas), sobem em `HANDS_RISE` com ease e pequeno assentamento (`hands_rise`), surgem da névoa por `transparency`; o trabalho (`hands_work`) aproxima-as do mundo; a direita pressiona e inclina a cada ato de formação (`sculpt_press`), a esquerda ergue-se para embalar; `veins` acende com trabalho e pressão e **esfria** depois de `planet.stable`; no clímax as mãos **soltam** o mundo (`hands_release`: recuam cada uma na sua direção e a palma abre); deriva lenta ambiente; névoa de motes NEBULA/LILAC em volta de cada antebraço + **poeira que se desprende** do fim da pedra (`Shed`, ciclo ambiente) — o antebraço se dissolve na névoa; gancho para o shader: `dissolve_origin`/`dissolve_axis`/`dissolve_span` escritos quando `hand_stone` os declarar |
 | `entities/genesis/forming_planet.gd` | `FormingPlanet` | `PlanetSphere` (densidade por qualidade) + `planet_forming()`: `formation` (acreção da semente), raio por passos (semente 0,55 → manto 1,2 → crosta 1,48 → céu 1,6), `heat` (semente 0,72 → manto 1 → esfria com a crosta), `crust`, `atmosphere`; rotação axial ambiente |
-| `entities/genesis/orbital_system.gd` | `OrbitalSystem` | luas `moon_doc()` (nascem por acreção + inchaço, órbitas em pivôs), anel `ring_skill()` (condensa por inchaço + fade), cinturão `AsteroidField` + `asteroid_memory()` (rochas incham uma a uma, `memory` acende os brilhos, deriva lenta), NAUVE-2/KESTRE-4 já formados com lua própria, linhas `orbit_line()` em tubo com `head` = fase do corpo |
-| `entities/genesis/relation_threads.gd` | `RelationThreads` | os 8 `GenesisScript.LINKS`: fibras cruzadas (`RelationThread`) que partem de pontos dentro da pluma do cabelo; tecidas em sequência como **arcos parciais** que crescem pelo próprio caminho (subdivisão de Bézier); depois, pulsos GOLD (par de motes) viajam origem → alvo a cada 7,5–12,5 s; fios planeta → luas vivem numa réplica do pivô da lua; fios aos mundos distantes são refeitos só quando uma ponta anda > 0,06 u |
+| `entities/genesis/orbital_system.gd` | `OrbitalSystem` | luas `moon_doc()` (nascem por acreção + inchaço, órbitas em pivôs), anel `ring_skill()` (condensa por inchaço + fade), cinturão `AsteroidField` + `asteroid_memory()` (rochas incham uma a uma, `memory` acende os brilhos, deriva lenta), **poeira do cinturão** (3 200 motes finos entre as rochas, 5 % brilhos GOLD; escritos uma vez, giram com as rochas, entram com o cinturão), 2 400 rochas, NAUVE-2 (anel próprio) e KESTRE-4 (duas luas) já formados, linhas `orbit_line()` em tubo com `head` = fase do corpo |
+| `entities/genesis/relation_threads.gd` | `RelationThreads` | os 8 `GenesisScript.LINKS`: fibras cruzadas (`RelationThread`) que partem de pontos dentro da pluma do cabelo e terminam **no limbo** dos corpos (raio × `LIMB_CLEARANCE` na direção da outra ponta, nunca no centro), finas (`WIDTH` 0,05 dos de MIKU, 0,034 entre corpos, 0,022 planeta → lua); tecidas em sequência como **arcos parciais** que crescem pelo próprio caminho (subdivisão de Bézier); depois, pulsos GOLD (par de motes) viajam origem → alvo a cada 7,5–12,5 s; no clímax **um pulso único** (`stable_wave`) percorre o grafo inteiro em largura a partir de MIKU (salto 0: fios dela; salto 1: os que saem dos corpos alcançados), acendendo cada fio enquanto passa; fios planeta → luas vivem numa réplica do pivô da lua; fios aos mundos distantes são refeitos só quando uma ponta anda > 0,06 u |
 | `fx/genesis/stardust.gd` | `Stardust` | rio de poeira do vestido (ambiente; dobra-se e alimenta o mundo de `dust.gathered` a `planet.stable`), disco de poeira que converge em espiral para a semente (função do tempo de simulação), disco de acreção em 3 bandas (presença narrativa, rotação ambiente), motes do ar |
 | `fx/genesis/formation_glow.gd` | `FormationGlow` | clarão contido da semente, faíscas de formação (semente, camadas, luas, anel) e brilhos de chegada dos fios |
 | `fx/genesis/mote_cloud.gd` | (auxiliar `MoteCloud`) | MultiMesh de motes (`MaterialLibrary.mote`) com buffer reaproveitado, cor HDR só nos núcleos, contagem por `Quality.profile.particles` |
 
 ### Mapeamento evento → visual (constantes em `GenesisChoreography`)
 
-- **Antes de `miku.awaken`**: MIKU é porcelana adormecida (silhueta pela contraluz, cabelo curto e fraco,
-  sem halo nem semente); luz `LIGHT_ASLEEP`.
-- **`miku.awaken`**: a semente acende (`SEED_DUR`), a porcelana desperta (`AWAKEN_DUR`), o cabelo
-  desenrola (`HAIR_GROW_DUR`), o halo incha depois de `HALO_DELAY`; a luz sobe para `LIGHT_AWAKE`.
+- **Antes de `miku.awaken`**: **escuro, só a semente** — brasa GOLD na testa (`SEED_DORMANT`, respira
+  em tempo real); corpo oculto, cabelo apagado, sem halo; luz `LIGHT_ASLEEP` mínima (nenhuma silhueta
+  humanoide escura contra a nebulosa); o vestido ainda é só poeira (rio do `Stardust` fraco).
+- **`miku.awaken`**: a semente floresce (`SEED_DUR`, `seed_bloom`: a luz dela se abre) e **revela a
+  porcelana** (`REVEAL_DELAY`, `REVEAL_DUR`); key/rim/ambiente sobem primeiro (`FRONT_LIGHT_DUR`), a
+  contraluz depois (`BACK_LIGHT_DELAY`) — o corpo surge iluminado, nunca recortado; o cabelo desenrola
+  (`HAIR_GROW_DUR`), o halo incha depois de `HALO_DELAY`.
 - **`hands.summoned`**: as mãos sobem da névoa (`HANDS_RISE`, `HANDS_SETTLE`, `HANDS_OVERSHOOT`);
   kintsugi em repouso (`VEINS_SUMMONED`).
 - **`dust.gathered`**: o disco de poeira converge (`DUST_CONVERGE`); o rio do vestido dobra-se para o
@@ -360,9 +366,14 @@ no FORGE, inteiros no UNIVERSE).
 - **`moon.formed` i**: a lua incha por acreção (`MOON_SWELL`); a órbita é traçada atrás dela.
 - **`ring.formed`**: o anel condensa (`RING_SWEEP`) + faíscas ao longo do círculo.
 - **`belt.formed`**: as rochas incham uma a uma (`BELT_FORM`, `BELT_ROCK_SWELL`); acendem os brilhos de memória.
-- **`links.woven`**: fios tecidos em sequência (`LINK_STAGGER`, `LINK_WEAVE`), brilho na chegada, depois pulsos.
-- **`planet.stable`**: o trabalho termina (mãos repousam, kintsugi `VEINS_STABLE`), o disco se dissolve,
-  o rio relaxa; a câmera volta ao plano herói e se aproxima devagar.
+- **`links.woven`**: fios tecidos em sequência (`LINK_STAGGER`, `LINK_WEAVE`; todos prontos antes do
+  pulso do clímax), brilho na chegada, depois pulsos.
+- **`planet.stable` — clímax** (a sessão termina 3 s depois e o último instante fica congelado, então
+  cada batida se resolve até 56 s): o **pico de luz da sessão** (`climax`: `LIGHT_CLIMAX` + luz do céu do
+  mundo `PLANET_LIGHT_CLIMAX`; teste: nenhum instante anterior é mais claro), a semente surge; as mãos
+  **soltam** o mundo devagar (`RELEASE_*`) e o kintsugi **esfria** (`VEINS_COOL_DUR` → `VEINS_STABLE`);
+  MIKU **ergue a cabeça** (`HEAD_LIFT_*`); o halo **fecha a volta** (`HALO_CLOSE_*`); **um pulso único**
+  percorre todos os fios (`WAVE_DELAY`, `WAVE_HOP`); o disco se dissolve, o rio relaxa; a câmera **recua**.
 
 ### Câmera GENESIS (`GenesisShots`, `src/animation/genesis_shots.gd`)
 
@@ -371,12 +382,21 @@ foco); a ORIGIN continua com `CameraShots` sem mudança. Troca de cenário = sna
 
 - **FORGE** herói: levemente de baixo (câmera abaixo do peito, `FORGE_PITCH`), lente 36,5°; o teste fixa
   MIKU no terço superior, o mundo no inferior, centrado.
-- **UNIVERSE**: alto e afastado (sistema inteiro). **OBSERVATORY**: ¾ alto (fios e rótulos).
-- **Deixas** (FORGE + `Session.cinematic`), pose = f(estado, tempo de simulação) + balanço ambiente
-  minúsculo (`SWAY_*`, MotionClock): `cue_g_portrait` (MIKU desperta; a grua desce e recua) →
-  `cue_g_hero` (mãos e formação; dolly lento) → `cue_g_orbits` (luas e anel) → `cue_g_belt` (de fora,
-  rochas em primeiro plano) → `cue_g_threads` (¾ alto) → `cue_g_stable` (herói, aproximação lenta).
-  Troca de deixa = grua de `Palette.T_CRANE`; mudanças do usuário (modo, foco, reset) em `T_USER`.
+- **UNIVERSE**: afastado e baixo o bastante para **enquadrar o núcleo quente atrás do sistema** (o
+  sistema no terço inferior, o núcleo no superior). **OBSERVATORY**: ¾ alto (fios e rótulos).
+- **Deixas** (FORGE + `Session.cinematic`): estações de **um caminho contínuo** (`cue_path`, função pura
+  do estado e do tempo de simulação) + balanço ambiente minúsculo (`SWAY_*`, MotionClock). Abre perto da
+  semente, no escuro (`SEED_POSE`, um pouco acima, olhando para baixo, mundos distantes fora do quadro),
+  depois quatro movimentos desenhados, cada um com ease in-out a partir do seu evento: (1) **grua para
+  trás no despertar** até MIKU inteira (`CRANE_BACK`), enquanto a luz da semente a revela; recuo até o
+  herói enquanto as mãos sobem (`HERO_DOLLY_DUR`); (2) **dolly baixo até o berço** no manto
+  (`cue_g_cradle`, pela esquerda: a mão esquerda embala em primeiro plano, a direita longe do vestido);
+  (3) **subida** nas luas/anel/cinturão até ¾ alto onde os fios saem do cabelo (`RISE_DUR`); (4) **recuo**
+  no estável (`RECEDE_DUR`). Ids: `cue_g_portrait` → `cue_g_hero` → `cue_g_cradle` → `cue_g_orbits` →
+  `cue_g_belt` → `cue_g_threads` → `cue_g_stable`. Como o caminho é contínuo, trocar de deixa não faz
+  blend (`CONTINUOUS_CUES`; teste: nenhum salto a cada 0,02 s) — o giro brusco entre deixas (~48–50 s)
+  que lia como "pop de exposição" sumiu. Voltar às deixas depois do usuário = grua de `Palette.T_CRANE`;
+  mudanças do usuário (modo, foco, reset) em `T_USER`. Teste: nenhuma estação corta MIKU na cintura.
 - **Limites**: pitch −0,55…1,35, distância por modo, alvo dentro de `FLY_RADIUS` (50), câmera nunca
   abaixo da névoa (`MIN_CAMERA_Y`).
 - **Foco**: qualquer entidade GENESIS em qualquer modo (`focus_shot`: mantém lente e yaw, preenche
@@ -404,6 +424,14 @@ entre as palmas, `planet` = centro do mundo. Destaque de seleção/hover pelo un
 
 ### Pendências (fora da área do animator)
 
+- **Revelação radial e véu** (art-director): a porcelana surge hoje por `transparency` uniforme sob a luz
+  da semente; um uniform de revelação a partir da testa (`reveal_origin`/`reveal_radius`) daria a luz
+  nascendo dela pela pele. `hand_stone`: declarar `dissolve_origin`/`dissolve_axis`/`dissolve_span`
+  (já escritos pelas mãos quando existirem). Segunda passada do animator: religar `GOWN_VEIL` com a
+  dissolução em grãos, usar a nova `HairRibbons` (tufos, fios de link) e as metas dos novos materiais.
+- **Céu no escuro da abertura** (game-engineer): o céu da nebulosa tem energia fixa por modo; antes do
+  despertar o quadro já é escuro pela câmera (perto da semente, olhando abaixo do núcleo quente), mas
+  no plano herói livre o céu continua claro (sem figura, só a semente).
 - **Shaders com `pow` de base negativa** (art-director): `exp(-pow(x / w, 2.0))` com `x` com sinal gera NaN
   no llvmpipe (e em drivers que não reescrevem `pow(x, 2.0)` como `x*x`): `miku_gown` (lábio da
   dissolução), `miku_hair` (frente do `reveal`), `relation_thread` (frente do `woven` e `pulse`),
@@ -417,8 +445,9 @@ entre as palmas, `planet` = centro do mundo. Destaque de seleção/hover pelo un
 
 Sem alocação por quadro nos módulos (buffers de MultiMesh reaproveitados, caches de uniform); fios
 refeitos só enquanto são tecidos ou quando uma ponta orbital anda. Motes: rio 300, poeira 420 (só entre
-`dust.gathered` e a semente), disco 3 × 120 (posições fixas, só gira), ar 160, névoa 2 × 90, faíscas 72 —
-× `Quality.profile.particles` (LOW 0,35). Cinturão: 760 rochas (LOW ≥ 45 %).
+`dust.gathered` e a semente), disco 3 × 120 (posições fixas, só gira), ar 160, névoa 2 × 90, poeira dos
+antebraços 2 × 70, faíscas 72, poeira do cinturão 3 200 (escrita uma vez; só gira) — × `Quality.profile.particles`
+(LOW 0,35). Cinturão: rochas por `GenesisLayout.BELT_ROCKS` (LOW ≥ 45 %).
 
 ### Verificação
 

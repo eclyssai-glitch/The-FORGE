@@ -33,8 +33,8 @@ const ARC := 0.16
 const LIMB_CLEARANCE := 1.03
 ## Stable wave (GenesisChoreography.stable_wave): the single pulse is larger and brighter than the
 ## ambient ones and lights each thread while it runs through it.
-const WAVE_CORE := 0.14
-const WAVE_HALO := 0.7
+const WAVE_CORE := 0.2
+const WAVE_HALO := 0.9
 const WAVE_HDR := 2.4
 const WAVE_GLOW := 1.4
 ## Rebuild a moving thread when one end moved farther than this (units); a growing thread when its
