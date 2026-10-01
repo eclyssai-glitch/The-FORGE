@@ -41,7 +41,8 @@ ou outros templates mudam o binário.
 | Pacote exato do `.exe` executado no renderizador real | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` |
 | Jogo a partir do código | `tools/smoke_test.sh` e `tools/capture_evidence.sh` |
 | Cenário GENESIS | `tools/smoke_test.sh --scenario=genesis`, `tools/capture_evidence.sh <dir> --scenario=genesis` |
-| Style frames GENESIS (≥ 6, HUD oculto, 1920×1080) | `tools/style_frames.sh <dir> [--quality=high]` |
+| Style frames GENESIS (≥ 6, HUD oculto, 1920×1080) | `tools/style_frames.sh <dir> [--quality=<nível>]` (HIGH por padrão) |
+| Vídeo do jogo real GENESIS com áudio (MP4 H.264 + AAC) | `tools/record_genesis.sh [--hud=off] [--resolution=WxH]` |
 
 O smoke reprova se: `RESULT=FAIL`, falta a linha `RESULT`, há `SCRIPT ERROR`/`Parse Error` no log,
 a linha `modules=N/M` tem N ≠ M (script de entidade, fx, áudio ou câmera do cenário ativo ausente/quebrado;
@@ -134,3 +135,52 @@ minutos) e codifica com ffmpeg (libx264, CRF 22, yuv420p, `+faststart`, sem áud
 O Movie Maker grava no tamanho de janela do projeto (1600x900) qualquer que seja `--resolution`; o MP4 é
 escalado para a resolução pedida. Log: `build/review/record.log`. Depuração sem gravar:
 `godot --path . res://tools/review/review_tour.tscn -- --review-snap=<dir>` salva PNG após cada passo.
+
+## Gravação GENESIS com áudio (`tools/record_genesis.sh`, Loop 4 r1)
+
+Grava o **jogo real** jogando o cenário GENESIS com som, para a revisão do art-critic (critério 6) e para a
+remixagem do sound-designer. Ferramenta fora do export: `tools/review/genesis_tour.tscn` + `genesis_tour.gd`
+instanciam `scenes/main.tscn` (o jogo roda com `--scenario=genesis`), forçam a qualidade
+(`Quality.override_for_session`, HIGH por padrão — o AUTO mediria os 30 fps fixos e rebaixaria), põem FORGE +
+câmera cinematográfica (`Session.set_cinematic(true)`: os planos da história do animator), HUD visível ou oculto
+(`Session.set_hud_visible`; o selo DEMO fica sempre), esperam 0,5 s no quadro parado (fade de entrada), chamam
+`Simulation.start()` e, 56 s + 4 s de respiro depois, saem por `Main.quit_game` (áudio silenciado antes).
+Tudo por tempo de jogo (soma de `delta` = 1/30 s com o Movie Maker); nenhuma interação simulada.
+
+```bash
+tools/record_genesis.sh                                   # 1920x1080, HUD on → build/review/genesis_1920x1080_hud-on.mp4
+tools/record_genesis.sh --hud=off                         # tomada limpa (só o selo DEMO)
+tools/record_genesis.sh --until=12 --resolution=960x540   # prévia curta → ..._preview.mp4
+tools/record_genesis.sh --from=42 --resolution=960x540    # só um trecho: seek para T+42 antes de começar
+```
+
+Opções: `--hud=on|off`, `--resolution=WxH` (janela, tela Xvfb e vídeo; padrão 1920x1080), `--until=<s>`
+(segundos de tour; o demo começa em 0,5 s), `--from=<s>` (seek antes do start), `--quality=low|medium|high|ultra`,
+`--crf=<n>` (x264, padrão 18), `--timeout=<s>`/`GENESIS_TIMEOUT` (padrão 5400 s), `GENESIS_GRACE` (120 s após
+`[genesis] done`). Saída: `build/review/genesis_<W>x<H>_hud-<on|off>[_from<s>][_preview].{avi,mp4,log}`.
+
+- **Movie Maker** (`--write-movie`, `--fixed-fps 30`): com ele o Godot mistura o áudio pelo driver Dummy do próprio
+  motor e grava PCM 16 bits 48 kHz estéreo no AVI (não precisa de placa de som). O script reprova se o AVI não tem
+  stream de áudio.
+- **Tamanho do vídeo**: o Movie Maker dimensiona o AVI por `display/window/size/viewport_width/height`, ignorando
+  `--resolution` e redimensionamentos posteriores (quadros reescalados para 1600x900 — por isso o
+  `record_review.sh` sai sempre 1600x900). O script escreve um `override.cfg` do Godot na raiz do projeto
+  (tamanho pedido, janela normal), apaga-o assim que o motor iniciou (linha `Movie Maker mode enabled`; também no
+  `trap` de saída) e confere que a gravação saiu no tamanho pedido. Se já existir um `override.cfg`, recusa rodar
+  (nunca sobrescreve). `/override.cfg` está no `.gitignore`.
+- **Codificação**: ffmpeg H.264 (`-preset slow -crf 18`, yuv420p, `+faststart`) + AAC 192 kb/s 48 kHz. O script
+  imprime duração, quadros, tamanho, streams (`video h264,W,H,30/1 · audio aac,48000,2`) e o EBU R128 do áudio
+  gravado (`I`, `LRA`, pico verdadeiro).
+- Custo no contêiner (llvmpipe): ~0,7 s por quadro em 960x540 (~25 min para a tomada inteira); 1920x1080 leva
+  ~4×. A duração do MP4 é a do tour + ~0,25 s (o silêncio de `quit_game`).
+
+Prova (r1): `--until=12 --resolution=960x540` → `genesis_960x540_hud-on_preview.mp4`, 12,27 s, 368 quadros,
+`h264 960x540 30/1` + `aac 48000 2`, I −20,7 LUFS, LRA 12,0 LU, pico −8,0 dBFS; quadros em 1/4/8/11,5 s
+inspecionados (MIKU despertando no plano cinematográfico, legendas de fase, HUD, selo DEMO).
+
+## Qualidade das capturas
+
+`tools/capture_evidence.sh` e `tools/style_frames.sh` rodam em **HIGH** salvo `--quality=<nível>` (`auto` mantém a
+detecção). Motivo (Loop 4 r1): sob Xvfb + llvmpipe o AUTO detecta CPU → LOW, e os quadros julgados pelo
+art-critic saíam em LOW (sem MSAA, sombra mais grossa) em vez do perfil-alvo (desktop com GPU dedicada). Cada
+linha `[capture]`/`[style-frame]` do log traz `quality=<nível>`. Smoke continua em AUTO.
