@@ -11,8 +11,9 @@ extends Node3D
 ## (dust.gathered -> planet.stable) the kintsugi wakes; on each act of formation (seeded, each
 ## layer) the right hand presses down a little and tilts (it sculpts), the left lifts to cradle.
 ## Ambient (MotionClock): a slow, heavy breathing drift of each hand (different phases).
-## The wrists dissolve into mist: a soft cloud of dim NEBULA/LILAC motes drifts around each
-## forearm (the tapering forearm of the sculpture fades into it).
+## The wrists dissolve into mist: the stone breaks into grains from the wrist towards the forearm
+## end (hand_stone's wrist fade) and a soft cloud of dim NEBULA/LILAC motes drifts around each
+## forearm, with fine dust shed where the stone ends.
 ## Entities `hand_left`, `hand_right`: each hand pivot is its visual root (group, focus bounds of
 ## the hand without the forearm, label anchor at the knuckles), picked through a trimesh body of
 ## the sculpture (layer 2), disabled while the hands are in the mist. Audio anchor `hands` =
@@ -39,7 +40,7 @@ const MIST_MOTES := 90
 const MIST_SIZE := 1.25
 const MIST_ALPHA := 0.075
 const MIST_FROM := 0.4
-## Dust shed by the forearm where the stone ends: fine motes born around the cut that drift away
+## Dust shed by the forearm where the stone breaks into grains: fine motes born around it that drift away
 ## along the arm and sink, fading (ambient life cycle) — the stone dissolves into the mist, no
 ## cylindrical cut. Count, size, life (s), drift (units over a life), alpha.
 const SHED_MOTES := 70
@@ -49,22 +50,29 @@ const SHED_DRIFT := 2.4
 const SHED_ALPHA := 0.5
 ## Radius of the forearm at its end (sculpture units) when the JSON has no `forearm_radius`.
 const SHED_RING := 0.7
-## Hook for hand_stone's dissolve towards the forearm (art-director): when the shader declares
-## these uniforms the hand writes the object-space origin (wrist centre), the unit axis towards the
-## forearm end and the fade span (distances along the axis where the stone starts / ends fading).
-const DISSOLVE_ORIGIN := &"dissolve_origin"
-const DISSOLVE_AXIS := &"dissolve_axis"
-const DISSOLVE_SPAN := &"dissolve_span"
-## Share of wrist -> forearm end where the fade starts and ends (only used by the shader hook).
-const DISSOLVE_FROM := 0.15
-const DISSOLVE_TO := 0.95
+## The stone dissolves into grains from the wrist towards the forearm end (hand_stone's wrist
+## fade, MaterialLibrary.set_hand_wrist): shares of wrist -> forearm end where it starts / where
+## nothing is left. The wrist itself stays stone; the mist and the shed dust take over.
+const WRIST_FADE := Vector2(0.12, 0.8)
 ## Release after planet.stable (GenesisChoreography.hands_release): each hand withdraws along its
 ## own direction (world units) and opens (rad) — the gesture of letting the world go.
-const RELEASE_LEFT := Vector3(-0.9, -1.2, 0.25)
+const RELEASE_LEFT := Vector3(-1.25, -0.35, -0.2)
 const RELEASE_RIGHT := Vector3(1.3, 0.35, -0.35)
 const RELEASE_OPEN_LEFT := 0.22
 const RELEASE_OPEN_RIGHT := -0.2
 const SELECT_RATE := 6.0
+## The right hand weaves: while the hands work, fibres of light are strung between its fingertips
+## (a cat's cradle, sagging towards the world below the palm) and a gold pulse runs along each one
+## from time to time. [from tip, to tip] pairs (sculpt anchors), sag (share of the span), width,
+## brightness at full work, pulse period range (s).
+const WEAVE_PAIRS: Array = [
+	["tip_thumb", "tip_index"], ["tip_index", "tip_middle"], ["tip_middle", "tip_ring"],
+	["tip_ring", "tip_little"], ["tip_thumb", "tip_ring"], ["tip_index", "tip_little"],
+]
+const WEAVE_SAG := 0.22
+const WEAVE_WIDTH := 0.03
+const WEAVE_INTENSITY := 0.5
+const WEAVE_PULSE_PERIODS := Vector2(3.5, 6.0)
 
 var hands: Dictionary = {}
 var pivots: Dictionary = {}
@@ -81,11 +89,16 @@ var _shed_seed: Dictionary = {}
 var _select: Dictionary = {LEFT: 0.0, RIGHT: 0.0}
 var _veins_written: Dictionary = {LEFT: -1.0, RIGHT: -1.0}
 var _present := -1.0
+## Fibres of light between the right hand's fingertips (weaving) and their materials.
+var weave: Node3D
+var _weave_mats: Array[ShaderMaterial] = []
+var _weave_written := -1.0
 
 
 func _ready() -> void:
 	for id: StringName in HANDS:
 		_build_hand(id)
+	_build_weave()
 	anchor_node = Node3D.new()
 	anchor_node.name = "HandsAnchor"
 	anchor_node.position = (GenesisLayout.HAND_LEFT_POS + GenesisLayout.HAND_RIGHT_POS) * 0.5
@@ -174,22 +187,55 @@ func _build_hand(id: StringName) -> void:
 		sseeds.append(Vector3(Motion.hash01(i * 41 + (3 if left else 4)), Motion.hash01(i * 43 + 5), Motion.hash01(i * 47 + 6)))
 	_shed_seed[id] = sseeds
 
-	# Shader hook: the stone fades towards the forearm when hand_stone supports it.
-	_set_if_declared(mat, DISSOLVE_ORIGIN, wrist)
-	_set_if_declared(mat, DISSOLVE_AXIS, (arm_end - wrist).normalized())
-	var span := wrist.distance_to(arm_end)
-	_set_if_declared(mat, DISSOLVE_SPAN, Vector2(span * DISSOLVE_FROM, span * DISSOLVE_TO))
+	# The forearm turns into grains from the wrist (hand_stone's wrist fade, object space).
+	MaterialLibrary.set_hand_wrist(mat, wrist, arm_end, WRIST_FADE)
 
 
-## Sets `uniform` on `mat` only when its shader declares it (forward-compatible material hooks).
-static func _set_if_declared(mat: ShaderMaterial, uniform: StringName, value: Variant) -> bool:
-	if mat == null or mat.shader == null:
-		return false
-	for u: Dictionary in mat.shader.get_shader_uniform_list():
-		if StringName(u.get("name", "")) == uniform:
-			mat.set_shader_parameter(uniform, value)
-			return true
-	return false
+## The weaving fibres of the right hand (pivot space of the sculpture: they move with the hand).
+func _build_weave() -> void:
+	weave = Node3D.new()
+	weave.name = "Weave"
+	weave.visible = false
+	(pivots[RIGHT] as Node3D).add_child(weave)
+	var mesh_name := String(RIGHT)
+	# Sag towards the palm side (the world below the palm).
+	var down := -GenesisLayout.anchor(mesh_name, "palm_normal", Vector3(0.0, -1.0, 0.0)).normalized()
+	for k in WEAVE_PAIRS.size():
+		var pair: Array = WEAVE_PAIRS[k]
+		var a := GenesisLayout.anchor(mesh_name, pair[0], Vector3.ZERO)
+		var b := GenesisLayout.anchor(mesh_name, pair[1], Vector3.ZERO)
+		var mi := MeshInstance3D.new()
+		mi.name = "Fibre%d" % k
+		mi.mesh = RelationThread.build_crossed(a, b, a.distance_to(b) * WEAVE_SAG, WEAVE_WIDTH / GenesisLayout.HAND_SCALE, 24, -down)
+		var mat := MaterialLibrary.relation_thread().duplicate() as ShaderMaterial
+		mat.set_shader_parameter("color_from", Palette.LILAC)
+		mat.set_shader_parameter("color_to", Palette.GOLD.lerp(Palette.PEARL, 0.3))
+		mat.set_shader_parameter("intensity", 0.0)
+		mat.set_shader_parameter("woven", 1.0)
+		mat.set_shader_parameter("pulse", -1.0)
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		weave.add_child(mi)
+		_weave_mats.append(mat)
+
+
+## Brightness of the weaving fibres (narrative: the work envelope, gone once the hands let go) and
+## their pulses (ambient).
+func _update_weave(work: float, release: float, m: float) -> void:
+	var w := work * (1.0 - release)
+	weave.visible = w > 0.002
+	if not weave.visible:
+		_weave_written = -1.0
+		return
+	for k in _weave_mats.size():
+		var period := lerpf(WEAVE_PULSE_PERIODS.x, WEAVE_PULSE_PERIODS.y, Motion.hash01(k * 31 + 7))
+		var ph := fposmod(m / period + Motion.hash01(k * 37 + 3), 1.0)
+		# A pulse runs along the fibre over the first 40 % of its period, then rests.
+		_weave_mats[k].set_shader_parameter("pulse", Motion.eased(ph / 0.4) if ph < 0.4 else -1.0)
+	if not is_equal_approx(w, _weave_written):
+		_weave_written = w
+		for mat in _weave_mats:
+			mat.set_shader_parameter("intensity", WEAVE_INTENSITY * w)
 
 
 func _update(delta: float) -> void:
@@ -202,6 +248,7 @@ func _update(delta: float) -> void:
 	var press := GenesisChoreography.sculpt_press(g, t)
 	var release := GenesisChoreography.hands_release(g, t)
 	var present := vis
+	_update_weave(work, release, m)
 	for id: StringName in HANDS:
 		var left := id == LEFT
 		var pivot: Node3D = pivots[id]
@@ -288,7 +335,8 @@ func _update_shed(id: StringName, m: float, vis: float) -> void:
 		var u := fposmod(m / (SHED_LIFE * (0.75 + 0.5 * s.z)) + s.y, 1.0)
 		var ang := TAU * s.x + 0.8 * u
 		var r := ring * (0.75 + 0.35 * s.z) * (1.0 + 0.8 * u)
-		var born := wrist.lerp(arm_end, 0.72 + 0.3 * s.z)
+		# Born where the stone breaks into grains (the dissolving stretch of the forearm).
+		var born := wrist.lerp(arm_end, lerpf(WRIST_FADE.x, WRIST_FADE.y, 0.3 + 0.7 * s.z))
 		var p := born + axis * SHED_DRIFT * u * (0.5 + 0.5 * s.x) + (side * cos(ang) + up * sin(ang)) * r - up * 0.9 * u * u
 		col.a = SHED_ALPHA * vis * smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.45, 1.0, u)) * (0.5 + 0.5 * s.y)
 		shed.set_mote(i, p, 0.6 + 0.9 * s.z * (1.0 - 0.5 * u), col)

@@ -14,15 +14,22 @@ const AWAKEN_DUR := 5.0
 ## awake seed). At miku.awaken the seed blooms first and its light reveals the porcelain: the body
 ## comes out of the dark after REVEAL_DELAY over REVEAL_DUR (never a dark humanoid silhouette).
 const SEED_DORMANT := 0.45
-const REVEAL_DELAY := 1.1
+const REVEAL_DELAY := 1.3
 const REVEAL_DUR := 1.8
+## While the seed's light reveals her the porcelain glows from within (REVEAL_GLOW of inner light
+## at the start of the reveal, fading out over REVEAL_GLOW_FALL s after it): she materialises as
+## pale light, never as a dark translucent figure.
+const REVEAL_GLOW := 1.0
+const REVEAL_GLOW_FALL := 3.0
 ## The seed's own light blooms out of it while it reveals her (rise, fall in seconds).
 const SEED_BLOOM_RISE := 1.5
 const SEED_BLOOM_FALL := 5.5
 ## Front lights lead (the revealed body is lit, never cut out); the warm backlight follows later.
-const FRONT_LIGHT_DUR := 2.2
-const BACK_LIGHT_DELAY := 2.2
-## Hair spun out from the root (s from miku.awaken), from HAIR_ASLEEP of its length.
+const FRONT_LIGHT_DUR := 1.6
+const BACK_LIGHT_DELAY := 1.6
+## Hair spun out from the root (s from miku.awaken + HAIR_DELAY: once the seed's light has begun to
+## reveal her, never a comet of hair in the dark), from HAIR_ASLEEP of its length.
+const HAIR_DELAY := 1.4
 const HAIR_GROW_DUR := 8.0
 const HAIR_ASLEEP := 0.14
 ## Hair / gown brightness asleep and awake (asleep: dark, only the seed).
@@ -126,8 +133,17 @@ const PLANET_LIGHT := 2.6
 const PLANET_LIGHT_REST := 0.3
 ## At the climax the formed world shines with its own sky (PEARL/ICE light, rig) — above the mantle.
 const PLANET_LIGHT_CLIMAX := 3.4
+## Planet key (rig light on the worlds only): the formed world gets a key of its own as its crust
+## and sky form (PLANET_KEY at full atmosphere, PLANET_KEY_CRUST share with the crust alone), and
+## PLANET_KEY_CLIMAX more at the climax — the world is the most beautiful body of the final frame.
+const PLANET_KEY := 1.6
+const PLANET_KEY_CRUST := 0.5
+const PLANET_KEY_CLIMAX := 2.4
+## Planet rim (ICE, from behind; worlds only): with the sky, and more at the climax.
+const PLANET_RIM := 1.2
+const PLANET_RIM_CLIMAX := 2.2
 ## Weights of the "total light" proxy used to check that the climax is the peak (tests/debug).
-const LIGHT_WEIGHTS := {"back": 1.0, "rim": 1.0, "key": 1.0, "fill": 1.0, "ambient": 2.0, "planet": 0.6}
+const LIGHT_WEIGHTS := {"back": 1.0, "rim": 1.0, "key": 1.0, "fill": 1.0, "ambient": 2.0, "planet": 0.6, "planet_key": 0.5, "planet_rim": 0.3}
 
 
 # --- MIKU ------------------------------------------------------------------------------------------
@@ -137,12 +153,16 @@ static func awaken(g: GenesisState, t: float) -> float:
 
 
 static func hair_reveal(g: GenesisState, t: float) -> float:
-	var p := Motion.eased(Motion.progress(g.awaken_at, t, HAIR_GROW_DUR), Tween.TRANS_CUBIC, Tween.EASE_OUT)
+	if g.awaken_at < 0.0:
+		return HAIR_ASLEEP
+	var p := Motion.eased(Motion.progress(g.awaken_at + HAIR_DELAY, t, HAIR_GROW_DUR), Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	return lerpf(HAIR_ASLEEP, 1.0, p)
 
 
 static func hair_intensity(g: GenesisState, t: float) -> float:
-	return lerpf(HAIR_INTENSITY.x, HAIR_INTENSITY.y, awaken(g, t))
+	if g.awaken_at < 0.0:
+		return HAIR_INTENSITY.x
+	return lerpf(HAIR_INTENSITY.x, HAIR_INTENSITY.y, Motion.smooth(g.awaken_at + HAIR_DELAY, t, AWAKEN_DUR))
 
 
 static func gown_presence(g: GenesisState, t: float) -> float:
@@ -176,6 +196,14 @@ static func body_presence(g: GenesisState, t: float) -> float:
 	if g.awaken_at < 0.0:
 		return 0.0
 	return Motion.smooth(g.awaken_at + REVEAL_DELAY, t, REVEAL_DUR)
+
+
+## Inner light 0..1 of the porcelain while it is revealed (1 while it fades in, then eases out).
+static func reveal_glow(g: GenesisState, t: float) -> float:
+	if g.awaken_at < 0.0:
+		return 0.0
+	var end := g.awaken_at + REVEAL_DELAY + REVEAL_DUR
+	return body_presence(g, t) * (1.0 - Motion.smooth(end, t, REVEAL_GLOW_FALL))
 
 
 ## Bloom 0..1 of the seed's own light at the awakening (the light that reveals her), then it settles.
@@ -427,7 +455,8 @@ static func wave_on_link(wave: float, hop: int) -> float:
 
 # --- Light ----------------------------------------------------------------------------------------------
 
-## Light levels of the rig at (g, t) into `out` (keys of LIGHT_AWAKE + "planet" + "climax").
+## Light levels of the rig at (g, t) into `out` (keys of LIGHT_AWAKE + "planet" + "planet_key" +
+## "climax").
 ## The front lights (key, rim, fill, ambient) lead the awakening so the revealed body is lit; the
 ## warm backlight follows BACK_LIGHT_DELAY later. The climax adds LIGHT_CLIMAX and the world's own
 ## sky light (`planet` = molten glow + PLANET_LIGHT_CLIMAX × climax; `climax` = the envelope).
@@ -440,6 +469,8 @@ static func light_levels(g: GenesisState, t: float, out: Dictionary) -> Dictiona
 		out[k] = lerpf(float(LIGHT_ASLEEP[k]), float(LIGHT_AWAKE[k]), a) + float(LIGHT_CLIMAX[k]) * c
 	var molten := PLANET_LIGHT * maxf(planet_heat(g, t), PLANET_LIGHT_REST * planet_crust(g, t)) * planet_formation(g, t)
 	out["planet"] = molten + PLANET_LIGHT_CLIMAX * c
+	out["planet_key"] = PLANET_KEY * maxf(PLANET_KEY_CRUST * planet_crust(g, t), planet_atmosphere(g, t)) + PLANET_KEY_CLIMAX * c
+	out["planet_rim"] = PLANET_RIM * planet_atmosphere(g, t) + PLANET_RIM_CLIMAX * c
 	out["climax"] = c
 	return out
 

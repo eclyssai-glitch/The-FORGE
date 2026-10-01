@@ -48,14 +48,28 @@ const PULSE_CORE := 0.09
 const PULSE_HALO := 0.42
 const PULSE_HDR := 1.7
 const INTENSITY := 0.55
-## Hair sources (MIKU object space, relative to the hair_root anchor), one per MIKU link index:
-## points inside the rising plume, spread so each thread leaves the hair on its own side.
+## MIKU's own threads (the hair become the graph) are drawn a little bolder (relation_thread line_px).
+const HAIR_LINE_PX := 2.1
+## MIKU's own threads (GenesisScript.LINKS indices whose source is MIKU), in hair-strand order.
+const MIKU_LINKS: Array[int] = [0, 4, 5, 6]
+## Hair sources (MIKU object space, relative to the hair_root anchor), one per MIKU link: where a
+## long strand of her hair (Miku.hair_link_curves) ends and its thread continues — on the flanks of
+## the plume, so each thread leaves the hair on its own side.
 const HAIR_SOURCES := {
 	0: Vector3(-1.1, 2.2, -1.6),
 	4: Vector3(0.35, 3.2, -2.8),
 	5: Vector3(0.9, 2.6, -2.0),
 	6: Vector3(-1.6, 3.0, -2.4),
 }
+## The thread starts this far (share of the strand's control points) before the strand's tip and
+## overlaps it, leaving along the strand's own direction (no kink, no pinch at the junction).
+const HAIR_OVERLAP := 0.06
+## A thread leaving the hair keeps the strand's direction as long as it heads to its body within
+## this angle (cosine; beyond it the start direction is turned towards the body).
+const HAIR_TANGENT_MIN_COS := 0.55
+## MIKU floats (and lifts her head at the climax): her threads are rebuilt when their hair end
+## moved farther than this (units).
+const HAIR_REBUILD_STEP := 0.015
 ## Bulge direction per link (world); default up.
 const BULGE := {
 	0: Vector3(-1.0, 0.1, 0.45),
@@ -83,6 +97,9 @@ var _built_w := PackedFloat32Array()
 var _pivot_of: Array[Node3D] = []
 var _periods := PackedFloat32Array()
 var _hops := PackedInt32Array()
+## Arc of each thread (height, bulge direction), recomputed with its ends.
+var _heights := PackedFloat32Array()
+var _ups := PackedVector3Array()
 var _wave_hops := 1
 var _intensity_written := PackedFloat32Array()
 var _pick_body: StaticBody3D
@@ -103,6 +120,8 @@ func _ready() -> void:
 	_hops.resize(n)
 	_intensity_written.resize(n)
 	_intensity_written.fill(-1.0)
+	_heights.resize(n)
+	_ups.resize(n)
 	_wave_hops = GenesisChoreography.wave_hops()
 	var m := MotionClock.now()
 	for i in n:
@@ -113,6 +132,8 @@ func _ready() -> void:
 		mat.set_shader_parameter("intensity", INTENSITY)
 		mat.set_shader_parameter("woven", 1.0)
 		mat.set_shader_parameter("pulse", -1.0)
+		if GenesisScript.LINKS[i][0] == &"miku":
+			mat.set_shader_parameter("line_px", HAIR_LINE_PX)
 		var mi := MeshInstance3D.new()
 		mi.name = "Thread%d" % i
 		mi.material_override = mat
@@ -146,13 +167,13 @@ func _ready() -> void:
 			_kinds[i] = 2 if moving(a) or moving(b) else 0
 			_ends_a[i] = endpoint(i, true, m)
 			_ends_b[i] = endpoint(i, false, m)
+		_set_arc(i, m, 0.0)
 	pulses = MoteCloud.new()
 	pulses.name = "Pulses"
 	pulses.setup(n * 2, Palette.GOLD.lerp(Palette.PEARL, 0.3), 1.0, Vector2(1.0, 3.0), false)
 	pulses.visible = false
 	add_child(pulses)
-	var h0 := _ends_a[0].distance_to(_ends_b[0]) * ARC
-	set_meta(&"label_anchor", RelationThread.arc_point(_ends_a[0], _ends_b[0], h0, 0.55, _bulge(0)))
+	set_meta(&"label_anchor", RelationThread.arc_point(_ends_a[0], _ends_b[0], _heights[0], 0.55, _ups[0]))
 	set_meta(&"label_radius", 0.3)
 	set_meta(CameraDirector.FOCUS_BOUNDS_META, AABB(Vector3(-5.0, -3.0, -3.0), Vector3(10.0, 15.0, 9.0)))
 	_pick_body = _thread_pick_body(0)
@@ -172,7 +193,7 @@ func _on_rebuilt() -> void:
 
 ## True when the body orbits (its thread end moves with MotionClock).
 static func moving(id: StringName) -> bool:
-	return id == &"moon_0" or id == &"moon_1" or id == &"planet_far_0" or id == &"planet_far_1"
+	return id == &"miku" or id == &"moon_0" or id == &"moon_1" or id == &"planet_far_0" or id == &"planet_far_1"
 
 
 ## Colour of a thread at its target (the target body's family).
@@ -191,17 +212,17 @@ static func target_color(id: StringName) -> Color:
 	return Palette.ICE
 
 
-## World point where link `i` starts (`source`) or ends, at ambient time `m`: on the limb of a
-## round body (planet, moons, distant worlds) facing the other end; MIKU's end is inside her hair,
-## the ring's and the belt's on their circle.
-static func endpoint(i: int, source: bool, m: float) -> Vector3:
+## World point where link `i` starts (`source`) or ends, at ambient time `m` (MIKU's head lift
+## `lift` 0..1): on the limb of a round body (planet, moons, distant worlds) facing the other end;
+## MIKU's end is on the tip of its hair strand, the ring's and the belt's on their circle.
+static func endpoint(i: int, source: bool, m: float, lift := 0.0) -> Vector3:
 	var id: StringName = GenesisScript.LINKS[i][0 if source else 1]
-	var c := body_point(i, id, m)
+	var c := body_point(i, id, m, lift)
 	var r := body_radius(id)
 	if r <= 0.0:
 		return c
 	var other: StringName = GenesisScript.LINKS[i][1 if source else 0]
-	var d := body_point(i, other, m) - c
+	var d := body_point(i, other, m, lift) - c
 	return c + d.normalized() * r * LIMB_CLEARANCE if d.length() > 1e-4 else c
 
 
@@ -230,13 +251,11 @@ static func width_of(i: int) -> float:
 	return WIDTH if a == &"miku" else WIDTH_BODY
 
 
-## Centre of body `id` as seen by link `i` (MIKU: the hair source of that link).
-static func body_point(i: int, id: StringName, m: float) -> Vector3:
+## Centre of body `id` as seen by link `i` (MIKU: where the thread leaves her hair strand).
+static func body_point(i: int, id: StringName, m: float, lift := 0.0) -> Vector3:
 	match id:
 		&"miku":
-			var root := GenesisLayout.anchor("miku_body", "hair_root", Vector3(-0.08, 1.73, -0.11))
-			var off: Vector3 = HAIR_SOURCES.get(i, Vector3(0.0, 2.5, -1.5))
-			return GenesisLayout.miku_transform() * (root + off)
+			return Miku.figure_pose(m, lift) * hair_point(i)
 		&"planet_forming":
 			return GenesisLayout.PLANET_CENTER
 		&"moon_0":
@@ -254,6 +273,51 @@ static func body_point(i: int, id: StringName, m: float) -> Vector3:
 		&"planet_far_1":
 			return GenesisLayout.far_position(1, m)
 	return Vector3.ZERO
+
+
+## Object-space point (sculpture of MIKU) where link `i` leaves her hair: on its link strand,
+## HAIR_OVERLAP before the strand's tip.
+static func hair_point(i: int) -> Vector3:
+	var root := GenesisLayout.anchor("miku_body", "hair_root", Miku.HAIR_ROOT_FALLBACK)
+	var k := MIKU_LINKS.find(i)
+	var curves := Miku.hair_link_curves()
+	if k < 0 or k >= curves.size():
+		return root + (HAIR_SOURCES.get(i, Vector3(0.0, 2.5, -1.5)) as Vector3)
+	return root + HairRibbons.curve_point(curves[k], 1.0 - HAIR_OVERLAP)
+
+
+## Object-space direction of the hair strand of link `i` where its thread leaves it.
+static func hair_tangent(i: int) -> Vector3:
+	var k := MIKU_LINKS.find(i)
+	var curves := Miku.hair_link_curves()
+	if k < 0 or k >= curves.size():
+		return Vector3.UP
+	var c := curves[k]
+	return (HairRibbons.curve_point(c, 1.0 - HAIR_OVERLAP * 0.5) - HairRibbons.curve_point(c, 1.0 - HAIR_OVERLAP * 1.5)).normalized()
+
+
+## Arc a -> b whose start leaves along `tangent` (as close as HAIR_TANGENT_MIN_COS allows):
+## returns [height, bulge direction] for RelationThread (quadratic arc, control point on the start
+## tangent and above the chord's middle).
+static func tangent_arc(a: Vector3, b: Vector3, tangent: Vector3) -> Array:
+	var chord := b - a
+	var chord_len := chord.length()
+	if chord_len < 1e-4:
+		return [0.0, Vector3.UP]
+	var c_dir := chord / chord_len
+	var tn := tangent.normalized()
+	var cs := tn.dot(c_dir)
+	if cs < HAIR_TANGENT_MIN_COS:
+		var side := tn - c_dir * cs
+		side = side.normalized() if side.length() > 1e-5 else RelationThread.bulge_dir(a, b, Vector3.UP)
+		var sn := sqrt(1.0 - HAIR_TANGENT_MIN_COS * HAIR_TANGENT_MIN_COS)
+		tn = c_dir * HAIR_TANGENT_MIN_COS + side * sn
+		cs = HAIR_TANGENT_MIN_COS
+	var ctrl := a + tn * (chord_len * 0.5 / cs)
+	var off := ctrl - (a + b) * 0.5
+	if off.length() < 1e-5:
+		return [0.0, RelationThread.bulge_dir(a, b, Vector3.UP)]
+	return [off.length() * 0.5, off.normalized()]
 
 
 ## Pulse position 0..1 along thread `i` at ambient time `m` (< 0 = no pulse): one eased travel of
@@ -290,12 +354,27 @@ func _bulge(i: int) -> Vector3:
 	return (BULGE.get(i, Vector3.UP) as Vector3).normalized()
 
 
+## Arc of thread `i` for its current ends: MIKU's threads leave along their hair strand; the others
+## bulge by ARC of the chord towards their BULGE direction.
+func _set_arc(i: int, m: float, lift: float) -> void:
+	var a := _ends_a[i]
+	var b := _ends_b[i]
+	if GenesisScript.LINKS[i][0] == &"miku":
+		var tw := Miku.figure_pose(m, lift).basis * hair_tangent(i)
+		var arc := tangent_arc(a, b, tw)
+		_heights[i] = arc[0]
+		_ups[i] = arc[1]
+	else:
+		_heights[i] = a.distance_to(b) * ARC
+		_ups[i] = _bulge(i) if _kinds[i] != 1 else Vector3.UP
+
+
 func _build(i: int, w: float) -> void:
 	_built_w[i] = w
 	var a := _ends_a[i]
 	var b := _ends_b[i]
-	var up := _bulge(i) if _kinds[i] != 1 else Vector3.UP
-	var h := a.distance_to(b) * ARC
+	var up := _ups[i]
+	var h := _heights[i]
 	if w >= 0.999:
 		threads[i].mesh = RelationThread.build_crossed(a, b, h, width_of(i), SEGMENTS, up)
 		return
@@ -310,6 +389,7 @@ func _update() -> void:
 	var any := false
 	var pulsing := false
 	var wave := GenesisChoreography.stable_wave(g, t, _wave_hops)
+	var lift := GenesisChoreography.head_lift(g, t)
 	for i in threads.size():
 		var w := GenesisChoreography.link(g, t, i)
 		var mi := threads[i]
@@ -327,11 +407,13 @@ func _update() -> void:
 		mi.visible = true
 		var moved := false
 		if _kinds[i] == 2:
-			var ea := endpoint(i, true, m)
-			var eb := endpoint(i, false, m)
-			if ea.distance_to(_ends_a[i]) > REBUILD_STEP or eb.distance_to(_ends_b[i]) > REBUILD_STEP:
+			var ea := endpoint(i, true, m, lift)
+			var eb := endpoint(i, false, m, lift)
+			var step := HAIR_REBUILD_STEP if GenesisScript.LINKS[i][0] == &"miku" else REBUILD_STEP
+			if ea.distance_to(_ends_a[i]) > step or eb.distance_to(_ends_b[i]) > REBUILD_STEP:
 				_ends_a[i] = ea
 				_ends_b[i] = eb
+				_set_arc(i, m, lift)
 				moved = true
 		if moved or _built_w[i] < 0.0 or absf(w - _built_w[i]) > WEAVE_STEP or (w >= 0.999 and _built_w[i] < 0.999):
 			_build(i, w)
@@ -348,8 +430,7 @@ func _update() -> void:
 			pulses.hide_mote(i * 2 + 1)
 			continue
 		pulsing = true
-		var up := _bulge(i) if _kinds[i] != 1 else Vector3.UP
-		var pos := RelationThread.arc_point(_ends_a[i], _ends_b[i], _ends_a[i].distance_to(_ends_b[i]) * ARC, p, up)
+		var pos := RelationThread.arc_point(_ends_a[i], _ends_b[i], _heights[i], p, _ups[i])
 		if _kinds[i] == 1:
 			pos = to_local(_pivot_of[i].global_transform * pos)
 		var env := sin(PI * p)
@@ -379,10 +460,10 @@ func _thread_pick_body(i: int) -> StaticBody3D:
 	sb.set_meta(&"entity_id", ENTITY)
 	var a := _ends_a[i]
 	var b := _ends_b[i]
-	var h := a.distance_to(b) * ARC
+	var h := _heights[i]
 	for k in PICK_SEGMENTS:
-		var p0 := RelationThread.arc_point(a, b, h, float(k) / PICK_SEGMENTS, _bulge(i))
-		var p1 := RelationThread.arc_point(a, b, h, float(k + 1) / PICK_SEGMENTS, _bulge(i))
+		var p0 := RelationThread.arc_point(a, b, h, float(k) / PICK_SEGMENTS, _ups[i])
+		var p1 := RelationThread.arc_point(a, b, h, float(k + 1) / PICK_SEGMENTS, _ups[i])
 		var cs := CollisionShape3D.new()
 		var cap := CapsuleShape3D.new()
 		cap.radius = PICK_RADIUS

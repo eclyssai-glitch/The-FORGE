@@ -33,6 +33,10 @@ const PLANET_STEP_RADII: Array[float] = [0.55, 1.2, 1.48, 1.6]
 ## Axial tilt of the forming planet and its ring plane.
 const PLANET_TILT := Vector3(0.32, 0.0, -0.22)
 
+## Render layer of the formed worlds (the new planet and the older ones): the rig's planet key
+## lights only this layer (visual layer 11; everything stays on layer 1 too).
+const PLANET_KEY_LAYER := 1 << 10
+
 # --- Auxiliary hands -----------------------------------------------------------------------------
 ## Rest pose of each hand (palm centre, Euler YXZ in radians, uniform scale).
 ## Left cradles from below (palm up, fingers under the planet), right shapes from above (palm

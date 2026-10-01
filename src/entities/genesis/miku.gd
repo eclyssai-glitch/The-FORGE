@@ -27,35 +27,41 @@ const FLOAT_AMPLITUDE := 0.06
 const FLOAT_PERIOD := Palette.T_BREATH_SLOW
 const BREATH_PERIOD := Palette.T_BREATH
 
-## Hair layers: [name, strands, seed, length, spread, wave amplitude, waves, rise, root radius,
-## width, intensity share, sway (rad), sway period (s)].
+## Hair: ONE nebula mass (HairRibbons.nebula) born at the single root on the sculpted knot
+## (anchor hair_root): tufts of 5–10 strands rising back and up in an S, varied lengths, tips
+## opening into filaments. Layers: [name, tufts, seed, length, width, intensity share, sway (rad),
+## sway period (s), nebula options]. Additive ribbons all start at one point, so the intensity is
+## low: the root concentrates the light of every strand.
 const HAIR_LAYERS: Array = [
-	["HairCore", 40, 7101, 8.0, 0.24, 0.35, 0.8, 0.3, 0.28, 0.12, 0.42, 0.018, 9.0],
-	["HairVeil", 34, 7202, 10.5, 0.4, 0.6, 0.95, 0.42, 0.3, 0.09, 0.38, 0.028, 12.5],
-	["HairFilaments", 26, 7303, 13.0, 0.6, 0.8, 1.2, 0.55, 0.3, 0.035, 0.4, 0.036, 15.0],
+	["HairMass", 10, 7101, 12.0, 0.11, 0.22, 0.014, 10.0,
+		{"spread": 0.55, "lift": 0.5, "s_amount": 0.55, "tip_open": 0.18, "root_radius": 0.1}],
+	["HairVeil", 8, 7202, 15.0, 0.06, 0.22, 0.024, 13.5,
+		{"spread": 0.75, "lift": 0.6, "s_amount": 0.6, "strands_min": 4, "strands_max": 7, "tip_open": 0.26,
+		"wave": 0.07, "root_radius": 0.12}],
 ]
-## Direction the hair leaves the crown (object space; blended with the sculpt's hair_root_tangent):
-## back more than up (it rises as it goes: HairRibbons `rise`), drifting a little to her right
-## (screen left), away from the right hand.
-const HAIR_DIRECTION := Vector3(-0.25, 0.22, -0.94)
-## Strands that frame the face: from each temple, back and up.
-const TEMPLE_STRANDS := 7
-const TEMPLE_LENGTH := 6.0
-const TEMPLE_OFFSET := Vector3(0.16, -0.12, -0.02)
+## Direction the hair leaves the knot (object space; blended with the sculpt's hair_root_tangent,
+## HAIR_TANGENT_SHARE of it): back more than up — the S lifts it as it goes (nebula `lift`) —
+## drifting a little to her right (screen left), away from the right hand.
+const HAIR_DIRECTION := Vector3(-0.72, 0.05, -0.7)
+const HAIR_TANGENT_SHARE := 0.25
+## Link strands: one long strand of the mass per relation thread of MIKU, ending exactly where its
+## thread starts (RelationThreads.HAIR_SOURCES, relative to hair_root): the hair visibly becomes
+## the graph. Static (no sway, so the junction holds), a little wider and brighter than the mass;
+## they brighten further once their thread is spun (links.woven).
+const HAIR_LINK_TUFTS := 10
+const HAIR_ROOT_FALLBACK := Vector3(-0.08, 1.73, -0.11)
+## The hair is spun out from the knot at the awakening: the shader's growth front (`reveal`, a
+## bright front running root -> tip) while the plume also swells from HAIR_GROW_SCALE of its size.
+const HAIR_GROW_SCALE := 0.7
+const HAIR_LINK_WIDTH := 0.09
+const HAIR_LINK_INTENSITY := Vector2(0.35, 0.75)
 ## Gown shell: the skirt of the sculpture below GOWN_TOP (object Y), pushed out along its normals,
 ## stretched below GOWN_STRETCH_FROM by GOWN_STRETCH and flared by GOWN_FLARE, so the veil trails
-## past the porcelain hem and dissolves into dust.
-## Gown veil. The material's downward dissolve (fade_top -> fade_bottom) is not used yet: its lip
-## term raises a negative base to a power (`pow(x, 2.0)`, NaN on llvmpipe and several drivers)
-## wherever the veil has dissolved — reported to the art-director. Until then the fades sit far
-## below the mesh (no dissolve, h = 0: pure fresnel veil), the shell is not stretched below the
-## hem, and the dissolution into dust is carried by the Stardust river alone. Restore GOWN_FADE,
-## GOWN_STRETCH and GOWN_FLARE (-0.35/-5.4, 0.75, 0.3) once the shader is fixed.
-## The veil itself is off for now (GOWN_VEIL): the material's fresnel term `pow(1.0 - nv, 1.6)` gets
-## nv = abs(dot(NORMAL, VIEW)) slightly above 1 on faces turned to the camera -> NaN pixels that the
-## glow spreads into white blotches with black specks (verified on llvmpipe: clamping nv removes
-## them). Set GOWN_VEIL = true once miku_gown clamps nv and squares without pow.
-const GOWN_VEIL := false
+## past the porcelain and dissolves downward into star dust (miku_gown fade_top -> fade_bottom:
+## a broad noise front breaking into grains with a luminous lip, never a hard hem). The porcelain
+## skirt itself turns into light and grains below BODY_DISSOLVE.x (miku_body dissolve_top/bottom):
+## the veil carries on past it and the Stardust river takes the grains down to the world.
+const GOWN_VEIL := true
 const GOWN_TOP := -0.2
 const GOWN_OFFSET := 0.03
 ## Skirt envelope of the sculpture (object units): radius at the hips, flare below.
@@ -66,9 +72,11 @@ const SKIRT_FLARE_FROM := -1.6
 ## porcelain already glows; the sum must stay below the glow threshold except at the grazing edges.
 const GOWN_LEVEL := 0.4
 const GOWN_STRETCH_FROM := -2.4
-const GOWN_STRETCH := 0.0
-const GOWN_FLARE := 0.0
-const GOWN_FADE := Vector2(-40.0, -41.0)
+const GOWN_STRETCH := 0.75
+const GOWN_FLARE := 0.3
+const GOWN_FADE := Vector2(-0.35, -5.4)
+## Porcelain dissolve (miku_body dissolve_top, dissolve_bottom; object Y): solid above x, gone at y.
+const BODY_DISSOLVE := Vector2(-1.7, -4.35)
 ## Halo: quad edge (units), distance behind the head centre, tilt.
 const HALO_SIZE := 2.3
 const HALO_BACK := 0.42
@@ -93,16 +101,24 @@ const HEAD_LIFT_RISE := 0.12
 ## The halo's arcs close at planet.stable (arc spans of halo_arc: from the material's own to these).
 const HALO_CLOSED_SPAN := 1.0
 const HALO_CLOSED_INNER := 0.8
+## Inner light of the porcelain at rest (miku_body inner_glow) and added while the seed reveals her
+## (GenesisChoreography.reveal_glow). While she is revealed the porcelain's `awaken` follows her
+## presence (the revealed porcelain is already the lit, awake one — never a dark figure).
+const INNER_GLOW := 0.05
+const REVEAL_INNER := 1.1
+const REVEAL_WAKE := 4.0
 ## Selection smoothing (1/s) and levels.
 const SELECT_RATE := 6.0
 
 static var _gown_mesh_cache: ArrayMesh
+static var _link_curves: Array[PackedVector3Array] = []
 
 var figure: Node3D
 var body: MeshInstance3D
 var gown: MeshInstance3D
 var hair_pivot: Node3D
 var hair_layers: Array[MeshInstance3D] = []
+var hair_links: MeshInstance3D
 var halo_pivot: Node3D
 var halo: MeshInstance3D
 var seed_motes: MoteCloud
@@ -114,11 +130,12 @@ var _body_mat: ShaderMaterial
 var _gown_mat: ShaderMaterial
 var _halo_mat: ShaderMaterial
 var _hair_mats: Array[ShaderMaterial] = []
+var _link_mat: ShaderMaterial
 var _select := 0.0
 var _figure_base := Transform3D.IDENTITY
 ## Last narrative values written (awaken, hair reveal, hair intensity, gown, halo, seed, presence,
-## seed bloom, head lift, halo close).
-var _written := PackedFloat32Array([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+## seed bloom, head lift, halo close, link strands, reveal glow).
+var _written := PackedFloat32Array([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
 ## Seed brightness (narrative) and whether she is still asleep (the ember breathes, ambient).
 var _seed := 0.0
 var _bloom := 0.0
@@ -144,6 +161,8 @@ func _ready() -> void:
 	body.name = "Body"
 	body.mesh = load(MESH_PATH) as Mesh
 	_body_mat = MaterialLibrary.miku_body().duplicate() as ShaderMaterial
+	_body_mat.set_shader_parameter("dissolve_top", BODY_DISSOLVE.x)
+	_body_mat.set_shader_parameter("dissolve_bottom", BODY_DISSOLVE.y)
 	body.material_override = _body_mat
 	# No self-shadow: the key's shadow map stair-stepped across the torso and gown (critic r1).
 	# Her baked AO + SSAO shape the porcelain; the key still lights her.
@@ -217,20 +236,27 @@ func _update_narrative() -> void:
 		_written[9] = hc
 		_halo_mat.set_shader_parameter("arc_span", lerpf(_halo_span.x, HALO_CLOSED_SPAN, hc))
 		_halo_mat.set_shader_parameter("inner_span", lerpf(_halo_span.y, HALO_CLOSED_INNER, hc))
-	if not is_equal_approx(a, _written[0]):
+	var rg := GenesisChoreography.reveal_glow(g, t)
+	if not is_equal_approx(a, _written[0]) or not is_equal_approx(rg, _written[11]):
 		_written[0] = a
-		_body_mat.set_shader_parameter("awaken", a)
+		_written[11] = rg
+		_body_mat.set_shader_parameter("awaken", maxf(a, minf(GenesisChoreography.body_presence(g, t) * REVEAL_WAKE, 1.0)))
+		_body_mat.set_shader_parameter("inner_glow", INNER_GLOW + REVEAL_INNER * rg)
 	if not is_equal_approx(reveal, _written[1]) or not is_equal_approx(hi, _written[2]):
 		_written[1] = reveal
 		_written[2] = hi
-		# The hair unfurls from the crown: the plume grows (scale) while the shader's own `reveal`
-		# front stays off (reveal = 1): that front raises a negative base to a power (NaN on
-		# llvmpipe and several drivers) — reported to the art-director.
-		hair_pivot.scale = Vector3.ONE * reveal
+		# The hair is spun out from the knot: the growth front runs root -> tip while the plume swells.
+		hair_pivot.scale = Vector3.ONE * lerpf(HAIR_GROW_SCALE, 1.0, reveal)
 		hair_pivot.visible = hi > 0.002
 		for i in _hair_mats.size():
-			_hair_mats[i].set_shader_parameter("reveal", 1.0)
-			_hair_mats[i].set_shader_parameter("intensity", hi * float(HAIR_LAYERS[i][10]) if i < HAIR_LAYERS.size() else hi * 0.7)
+			_hair_mats[i].set_shader_parameter("reveal", reveal)
+			_hair_mats[i].set_shader_parameter("intensity", hi * float(HAIR_LAYERS[i][5]))
+		_link_mat.set_shader_parameter("reveal", reveal)
+	var lk := GenesisChoreography.link(g, t, 0)
+	var li := hi * lerpf(HAIR_LINK_INTENSITY.x, HAIR_LINK_INTENSITY.y, lk)
+	if not is_equal_approx(li, _written[10]):
+		_written[10] = li
+		_link_mat.set_shader_parameter("intensity", li)
 	if not is_equal_approx(gp, _written[3]):
 		_written[3] = gp
 		_gown_mat.set_shader_parameter("presence", gp * GOWN_LEVEL)
@@ -252,7 +278,9 @@ func _update_ambient(delta: float) -> void:
 	_halo_mat.set_shader_parameter("breath", breath)
 	for mat in _hair_mats:
 		mat.set_shader_parameter("motion_time", m)
+	_link_mat.set_shader_parameter("motion_time", m)
 	_gown_mat.set_shader_parameter("motion_time", m)
+	_body_mat.set_shader_parameter("motion_time", m)
 	# The seed: asleep, the ember breathes (ambient); awake it holds its narrative brightness.
 	var s := _seed * (1.0 + EMBER_BREATH * _asleep * sin(TAU * m / EMBER_PERIOD))
 	if not is_equal_approx(s, _written[5]):
@@ -260,13 +288,11 @@ func _update_ambient(delta: float) -> void:
 		_write_seed(s)
 	# Suspended: the whole figure floats on a slow breath; at planet.stable she raises her head
 	# (the figure tilts back around the waist and rises a little).
-	var lift := FLOAT_AMPLITUDE * sin(TAU * m / FLOAT_PERIOD + 0.7) + HEAD_LIFT_RISE * _lift
-	var basis := _figure_base.basis * Basis(Vector3.RIGHT, -HEAD_LIFT_ANGLE * _lift) if _lift > 0.0 else _figure_base.basis
-	figure.transform = Transform3D(basis, _figure_base.origin + Vector3(0.0, lift, 0.0))
+	figure.transform = figure_pose(m, _lift)
 	# Hair: each layer sways around the crown with its own period (nebula filaments in a slow wind).
 	for i in hair_layers.size():
-		var sway := float(HAIR_LAYERS[i][11]) if i < HAIR_LAYERS.size() else 0.02
-		var period := float(HAIR_LAYERS[i][12]) if i < HAIR_LAYERS.size() else 11.0
+		var sway := float(HAIR_LAYERS[i][6])
+		var period := float(HAIR_LAYERS[i][7])
 		var ph := TAU * m / period + float(i) * 1.9
 		hair_layers[i].rotation = Vector3(sway * sin(ph), sway * 0.6 * sin(ph * 0.73 + 1.1), sway * 0.8 * cos(ph * 0.91))
 	# Halo: one turn per T_HALO_TURN.
@@ -278,46 +304,74 @@ func _update_ambient(delta: float) -> void:
 		_body_mat.set_shader_parameter("select", _select)
 
 
+## Transform of the figure at ambient time `m` with the climax head lift `head_lift` 0..1: the slow
+## float, and at planet.stable the tilt back around the waist with a small rise. Pure (the relation
+## threads follow her hair with it).
+static func figure_pose(m: float, head_lift: float) -> Transform3D:
+	var base := GenesisLayout.miku_transform()
+	var rise := FLOAT_AMPLITUDE * sin(TAU * m / FLOAT_PERIOD + 0.7) + HEAD_LIFT_RISE * head_lift
+	var basis := base.basis * Basis(Vector3.RIGHT, -HEAD_LIFT_ANGLE * head_lift) if head_lift > 0.0 else base.basis
+	return Transform3D(basis, base.origin + Vector3(0.0, rise, 0.0))
+
+
 # ------------------------------------------------------------------------------ build
 
 
 func _build_hair() -> void:
 	hair_pivot = Node3D.new()
 	hair_pivot.name = "Hair"
-	var root := _anchor("hair_root", Vector3(-0.08, 1.73, -0.11))
-	hair_pivot.position = root
+	hair_pivot.position = _anchor("hair_root", HAIR_ROOT_FALLBACK)
 	figure.add_child(hair_pivot)
-	var tangent := _anchor("hair_root_tangent", Vector3(-0.07, 0.84, -0.53)).normalized()
-	var dir := (tangent + HAIR_DIRECTION.normalized() * 1.5).normalized()
+	var dir := hair_heading()
 	for li in HAIR_LAYERS.size():
 		var L: Array = HAIR_LAYERS[li]
-		var curves := HairRibbons.generate_curves(Vector3.ZERO, dir, int(L[1]), int(L[2]), float(L[3]),
-			10, float(L[4]), float(L[5]), float(L[6]), float(L[7]), float(L[8]))
-		if li == 0:
-			curves.append_array(_temple_curves(root))
-		var mi := MeshInstance3D.new()
-		mi.name = String(L[0])
-		mi.mesh = HairRibbons.build(curves, float(L[9]), 0.2, 56, Vector3.BACK, true)
-		var mat := MaterialLibrary.miku_hair().duplicate() as ShaderMaterial
-		mat.set_shader_parameter("seed", float(li) * 1.37 + 0.2)
-		mi.material_override = mat
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.extra_cull_margin = 2.0
-		hair_pivot.add_child(mi)
+		var neb := HairRibbons.nebula(Vector3.ZERO, dir, int(L[1]), int(L[0]) if false else int(L[1]), float(L[3]))
+		_add_hair_mesh(String(L[0]), neb["curves"], float(L[4]), float(li) * 1.37 + 0.2, PackedInt32Array(), neb["groups"], true)
+	# The link strands: the mass's own seed and tufts, so each leaves the root inside a real tuft.
+	var links := hair_link_curves()
+	hair_links = _add_hair_mesh("HairLinks", links, HAIR_LINK_WIDTH, 3.1, PackedInt32Array(range(links.size())),
+		PackedInt32Array(), false)
+	_link_mat = hair_links.material_override as ShaderMaterial
+
+
+func _add_hair_mesh(n: String, curves: Array[PackedVector3Array], width: float, seed: float,
+		links: PackedInt32Array, groups: PackedInt32Array, sways: bool) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = n
+	mi.mesh = HairRibbons.build(curves, width, 0.2, 56, Vector3.BACK, true, links, groups)
+	var mat := MaterialLibrary.miku_hair().duplicate() as ShaderMaterial
+	mat.set_shader_parameter("seed", seed)
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.extra_cull_margin = 2.0
+	hair_pivot.add_child(mi)
+	if sways:
 		hair_layers.append(mi)
 		_hair_mats.append(mat)
+	return mi
 
 
-## Strands from both temples sweeping back and up (relative to the hair pivot at `root`).
-func _temple_curves(root: Vector3) -> Array[PackedVector3Array]:
-	var out: Array[PackedVector3Array] = []
-	var brow := _anchor("forehead", Vector3(0.0, 1.52, 0.42))
-	for side in [-1.0, 1.0]:
-		var start := Vector3(brow.x + side * TEMPLE_OFFSET.x, brow.y + TEMPLE_OFFSET.y, brow.z + TEMPLE_OFFSET.z - 0.12) - root
-		var d := Vector3(side * 0.35, 0.55, -1.0).normalized()
-		out.append_array(HairRibbons.generate_curves(start, d, TEMPLE_STRANDS, 7400 + int(side * 11.0), TEMPLE_LENGTH,
-			9, 0.25, 0.4, 1.0, 1.1, 0.05))
-	return out
+## Heading of the hair at the knot (object space of the sculpture).
+static func hair_heading() -> Vector3:
+	var tangent := GenesisLayout.anchor(MESH_NAME, "hair_root_tangent", Vector3(-0.07, 0.8, -0.6)).normalized()
+	return (tangent * HAIR_TANGENT_SHARE + HAIR_DIRECTION.normalized()).normalized()
+
+
+## The link strands of the hair (relative to the hair root, object space of the sculpture), in the
+## order of RelationThreads.MIKU_LINKS: long strands of the mass (layer 0's seed and tufts) ending
+## exactly at RelationThreads.HAIR_SOURCES. Pure and cached (RelationThreads follows them).
+static func hair_link_curves() -> Array[PackedVector3Array]:
+	if not _link_curves.is_empty():
+		return _link_curves
+	var ends := PackedVector3Array()
+	for i: int in RelationThreads.MIKU_LINKS:
+		ends.append(RelationThreads.HAIR_SOURCES[i])
+	var L: Array = HAIR_LAYERS[0]
+	var neb := HairRibbons.nebula(Vector3.ZERO, hair_heading(), int(L[2]), HAIR_LINK_TUFTS, float(L[3]), ends, L[8])
+	var curves: Array = neb["curves"]
+	for idx: int in neb["links"]:
+		_link_curves.append(curves[idx])
+	return _link_curves
 
 
 func _build_halo() -> void:

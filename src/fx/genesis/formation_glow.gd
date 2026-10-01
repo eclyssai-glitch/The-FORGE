@@ -30,7 +30,7 @@ const GLINT_ALPHA := 0.4
 ## (its disc hides the centre, so it reads as light around the limb) and a thin brighter rim
 ## (sizes as a share of the final radius; alphas at the peak of GenesisChoreography.climax).
 const AURA_SIZE := 4.6
-const AURA_ALPHA := 0.3
+const AURA_ALPHA := 0.16
 const AURA_RIM_SIZE := 2.5
 const AURA_RIM_ALPHA := 0.42
 const AURA_RIM_HDR := 1.25

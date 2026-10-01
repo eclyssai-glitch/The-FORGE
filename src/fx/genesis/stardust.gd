@@ -22,6 +22,11 @@ const RIVER_SIZE := 0.075
 const RIVER_ALPHA := 0.42
 ## River presence asleep / awake (share of RIVER_ALPHA).
 const RIVER_PRESENCE := Vector2(0.25, 1.0)
+## Where the river is born: the dissolving stretch of the porcelain skirt (object Y of the sculpture,
+## inside Miku.BODY_DISSOLVE) — grains leave the skirt where it turns into light, not at a hem.
+const RIVER_BIRTH := Vector2(-2.5, -4.1)
+## Skirt radius (object units) at the top of the birth band; it widens to the hem radius below.
+const RIVER_BIRTH_RADIUS := 0.62
 ## Feeding the planet: rises at dust.gathered, holds until stable, then relaxes to FEED_REST.
 const FEED_RISE := 4.0
 const FEED_FALL := 6.0
@@ -55,6 +60,8 @@ var air: MoteCloud
 
 var _hem := Vector3.ZERO
 var _hem_radius := 1.1
+var _hem_local := Vector3(-0.18, -4.1, -0.34)
+var _miku := Transform3D.IDENTITY
 var _river_seed := PackedVector3Array()
 var _dust_seed := PackedVector3Array()
 var _air_seed := PackedVector3Array()
@@ -64,10 +71,11 @@ var _disc_radius := -1.0
 
 
 func _ready() -> void:
-	var miku := GenesisLayout.miku_transform()
-	_hem = miku * GenesisLayout.anchor("miku_body", "gown_hem_center", Vector3(-0.18, -4.1, -0.34))
+	_miku = GenesisLayout.miku_transform()
+	_hem_local = GenesisLayout.anchor("miku_body", "gown_hem_center", _hem_local)
+	_hem = _miku * _hem_local
 	var hr: Variant = GenesisLayout.anchors("miku_body").get("gown_hem_radius", 1.16)
-	_hem_radius = float(hr) * GenesisLayout.MIKU_SCALE
+	_hem_radius = float(hr)
 
 	river = _cloud("River", RIVER_MOTES, Palette.PEARL.lerp(Palette.BLUSH, 0.5), RIVER_SIZE, Vector2(1.0, 3.0))
 	for i in RIVER_MOTES:
@@ -146,7 +154,10 @@ func _update_river(g: GenesisState, t: float, m: float) -> void:
 		var s := _river_seed[i]
 		var u := fposmod(m / (RIVER_LIFE * (0.8 + 0.4 * s.z)) + s.y, 1.0)
 		var az := TAU * s.x + 0.6 * sin(TAU * (m / 40.0 + s.z))
-		var start := _hem + Vector3(sin(az), 0.0, cos(az)) * _hem_radius * (0.55 + 0.45 * s.z)
+		# Born on the dissolving skirt (object space), lower grains on a wider skirt.
+		var by := lerpf(RIVER_BIRTH.x, RIVER_BIRTH.y, sqrt(s.y * 0.7 + s.z * 0.3))
+		var br := lerpf(RIVER_BIRTH_RADIUS, _hem_radius, (RIVER_BIRTH.x - by) / (RIVER_BIRTH.x - RIVER_BIRTH.y)) * (0.8 + 0.25 * s.z)
+		var start := _miku * Vector3(_hem_local.x + sin(az) * br, by, _hem_local.z + cos(az) * br)
 		# Free fall: down, slowly widening, a lazy swirl.
 		var sw := 0.35 * u * sin(TAU * (u * 0.8 + s.z) + m * 0.15)
 		var free := start + Vector3(sw + (start.x - _hem.x) * 0.35 * u, -RIVER_FALL * u * (0.7 + 0.3 * s.z),
