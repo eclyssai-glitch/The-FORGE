@@ -142,3 +142,26 @@ const UI_ARC_SHARE := 0.5
 const UI_ARC_SAG := 9.0
 const UI_LEADER := 26.0
 const UI_LEADER_RUN := 12.0
+
+# --- Living (Loop 5, MIKU LIVING CHARACTER prototype; docs/VISUAL_DIRECTION.md section 12) ---------
+# No new hues: the living materials and the call line reuse the v2 tokens above. Only motion and
+# layout of what the living scenario adds.
+
+## Confirmation of a validated configuration artifact: `validated` goes 0 -> 1 over this time (the
+## short pulse lives inside that ramp; at 1 the sheet is calm and sealed).
+const T_CONFIRM := 0.9
+## Call line: draw-in when Enter opens it, retract after a submission / cancel (sine).
+const T_CALL_OPEN := 0.45
+const T_CALL_CLOSE := 0.9
+## Whisper of the recognised intent under the call line: rises, rests, dissolves (sine).
+const T_CALL_ECHO_IN := 0.5
+const T_CALL_ECHO_HOLD := 2.4
+const T_CALL_ECHO_OUT := 1.6
+## Call line geometry (px): open width, resting hairline width, distance of the line from the
+## bottom edge (clear of the transport arc and its revealed controls), echo gap above the line.
+const UI_CALL_WIDTH := 440.0
+const UI_CALL_REST := 44.0
+const UI_CALL_FROM_BOTTOM := 104.0
+const UI_CALL_ECHO_GAP := 30.0
+## Typed text of the call line (thin pearl, not tracked: it is speech, not a label).
+const SIZE_CALL := 15
