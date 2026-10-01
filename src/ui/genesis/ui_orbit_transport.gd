@@ -39,6 +39,12 @@ var reveal := 0.0
 ## [{"time": float, "label": String}] — every scripted event of the active scenario.
 var marks: Array[Dictionary] = []
 var duration := 1.0
+## False: the arc never seeks (LIVING, ADR-015: real-time state has no seek); hover still names.
+var seekable := true:
+	set(v):
+		seekable = v
+		if track:
+			track.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if v else Control.CURSOR_ARROW
 
 var _speed_group := ButtonGroup.new()
 var _pointer_near := false
@@ -280,6 +286,9 @@ func _on_speed(s: float) -> void:
 func _on_track_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
 	if mb and mb.button_index == MOUSE_BUTTON_LEFT:
+		if not seekable:
+			track.accept_event()
+			return
 		_dragging = mb.pressed
 		if mb.pressed:
 			_pending = time_at(mb.position.x + track.position.x)
