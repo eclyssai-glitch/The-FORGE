@@ -34,7 +34,7 @@ uniform vec3 gold_color : source_color;
 uniform vec3 shadow_color : source_color;
 
 // Albedo of the lit porcelain (share of the pearl/blush marble).
-uniform float albedo_level : hint_range(0.0, 1.0) = 0.56;
+uniform float albedo_level : hint_range(0.0, 1.0) = 0.5;
 uniform float roughness_amount : hint_range(0.0, 1.0) = 0.52;
 // Specular reflectance scale (0.5 = F0 0.04, a plain dielectric). Kept low: matte porcelain.
 uniform float specular_amount : hint_range(0.0, 1.0) = 0.28;
@@ -52,7 +52,10 @@ uniform float inner_glow = 0.05;
 uniform float backlight_amount = 0.22;
 // Soft fill of the porcelain's micro-hollows: a faint BLUSH light where the baked AO darkens
 // (light scattered inside the porcelain reaches the folds), so grooves never read as cuts.
-uniform float hollow_fill = 0.06;
+uniform float hollow_fill = 0.08;
+// Same warm fill along sharp creases (the shading normal turning fast across a pixel, away from the
+// silhouette): narrow pleats and hair grooves read as soft shadow, never as an incised black line.
+uniform float crease_fill = 0.16;
 // Baked AO from vertex colour red (0 = ignore).
 uniform float ao_strength : hint_range(0.0, 1.0) = 1.0;
 // Marbling scale in object units (MIKU is ~6 u tall).
@@ -69,12 +72,12 @@ group_uniforms statuary;
 uniform vec3 head_center = vec3(-0.04, 1.4, 0.13);
 uniform vec3 head_radii = vec3(0.25, 0.38, 0.33);
 // Share of the face's shading normal taken from the ellipsoid (0 = raw sculpt).
-uniform float face_soften : hint_range(0.0, 1.0) = 0.5;
+uniform float face_soften : hint_range(0.0, 1.0) = 0.38;
 // Baked AO strength on the face (share of ao_strength): the eyes and lips are masses, not holes.
-uniform float face_ao : hint_range(0.0, 1.0) = 0.35;
+uniform float face_ao : hint_range(0.0, 1.0) = 0.5;
 // Torso front (bodice): horizontal share of the shading normal taken from the round torso around
 // the vertical axis through (torso_axis.x, torso_axis.y) (object x, z).
-uniform float torso_soften : hint_range(0.0, 1.0) = 0.4;
+uniform float torso_soften : hint_range(0.0, 1.0) = 0.55;
 uniform vec2 torso_axis = vec2(0.0, 0.0);
 
 group_uniforms dissolve;
@@ -98,8 +101,8 @@ uniform vec3 reveal_origin = vec3(0.001, 1.5145, 0.4168);
 uniform float reveal_reach = 6.4;
 // Width of the luminous edge (object units), its brightness and the noise breaking the front.
 uniform float reveal_edge = 0.32;
-uniform float reveal_glow = 1.1;
-uniform float reveal_noise = 1.3;
+uniform float reveal_glow = 1.6;
+uniform float reveal_noise = 2.2;
 uniform vec3 reveal_color : source_color;
 
 varying vec3 v_obj;
@@ -126,7 +129,7 @@ void vertex() {
 	// Bodice front: keep the mesh's vertical tilt (the pleats), take part of the horizontal
 	// direction from the round torso (melts decimation facets).
 	float wt = smoothstep(-0.7, -0.35, p.y) * (1.0 - smoothstep(0.95, 1.12, p.y))
-			* (1.0 - smoothstep(0.3, 0.5, abs(p.x))) * smoothstep(-0.05, 0.12, p.z);
+			* (1.0 - smoothstep(0.42, 0.64, abs(p.x))) * smoothstep(-0.05, 0.12, p.z);
 	vec2 hz = vec2(p.x - torso_axis.x, p.z - torso_axis.y);
 	vec2 hd = hz / max(length(hz), 1e-4);
 	float ny = clamp(n.y, -1.0, 1.0);
@@ -142,7 +145,7 @@ void fragment() {
 	if (reveal < 0.999) {
 		float rn = k_fbm(v_obj * reveal_noise + 11.0, 3) - 0.5;
 		float edge_w = max(reveal_edge, 1e-3);
-		float dist = length(v_obj - reveal_origin) + rn * edge_w * 1.6;
+		float dist = length(v_obj - reveal_origin) + rn * edge_w * 2.4;
 		float front = reveal * (reveal_reach + edge_w * 2.0);
 		if (dist > front) {
 			discard;
@@ -177,7 +180,7 @@ void fragment() {
 	v_edge = f_aa;
 
 	float marble = k_vnoise(v_obj * marble_scale) * 0.65 + k_vnoise(v_obj * marble_scale * 3.1) * 0.35;
-	vec3 base = mix(pearl_color, blush_color, 0.25 + smoothstep(0.35, 0.85, marble) * 0.35);
+	vec3 base = mix(pearl_color, blush_color, 0.38 + smoothstep(0.35, 0.85, marble) * 0.3);
 	base = mix(shadow_color, base * albedo_level, mix(0.45, 1.0, ao));
 
 	ALBEDO = base;
@@ -199,6 +202,8 @@ void fragment() {
 			* backlight_amount * wake * ao;
 	// Hollows: the darker the baked AO, the more warm scattered light fills it (never a black cut).
 	vec3 hollow_e = blush_color * (1.0 - raw_ao) * hollow_fill * wake;
+	float crease = smoothstep(0.12, 0.5, length(fwidth(NORMAL))) * smoothstep(0.12, 0.35, nv);
+	hollow_e += mix(pearl_color, blush_color, 0.5) * crease * crease_fill * wake;
 	vec3 select_e = pearl_color * f * f * f_aa * select * 0.6;
 	// The skirt turning into light: warmer and brighter toward the front, a luminous lip.
 	vec3 light_e = mix(pearl_color, blush_color, 0.5) * light_turn * smoothstep(0.0, 0.8, dh) * wake
@@ -216,7 +221,7 @@ void light() {
 	float wrapped = clamp((ndl + w) / max(1.0 + w, 1.0), 0.0, 1.0);
 	// The band the wrap adds beyond the terminator: light scattered through the porcelain.
 	float scatter = max(wrapped - direct, 0.0);
-	float edge = mix(0.55, 1.0, v_edge);
+	float edge = mix(0.45, 1.0, v_edge);
 	vec3 pass = vec3(ATTENUATION);
 	if (LIGHT_IS_DIRECTIONAL) {
 		pass = mix(blush_color * shadow_lift, vec3(1.0), ATTENUATION);

@@ -50,8 +50,8 @@ uniform float tone_variation : hint_range(0.0, 1.0) = 0.6;
 uniform float opacity_variation : hint_range(0.0, 1.0) = 0.45;
 // Root: brightness share at the root (all strands stack there) and the share over which it
 // recovers to full.
-uniform float root_level : hint_range(0.0, 1.0) = 0.3;
-uniform float root_length : hint_range(0.01, 0.5) = 0.18;
+uniform float root_level : hint_range(0.0, 1.0) = 0.16;
+uniform float root_length : hint_range(0.01, 0.5) = 0.24;
 // Link strands: brightness share, core width (share of the half-width) and where the ICE begins.
 uniform float link_intensity = 1.35;
 uniform float link_core : hint_range(0.05, 1.0) = 0.3;

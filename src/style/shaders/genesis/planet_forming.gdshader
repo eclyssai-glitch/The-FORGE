@@ -49,7 +49,7 @@ uniform float magma_intensity = 1.6;
 uniform float crack_glow = 1.6;
 uniform float atmo_intensity = 1.0;
 // Lit-limb scattering and the terminator band (shares of the light that reaches them).
-uniform float scatter_amount = 0.55;
+uniform float scatter_amount = 0.8;
 uniform float terminator_amount = 1.1;
 // Light wrap of the formed world (soft day/night line) and the sea glint.
 uniform float wrap_amount : hint_range(0.0, 1.0) = 0.18;
@@ -130,7 +130,8 @@ void fragment() {
 	float covered = settled * (1.0 - crack);
 	float crust_tex = k_fbm(d * 11.0 + 3.0, 2);
 	// Continents: broad land masses (lighter, warm) against dark basins; plate tones on top.
-	float land = smoothstep(0.42, 0.58, k_fbm(d * 1.4 + 31.0, 4));
+	float land_n = k_fbm(d * 1.4 + 31.0, 4);
+	float land = smoothstep(0.42, 0.58, land_n);
 	vec3 basin_albedo = mix(crust_color, crust_light_color, clamp(crust_tex * 0.5 + (v.z - 0.5) * 0.25, 0.0, 1.0));
 	vec3 land_albedo = mix(crust_light_color, land_color, clamp(0.35 + crust_tex * 0.5 + (v.z - 0.5) * 0.3, 0.0, 1.0));
 	vec3 crust_albedo = mix(basin_albedo, land_albedo, land);
@@ -144,19 +145,30 @@ void fragment() {
 	// The formed world (atmosphere, own look only): basins become seas, the land warms, clouds drift.
 	float own = 1.0 - max(style_b, style_d);
 	float formed = clamp(atmosphere, 0.0, 1.0) * own;
+	// Coasts of the formed world: crisp and fractal (fine noise on the threshold), more sea than land.
+	float coast_n = land_n + (crust_tex - 0.5) * 0.09;
+	float coast_aa = max(fwidth(coast_n), 1e-4);
+	float land_c = smoothstep(0.545 - coast_aa - 0.006, 0.545 + coast_aa + 0.006, coast_n);
+	land = mix(land, land_c, formed);
 	float sea = (1.0 - land) * formed;
-	vec3 sea_albedo = mix(ocean_color * 0.55, ocean_color, clamp(crust_tex * 0.8 + 0.1, 0.0, 1.0));
-	vec3 shore = mix(land_albedo, mix(land_color, cloud_color, 0.25), 0.5);
-	crust_albedo = mix(crust_albedo, mix(sea_albedo, shore, land), formed * 0.85);
+	// Seas: deep in the basins, lighter ICE over the shallows near the coasts.
+	float shallow = smoothstep(0.42, 0.545, coast_n);
+	vec3 sea_albedo = ocean_color * mix(0.45, 0.8, crust_tex);
+	sea_albedo = mix(sea_albedo, mix(ocean_color, atmo_inner_color, 0.45), shallow * 0.75);
+	// Land: one warm tone in broad regions (no per-plate mosaic), darker highlands.
+	float region = k_fbm(d * 3.1 + 77.0, 3);
+	vec3 land_formed = land_color * mix(0.6, 1.08, smoothstep(0.25, 0.75, region)) * mix(0.85, 1.05, crust_tex);
+	crust_albedo = mix(crust_albedo, mix(sea_albedo, land_formed, land), formed * 0.92);
 	crust_albedo = mix(crust_albedo, banded, style_b);
 	crust_albedo = mix(crust_albedo, dusty, style_d);
 	crack *= 1.0 - max(style_b, style_d);
 	// A formed world shows land and sea, not a cracked marble: the sealed seams vanish under the air.
-	crack *= 1.0 - formed * 0.85;
+	crack *= 1.0 - formed;
 	covered = settled * (1.0 - crack);
 	float cl_t = motion_time * cloud_speed;
-	vec3 cq = d * 3.2 + vec3(cl_t, 0.0, -cl_t * 0.7) + (w - 0.5) * 0.6;
-	float cloud = smoothstep(0.52, 0.74, k_fbm(cq + 51.0, 3)) * cloud_amount * formed * covered;
+	// Clouds: thin streaks stretched along the latitudes, drifting.
+	vec3 cq = vec3(d.x * 2.6, d.y * 7.5, d.z * 2.6) + vec3(cl_t, 0.0, -cl_t * 0.7) + (w - 0.5) * 0.8;
+	float cloud = smoothstep(0.56, 0.76, k_fbm(cq + 51.0, 3)) * cloud_amount * formed * covered;
 	v_sea = sea * covered * (1.0 - cloud);
 
 	float nv = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
@@ -178,9 +190,9 @@ void fragment() {
 
 	// Atmosphere: a soft haze over the disc toward the limb (the lit limb is scattered in light()).
 	float haze = smoothstep(0.35, 1.0, f);
-	ALBEDO = mix(ALBEDO, atmo_inner_color * 0.35, atmosphere * haze * haze * haze * 0.4);
+	ALBEDO = mix(ALBEDO, atmo_inner_color * 0.35, atmosphere * haze * haze * haze * 0.25);
 	vec3 atmo = mix(atmo_outer_color, atmo_inner_color, smoothstep(0.55, 0.95, f));
-	e += atmo * haze * haze * haze * f_aa * 0.22 * atmosphere * atmo_intensity;
+	e += atmo * haze * haze * haze * f_aa * 0.3 * atmosphere * atmo_intensity;
 
 	e += accretion_color * lip * 2.0;
 	e += atmo_inner_color * pow(max(f, 0.0), 3.0) * f_aa * select * 0.6;
