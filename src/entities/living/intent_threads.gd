@@ -67,7 +67,7 @@ func cast(side: int, finger: int, hand: PuppetHand, hand_point := -1, force := 0
 	t["target"] = Vector3.ZERO
 	t["phase0"] = float(id) * 1.7
 	(t["cycle"] as ThreadCycle).start(force, speed)
-	(t["node"] as MultiMeshInstance3D).visible = true
+	(t["node"] as GeometryInstance3D).visible = true
 	return id
 
 
@@ -168,7 +168,7 @@ func step(dt: float) -> void:
 		_update_ends(t)
 		_draw(t)
 		if not c.is_alive():
-			(t["node"] as MultiMeshInstance3D).visible = false
+			(t["node"] as GeometryInstance3D).visible = false
 
 
 func _update_ends(t: Dictionary) -> void:
