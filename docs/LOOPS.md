@@ -158,4 +158,18 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   são dele) — item da rodada 2. Evidência: `docs/evidence/loop-05/animator-r1/`, `docs/evidence/loop-05/inspector/`.
   Código de corpo/ossos manual da rodada 1 (a migrar): `src/miku/motion/{miku_motor,pose_rig,limb_ik,finger_set,arm_channel}.gd`,
   `src/miku/body/{rig_bones,miku_body(pose),miku_mannequin}.gd`, `src/entities/living/{hand_mannequin,puppet_hand(step/_apply_frame)}.gd`.
-- **Aguardando o Owner (gate).** Rodada 2 não iniciada.
+- Gate do Owner: aprovado.
+
+ROUND_1: INTEGRATED
+TOOLING_GATE: PASS
+ROUND_2: AUTHORIZED
+
+- Pré-voo da rodada 2: artefatos que sobrevivem migrados do sandbox — `docs/research/native-character-runtime.md`
+  (+ evidência: vídeo, folha de contato, bench/probes), `tools/research/native_character/` (spike, fora do export),
+  `docs/tooling/godotprompter/MANIFEST.md` + LICENSE, `docs/tooling/coding-solo-mcp.md` (+ log do teste). Não
+  migrados: skills (ficam no sandbox), node_modules/build do MCP, cenas-sonda, hooks. Testes: 520/520.
+- Rodada 2 (diretiva do Owner): bloco 1 (correção de runtime: correlação de requests no roteador + orçamento do smoke
+  LIVING; reconhecimento imediato na linha de chamada) → migração nativa em 5 passos com OLD vs NEW (AnimationTree;
+  atenção; braços/IK; movimento secundário; mãos-marionete) → extensões do rig (olhos, cabelo, saia multi-cadeia) →
+  direção (raiva, configuração, mundo indicado) → gate de causalidade → desempenho → gravação real → art-critic →
+  technical-auditor. Sound bus: tarefa isolada do sound-designer.

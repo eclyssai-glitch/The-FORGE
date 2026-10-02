@@ -1,0 +1,98 @@
+# Probe results — Godot 4.7.2.stable.official.ed1daf0bf — 2026-10-02
+# READING NOTES (see docs/research/native-character-runtime.md, section 3):
+# - probe_semantics, first block ("tree.advance(0)", "Add2: calm chest=0", "state machine current: Start"): the state
+#   machine was built with the DEFAULT Start transition (ADVANCE_MODE_ENABLED) and stayed in Start = finding P-05;
+#   the corrected measurements are in probe_followup (AUTO start, synchronous advance) and probe_followup2 (Add2 sync).
+# - probe_semantics "post-modifier hand.R ... snapshot=(0,0,0)" and "TwoBoneIK3D after forearm lengthened": those IKs had
+#   NO pole node, so they did nothing (finding P-14); corrected in probe_followup (BoneAttachment3D) and
+#   probe_real_rig (appearance at runtime: err 0.0000).
+
+## probe_basic.gd
+bones=40
+relative default=false forward_axis=4 primary_rot_axis=1
+before advance pose=(0, 0, 0, 1) gz=(0.0, 0.0, 1.0)
+after advance(sync) pose=(0, 0, 0, 1) gz=(0.0, 0.0, 1.0) updated_signals=0
+  modification_processed: pose=(-0.016389, 0.384943, 0.006837, 0.92277) gz=(0.710203, 0.03551, 0.703101)
+after 1 frame pose=(0, 0, 0, 1) gz=(0.0, 0.0, 1.0) updated_signals=1 [(0.710203, 0.03551, 0.703101)]
+after 2 frames gz=(0.0, 0.0, 1.0) signals=1
+wanted dir=(0.710203, 0.03551, 0.703101)
+
+## probe_semantics.gd
+R tree.advance(0) synchronous pose write: before=(0, 0, 0, 1) after=(0, 0, 0, 1) changed=false
+R state machine current after first advance: Start
+R Add2: calm chest=(0.0, 0.0, 0.0) with breath=(0.0, 0.0, 0.0) diff_x=0.0 (breath t=0.5, peak -0.055 at t=0.5)
+R OneShot filtered: upper_arm.L moved deg=63.6050984569899 head (unfiltered, own calm loop) moved deg=0.0 active=true
+R travel calm->frustrated xfade 0.6 s clavicle.L z deg over frames: ["frustrated:2.01", "frustrated:2.10", "frustrated:3.51", "frustrated:4.98", "frustrated:6.96", "frustrated:8.54"]
+R LookAt relative=false: animated roll 17.2 deg -> head roll after look-at deg=0.0 forward=(0.0, 0.050104, 0.998744)
+R LookAt relative=true: animated roll 17.2 deg -> head roll after look-at deg=17.2090799629338 forward=(-0.0, 0.050104, 0.998744)
+R LookAt duration=0.5 target jump (deg from front per frame, * = interpolating): ["24.8", "32.1", "39.6", "47.0", "53.8", "59.9", "64.9", "68.7", "71.0", "71.8*", "71.8*", "71.8*", "71.8*", "71.8*", "71.8*", "71.8*", "71.8*", "71.8*", "71.8*", "71.8*"]
+R LookAt duration=0.5 target moving continuously: ["want 14 got 14*", "want 31 got 31*", "want 48 got 48*", "want 65 got 65*", "want 83 got 83*", "want 100 got 100*"]
+R LookAt limits 80/60 target behind-right: within=false head yaw deg=-40.00000364946
+R LimitAngVel joint_count after chain neck->head: 0 exclude=false
+R LimitAngVel 180 deg/s, pose jump 0->90 deg then back (head yaw per frame @30fps): ["6.0", "12.0", "18.0", "24.0", "30.0", "36.0", "42.0", "48.0", "54.0", "60.0", "66.0", "72.0", "66.0", "60.0", "54.0", "48.0", "42.0", "36.0"]
+R LimitAngVel after LookAt (child order look->limit), target jump 0->86 deg: ["6.0", "12.0", "18.0", "24.0", "30.0", "36.0", "42.0", "48.0", "54.0", "60.0", "66.0", "72.0"]
+R TwoBoneIK3D (pole node) reach errors: ["target (-0.35, 1.25, 0.35) err 0.0000 elbow (-0.38, 1.26, 0.12)", "target (-0.2, 1.5, 0.4) err 0.0000 elbow (-0.34, 1.44, 0.22)", "target (-0.5, 1.0, 0.1) err 0.0168 elbow (-0.34, 1.19, 0.05)", "target (-1.5, 1.4, 0.8) err 1.0395 elbow (-0.41, 1.4, 0.14)"]
+R TwoBoneIK3D hand.R basis y after solve: (0.829059, 0.227809, -0.51065) forearm.R y: (0.829059, 0.227809, -0.51065)
+R post-modifier hand.R: snapshot(skeleton_updated)=(0.0, 0.0, 0.0) BoneAttachment3D=(-0.305, 0.91, 0.02) get_bone_global_pose in _process=(-0.305, 0.91, 0.02) target=(-0.2, 1.6, 0.5)
+R SpringBone skirt.f tip bone y.z after 30 cm step (every 4 frames): ["0.000", "0.609", "0.964", "0.610", "0.040", "-0.101", "-0.040", "0.001", "0.005", "0.001"]
+R SpringBone deterministic across two identical runs (manual dt): true
+R appearance under AnimationTree (rotation tracks only): chest pose scale=(1.2, 1.0, 1.15) neck pose pos=(0.0, 0.273, 0.0) (expected (0.0, 0.273, 0.0))
+R appearance vs a POSITION track on neck: neck pose pos=(0.0, 0.21, 0.0) (appearance lost)
+R TwoBoneIK3D after forearm lengthened x1.25 at runtime: err before=0.4864 after=0.5222 after reset()=0.5221
+R AimModifier3D index.R (-Y) to node: angle error deg=0.00000307832463
+R CopyTransformModifier3D index.L <- index.R rotation (local): L=(0, 0, 0, 1) snapshot L global y=(0.6, -0.29, -0.74) R global y=(0.6, -0.29, -0.74)
+R done
+
+## probe_followup.gd
+R IK pole=true updates=3 err=0.00000004214685 pole_direction=0
+R IK pole=false updates=0 err=1.34443295001984 pole_direction=0
+R read post-modifier hand.R: skeleton_updated snapshot=(-0.35, 1.25, 0.35) BoneAttachment3D=(-0.35, 1.25, 0.35) get_bone_global_pose next frame=(-0.305, 0.91, 0.02) target=(-0.35, 1.25, 0.35)
+R StateMachineTransition default advance_mode=1 (1=ENABLED needs travel/condition, 2=AUTO)
+R after advance(0): current=calm chest=(-0.05, -0.03, -0.015)
+R after advance(DT): current=calm chest=(-0.049994, -0.029974, -0.014987) (calm key0 chest x=-0.05; written synchronously by advance)
+R Add2 at breath t~0.53: chest x with=-0.0495 without=-0.0488 diff=-0.0007 (breath peak -0.055)
+R LookAt limit=60 target 90 deg right -> head yaw -30.0
+R LookAt limit=120 target 90 deg right -> head yaw -60.0
+R LookAt limit=160 target 90 deg right -> head yaw -80.0
+R LookAt duration=1.0 LINEAR, target jump 0->90: ["3.0(rem 0.97 false)", "12.0(rem 0.87 false)", "21.0(rem 0.77 false)", "30.1(rem 0.67 false)", "39.1(rem 0.57 false)", "48.1(rem 0.47 false)", "57.1(rem 0.37 false)", "66.1(rem 0.27 false)", "75.1(rem 0.17 false)", "84.2(rem 0.07 false)", "90.2(rem 0.00 true)", "90.2(rem 0.00 true)"]
+R LimitAngVel chain spine->head joint_count=4
+R LimitAngVel exclude=false: head (in chain) moved deg=3.0, upper_arm.L (outside) moved deg=68.8 in one frame (cap 3 deg/frame)
+R done
+
+## probe_followup2.gd
+R pole mode=none updates=3 ik_err=0.4759 head_yaw=63.7
+R pole mode=direction_vector updates=3 ik_err=0.4759 head_yaw=63.7
+R pole mode=direction_enum updates=3 ik_err=0.4759 head_yaw=63.7
+R Add2 sync=false: after 0.5 s at amount 0, switching to 1 -> chest x=-0.0490 (calm -0.05 + breath peak -0.055 = -0.105 if the breath clock ran)
+R Add2 sync=true: after 0.5 s at amount 0, switching to 1 -> chest x=-0.1033 (calm -0.05 + breath peak -0.055 = -0.105 if the breath clock ran)
+R SpringBone over animated root bone (anim rotates skirt.f.0 by -0.5 rad x): settled skirt.f.0 y=(0.0, 0.878, -0.479) (rest dir (0,-0.6,0.22)n; animated dir rotated back/up)
+R CCDIK3D clavicle.R->hand.R joints=4 max_iter=4 delta_limit=2 err per frame=["0.5460", "0.5460", "0.5460", "0.5460", "0.5460", "0.5460", "0.2568", "0.2568", "0.2568", "0.2568"] elbow=(-0.31, 1.19, 0.04) updates=10
+R CCDIK3D clavicle.R->hand.R joints=4 max_iter=16 delta_limit=30 err per frame=["0.0003", "0.0003", "0.0003", "0.0003", "0.0003", "0.0003", "0.0011", "0.0011", "0.0011", "0.0011"] elbow=(-0.35, 1.22, 0.08) updates=10
+R FABRIK3D clavicle.R->hand.R joints=4 max_iter=16 delta_limit=30 err per frame=["0.0001", "0.0001", "0.0001", "0.0001", "0.0001", "0.0001", "0.0004", "0.0004", "0.0004", "0.0004"] elbow=(-0.35, 1.18, 0.07) updates=10
+R JacobianIK3D clavicle.R->hand.R joints=4 max_iter=16 delta_limit=30 err per frame=["0.0188", "0.0188", "0.0188", "0.0188", "0.0188", "0.0188", "0.0016", "0.0016", "0.0016", "0.0016"] elbow=(-0.38, 1.33, 0.1) updates=10
+R done
+
+## probe_real_rig.gd
+R real rig bones=49 head rest global z=(0.0, 0.0, 1.0) head pos=(0.0, 0.0, 0.0) hand.R pos=(0.0, 0.0, 0.0) upper_arm.R=(0.0, 0.0, 0.0)
+R real LookAt chain chest/neck/head (+Z forward, relative): head forward err deg=0.00 want yaw 48.3 pitch 18.2 got yaw 48.3 pitch 18.2; chest yaw 16.1 pitch 11.4 neck yaw 30.3 pitch 15.5
+R real LookAt relative: head X axis . UP (tilt kept if far from 0) = 0.294
+R real TwoBoneIK3D arm.R mode=pole_node updates=6 arm_len=0.000 errs=["0.0000", "0.0000", "0.0000"] elbow=(-0.36, 0.17, -0.59)
+R real TwoBoneIK3D arm.R mode=pole_dir_+Z updates=0 arm_len=0.000 errs=["0.4031", "0.4153", "0.4637"] elbow=(0.0, 0.0, 0.0)
+R real TwoBoneIK3D arm.R mode=no_pole updates=0 arm_len=0.000 errs=["0.4031", "0.4153", "0.4637"] elbow=(0.0, 0.0, 0.0)
+R real SpringBone joint counts: skirt=3 index.R=3
+R real SpringBone skirt.2 / index.1.R deviation deg after a 25 cm jerk (every 3 frames): ["0.0/0.0", "3.3/33.8", "0.9/7.9", "8.8/0.5", "14.4/0.4", "16.1/0.0", "15.3/0.0", "13.3/0.0", "11.0/0.0", "8.8/0.0"]
+R real appearance (height 1.1, shoulders 1.15, neck 1.3, chest 1.2) applied BEFORE modifiers: IK err=0.0000 LookAt err deg=0.00 updates=4
+R real appearance changed at runtime (modifiers live): IK err=0.0000 LookAt err deg=0.00
+R real BoneTwistDisperser3D=false hand.R twisted 80 deg about its Y -> twist upper_arm 0.0 forearm -0.0 hand 80.0
+R real BoneTwistDisperser3D=true hand.R twisted 80 deg about its Y -> twist upper_arm 0.0 forearm -0.0 hand 80.0
+R real Add2 with non-identity rest: base rest*Rx(0.10) + add rest*Rx(-0.05) -> rest^-1*pose euler x=0.0500 (0.05 = additive relative to REST)
+R real HandRig.RIGHT bones=23 springs joints index=4; index.2 deviation deg after jerk: ["0.0", "2.1", "7.9", "12.9", "15.3", "13.8", "11.5", "9.0"] updates=27
+R done
+
+## probe_twist.gd
+R twist cfg root=upper_arm.R end=hand.R extend=false from_rest=false mode=0 joints=3 -> upper_arm 0.0 forearm -0.0 hand 80.0 (updates 3)
+R twist cfg root=upper_arm.R end=hand.R extend=true from_rest=false mode=0 joints=3 -> upper_arm -46.2 forearm -52.2 hand -190.5 (updates 3)
+R twist cfg root=upper_arm.R end=hand.R extend=true from_rest=true mode=0 joints=3 -> upper_arm 25.7 forearm 29.3 hand 30.8 (updates 3)
+R twist cfg root=upper_arm.R end=middle.0.R extend=false from_rest=false mode=0 joints=4 -> upper_arm -46.5 forearm -52.6 hand -189.9 (updates 3)
+R twist cfg root=upper_arm.R end=middle.0.R extend=false from_rest=true mode=0 joints=4 -> upper_arm 26.7 forearm 30.4 hand 29.0 (updates 3)
+R twist cfg root=forearm.R end=middle.0.R extend=false from_rest=true mode=1 joints=3 -> upper_arm 0.0 forearm 40.0 hand 41.8 (updates 3)

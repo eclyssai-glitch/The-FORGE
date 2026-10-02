@@ -1,0 +1,37 @@
+# Native character spike — cost results (Godot 4.7.2, 2026-10-02)
+# CPU headless bench: spikes/native_character/bench.gd (machine: 4 vCPU shared with other Godot workers; +-30% between runs)
+BENCH cpus=4 N=16 (shared machine: other Godot workers may run)
+BENCH modifiers[empty stamps only] us/rig/frame=0.4 (subtracted below)
+BENCH modifier lookat_head            us/rig/frame=4.3
+BENCH modifier lookat_chain5          us/rig/frame=14.2
+BENCH modifier twobone_ik             us/rig/frame=7.4
+BENCH modifier ccdik_16               us/rig/frame=13.5
+BENCH modifier fabrik_16              us/rig/frame=8.6
+BENCH modifier jacobian_16            us/rig/frame=29.9
+BENCH modifier spline_ik_hair         us/rig/frame=7.3
+BENCH modifier aim                    us/rig/frame=3.5
+BENCH modifier copy_transform         us/rig/frame=2.6
+BENCH modifier limit_angvel_2chains   us/rig/frame=2.7
+BENCH modifier twist_disperser        us/rig/frame=3.2
+BENCH modifier springbone_5chains     us/rig/frame=23.7
+BENCH AnimationTree MIKU (SM 4 states + Add2 breath + OneShot) advance us/rig/frame=49.0
+BENCH full NCMiku: tree us=42.2 modifier stack us=43.4 (per rig per frame)
+BENCH puppet hands x1: step+modifiers us/frame=141 -> per hand us=141.2
+BENCH puppet hands x4: step+modifiers us/frame=176 -> per hand us=44.1
+BENCH puppet hands x8: step+modifiers us/frame=342 -> per hand us=42.8
+BENCH puppet hands x16: step+modifiers us/frame=633 -> per hand us=39.6
+BENCH puppet hands x32: step+modifiers us/frame=1103 -> per hand us=34.5
+BENCH done
+
+# A/B renderizado (nc_demo.tscn -- --measure --seconds=8 [--strip=modifiers|all|--hands=12]), Xvfb + llvmpipe, 1600x900
+# loadavg at the end of the A/B: 16.0 14.2 9.3 on 4 CPUs -> frame times are dominated by render + contention; they
+# INCREASE run after run while layers are removed, i.e. the native layers (~0.1-0.2 ms) are below the noise.
+# In --strip modes miku_tree/modifiers_us are not meaningful (inactive stamps keep stale timestamps; advance() of an
+# inactive tree still returns quickly).
+MEASURE strip=none extra_hands=0 frames=241 avg_frame_ms=767.38 p50=722.53 p95=927.80 miku_tree_avg_us=99 miku_modifiers_avg_us=105 renderer=llvmpipe (LLVM 20.1.2, 256 bits)
+MEASURE strip=modifiers extra_hands=0 frames=241 avg_frame_ms=954.26 p50=895.77 p95=1376.98 miku_tree_avg_us=100 miku_modifiers_avg_us=46 renderer=llvmpipe (LLVM 20.1.2, 256 bits)
+MEASURE strip=all extra_hands=0 frames=241 avg_frame_ms=1025.64 p50=979.59 p95=1379.74 miku_tree_avg_us=113 miku_modifiers_avg_us=43 renderer=llvmpipe (LLVM 20.1.2, 256 bits)
+MEASURE strip=none extra_hands=12 frames=241 avg_frame_ms=1314.27 p50=1247.96 p95=1813.41 miku_tree_avg_us=108 miku_modifiers_avg_us=106 renderer=llvmpipe (LLVM 20.1.2, 256 bits)
+
+# Movie Maker recording run (12 s): 
+MEASURE strip=none extra_hands=0 frames=361 avg_frame_ms=500.23 p50=449.86 p95=687.98 miku_tree_avg_us=114 miku_modifiers_avg_us=78 renderer=llvmpipe
