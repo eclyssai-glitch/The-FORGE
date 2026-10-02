@@ -24,7 +24,12 @@
 # The game's whole process session (godot, xvfb-run, Xvfb) is always killed at the end.
 #   tools/smoke_test.sh                         run from project sources
 #   tools/smoke_test.sh --pack <exe|pck>        run the pack embedded in an export
-#                                              (e.g. build/windows/KoriumUniverse.exe)
+#                                              (e.g. build/windows/KoriumUniverse.exe). The engine
+#                                              runs from an empty temporary directory: with
+#                                              --main-pack, res:// files missing from the pack are
+#                                              read from the working directory, so running it from
+#                                              the project would hide files the export left out
+#                                              (e.g. tools/inspector would load).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source tools/_proc.sh
@@ -37,10 +42,14 @@ if [ "${SMOKE_ALLOW_MISSING_MODULES:-0}" = "1" ]; then game_flags+=(--allow-miss
 GRACE="${SMOKE_GRACE:-15}"
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
 log="$(mktemp)"
-PROC_ON_EXIT='rm -f "$log"'
-trap 'rm -f "$log"' EXIT
+rundir="$(mktemp -d)"
+PROC_ON_EXIT='rm -f "$log"; rm -rf "$rundir"'
+trap 'rm -f "$log"; rm -rf "$rundir"' EXIT
 if [ -n "$pack" ]; then
-  cmd=(tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --main-pack "$pack" -- "${game_flags[@]}" "$@")
+  [ -f "$pack" ] || { echo "smoke_test: pack $pack not found." >&2; exit 1; }
+  pack_abs="$(cd "$(dirname "$pack")" && pwd)/$(basename "$pack")"
+  cmd=(bash -c 'cd "$1" && shift && exec "$@"' _ "$rundir" "$PWD/tools/godot.sh" "${GODOT_AUDIO_FLAGS[@]}" \
+    --main-pack "$pack_abs" -- "${game_flags[@]}" "$@")
 else
   cmd=(tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --path . -- "${game_flags[@]}" "$@")
 fi

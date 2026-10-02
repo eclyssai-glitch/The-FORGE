@@ -85,6 +85,35 @@ func test_world_target() -> void:
 	assert_false(executor.calls.has([&"target_world", &"world_nowhere"]))
 
 
+func test_snapshot_reports_the_action_in_flight_read_only() -> void:
+	var idle := router.snapshot()
+	assert_eq(idle["action"], "")
+	assert_eq(idle["plan"], [])
+	assert_eq(idle["requests_finished"], 0)
+	assert_false(idle["provider_available"])
+	executor.auto_finish = false
+	router.submit_text("Miku, aumente sua altura")
+	executor.finish()  # LOOK_AT_USER -> ACKNOWLEDGE
+	var s := router.snapshot()
+	assert_eq(s["action"], String(V.ACKNOWLEDGE))
+	assert_eq(s["step_index"], 1)
+	assert_eq(s["plan"][0], V.LOOK_AT_USER)
+	assert_true(s["waiting"])
+	assert_eq(s["executor_pending"], String(V.ACKNOWLEDGE))
+	assert_eq(s["active_request"]["kind"], "CONFIG_PATCH")
+	# A copy: editing it changes nothing in the router.
+	(s["active_request"] as Dictionary)["kind"] = "X"
+	(s["plan"] as Array).clear()
+	assert_eq(router.snapshot()["active_request"]["kind"], "CONFIG_PATCH")
+	assert_eq((router.snapshot()["plan"] as Array).size(), 10)
+	while router.busy():
+		executor.finish()
+	var done := router.snapshot()
+	assert_eq(done["action"], "")
+	assert_eq(done["requests_finished"], 1)
+	assert_eq(done["last_report"]["status"], InteractionRouter.ST_APPLIED)
+
+
 func test_local_config_route_mutates_after_edit_file() -> void:
 	var mutations: Array = []
 	router.mutation_applied.connect(func(p: String, o: Variant, n: Variant) -> void: mutations.append([p, o, n]))

@@ -158,3 +158,34 @@ Entrada diegética, só por autoloads (`Session`):
 O `LivingInteraction` escuta `entity_clicked` (MIKU = chamar atenção; mundo = indicar) e `call_submitted`
 (texto → roteador). A linha de chamada final é da UI (grupo `living_call_line_ui`); sem ela aparece o placeholder
 mínimo `LivingCallLine` (CanvasLayer + LineEdit, cores da `Palette`). Não há painel nem menu de configuração.
+
+## Contrato `inspect_state()` (inspector de desenvolvimento, Loop 5)
+
+O inspector de runtime é **somente de desenvolvimento** (`tools/inspector/`, fora do export; uso e prova de
+exclusão em `docs/BUILD.md`, "Inspector de desenvolvimento"). Ele lê o estado genérico sozinho (árvore, `Skeleton3D`
+com pose de entrada e pose final após os `SkeletonModifier3D`, modificadores, `AnimationTree`, câmera); o estado
+**de jogo** que só o dono conhece entra por um protocolo duck-typed, sem dependência de código de produção para
+`tools/`:
+
+- O nó entra no grupo **`dev_inspect`** e implementa `func inspect_state() -> Dictionary`.
+- Opcional: `func inspect_section() -> String` — chave da seção no dump (padrão: o nome do nó; chaves repetidas
+  ganham `@<caminho>`). O inspector acrescenta `_path` e `_class`.
+- Regras: **somente leitura e sem efeitos colaterais** (não avança molas, não consome eventos, não cria nós), barato
+  (chamado só no instante do dump, nunca pelo jogo), valores simples (`bool/int/float/String/StringName`,
+  `Vector2/3/4`, `Quaternion`, `Color`, `Transform3D`, `Array`, `Dictionary`; `Node` vira caminho, `Resource`
+  vira classe/caminho; floats arredondados a 1e-5, arrays limitados a 64 itens). Não devolver referências internas
+  mutáveis (o inspector converte, mas o contrato é "cópia").
+- Nó do grupo sem o método, ou retorno que não é `Dictionary`, aparece em `errors` do dump (não interrompe).
+
+Seções esperadas no cenário `living` (nomes recomendados; o animator define o conteúdo dos seus módulos):
+
+| Seção | Dono / nó | Campos recomendados |
+|---|---|---|
+| `interaction` | game-engineer · `LivingInteraction` (já implementado) | `action`/`action_args` (entrada do vocabulário em execução), `step_index`, `plan`, `waiting`, `queue`, `active_request`, `last_report`, `executor_bound`, `executor_pending`, `provider_available`, `bound_to`, `call_line_open`, `config` |
+| `miku` | animator · `Miku` | `mood`/estado emocional, `composure`, `frustration`, `current_action` + `args`, `gaze_target` (posição/id), `attention` (usuário/mundo/trabalho), `micro_behaviour` atual, `breath`/`weight_shift` |
+| `hands` | animator · `HandPool` | `count`, `active`, por mão: `id`, `side`, `task`, `target` (posição/id), `position`, `velocity`, `grip`, `thread_id` |
+| `threads` | animator · `IntentThreads` | por fio: `id`, `hand_id`, `state` (aparecendo/tenso/relaxando), `tension` 0..1, `presence` 0..1 |
+| `work_world` | animator · `WorkWorld` | `world_id`, `stage`/`steps_done`, `failure`, `dismantling`, `complete` |
+
+Os módulos do animator não precisam importar nada: basta o grupo e o método. Sem o inspector carregado (jogo
+normal, export) ninguém chama `inspect_state()`.

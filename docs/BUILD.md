@@ -10,7 +10,10 @@ tools/export_windows.sh     # build/windows/KoriumUniverse.exe + build/KoriumUni
 ```
 
 Preset: `export_presets.cfg` → "Windows Desktop", x86_64, PCK embutido, BPTC/S3TC,
-metadados de versão no executável. Excluídos do pacote: `addons/gut`, `tests`, `tools`, `docs`, `.claude`.
+metadados de versão no executável. Excluídos do pacote: `addons/gut`, `tests`, `tools`, `docs`, `.claude`, `build`.
+`build/` entrou no `exclude_filter` no Loop 5 (Fase 3): no Godot 4 todo `.json` é recurso (`JSON`) e `all_resources`
+o exporta — dumps do inspector ou capturas gravados em `build/` iam parar no PCK. Conferir o conteúdo do pacote:
+`tools/pck_list.py build/windows/KoriumUniverse.exe [--grep=<trecho>] [--sizes]`.
 No Windows com o editor instalado: *Project → Export → Windows Desktop*, ou
 `Godot_v4.7.2-stable_win64.exe --headless --export-release "Windows Desktop" build/windows/KoriumUniverse.exe`.
 
@@ -27,6 +30,12 @@ Um mesmo commit gera o mesmo `.exe` e o mesmo zip, byte a byte, em qualquer chec
   três cenas pequenas no carregamento.
 - Zip: arquivos em ordem fixa, `zip -X`, mtimes = data do último commit (`git log -1 --format=%ct`).
 - Pré-requisito: árvore sem mudanças locais (o export usa os arquivos do disco, não o commit).
+- Observação (Loop 5, Fase 3): o import do Godot regrava `default_bus_layout.tres` (acrescenta
+  `uid="uid://fxi7fabt56xw"` e remove `bus/0/volume_db = 0.0`). A regravação é determinística — dois checkouts
+  limpos ficam iguais —, mas um checkout em que o arquivo foi restaurado ao versionado exporta outro
+  `uid_cache.bin` (sem esse UID) e o `.exe` muda. Correção definitiva: o dono (sound-designer) versionar o arquivo
+  na forma regravada pelo motor. A ordem de `global_script_class_cache.cfg` também depende de o `.godot/` ser
+  importado do zero ou incrementalmente: compare sempre exports com `.godot/` novo.
 
 Verificação: dois checkouts limpos (`git worktree add`) do mesmo commit, cada um com `.godot/`
 importado do zero, rodando `tools/export_windows.sh`, e um terceiro export num deles após apagar
@@ -38,7 +47,8 @@ ou outros templates mudam o binário.
 | Verificação | Comando |
 |---|---|
 | Export reproduzível (mesmo `.exe` e mesmo zip para o mesmo commit) | `tools/export_windows.sh` em dois checkouts limpos e comparar SHA-256 |
-| Pacote exato do `.exe` executado no renderizador real | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` |
+| Pacote exato do `.exe` executado no renderizador real | `tools/smoke_test.sh --pack build/windows/KoriumUniverse.exe` (o motor roda num diretório temporário vazio: com `--main-pack`, arquivos `res://` ausentes do pacote são lidos do diretório de trabalho — rodando da raiz do projeto, o que o export deixou de fora seria achado no disco) |
+| Conteúdo do PCK (nada de `tools/`, `tests/`, `docs/`, `build/`) | `tools/pck_list.py build/windows/KoriumUniverse.exe --grep=tools/` (saída 1 = nada encontrado) |
 | Jogo a partir do código | `tools/smoke_test.sh` e `tools/capture_evidence.sh` |
 | Cenário GENESIS | `tools/smoke_test.sh --scenario=genesis`, `tools/capture_evidence.sh <dir> --scenario=genesis` |
 | Style frames GENESIS (≥ 6, HUD oculto, 1920×1080) | `tools/style_frames.sh <dir> [--quality=<nível>]` (HIGH por padrão) |
@@ -221,3 +231,83 @@ versionado (configuração do jogador zerada e restaurada: `config_restored=true
 Opções: `--hud=on|off`, `--resolution=WxH`, `--until=<s>` (prévia), `--quality=`, `--crf=`,
 `--timeout=`/`LIVING_TIMEOUT` (9000 s), `LIVING_GRACE` (120 s). Saída:
 `build/review/living_<W>x<H>_hud-<on|off>[_preview].{avi,mp4,log}`.
+
+## Inspector de desenvolvimento (Loop 5, Fase 3)
+
+Ciclo **inspect → run → see → correct** sem MCP nem conexão: cada quadro capturado ganha um JSON com o estado do
+jogo naquele mesmo quadro. **Somente desenvolvimento**: nunca vai ao `.exe`.
+
+**Isolamento**
+
+- Código em `tools/inspector/` (`dev_inspector.gd` — nó: dumps por captura, periódicos e F9, poses finais dos
+  esqueletos; `inspector_collect.gd` — coleta pura; `summarize.py` — leitura), excluído do export por `tools/*`.
+  Sem `class_name` (não entra no cache global de classes do pacote), sem autoload, nada em `project.godot`.
+- Carregado **por caminho** (`load()`, nunca `preload`) por `Automation.load_inspector()` (`src/core/automation.gd`)
+  só quando há `--inspect`/`--inspect-every` na linha de comando; `Main` cria a `Automation` também nesses casos.
+  Sem o flag nada é carregado (`tests/integration/test_dev_inspector.gd`). Arquivo ausente (pacote exportado) →
+  aviso `dev inspector ... not found (exported build?) - --inspect ignored.` e o jogo segue normal.
+- O único vestígio no código de produção é o protocolo passivo `inspect_state()` (grupo `dev_inspect`; contrato em
+  `docs/ARCHITECTURE.md`), que ninguém chama no jogo.
+
+**Uso** (argumentos depois de `--`; os scripts repassam)
+
+| Comando | Saída |
+|---|---|
+| `tools/capture_evidence.sh <dir> --scenario=living --inspect` | `<dir>/l07_failure.png` + `<dir>/l07_failure.json` (mesmo quadro) para cada captura; o script exige os dois |
+| `tools/style_frames.sh <dir> --inspect` | `<frame>.json` ao lado de cada style frame |
+| `godot --path . -- --scenario=living --inspect=build/inspect --inspect-every=2` | jogo normal + dump a cada 2 s de tempo de jogo (`inspect_<n>_f<quadro>.json` + `.png` do mesmo quadro; `--inspect-png=off` sem PNG; headless nunca grava PNG) e **F9** = dump agora |
+| `tools/record_living.sh --inspect-every=1` | dumps sem PNG em `build/review/living_..._inspect/` (o vídeo tem os quadros; `motion_time` do dump = tempo do vídeo) |
+| `tools/smoke_test.sh --inspect=build/inspect` | `smoke_end.json` com o estado ao fim do smoke |
+
+Diretório: `--inspect=<dir>` (relativo à raiz do projeto, ou `user://…`); padrão `user://inspect`. Grave em
+`docs/evidence/…`, `build/…` ou `user://` — pastas fora do export (um `.json` numa pasta exportada viraria recurso
+do pacote).
+
+**Conteúdo do JSON** (`format: korium-inspect/1`, chaves ordenadas, floats arredondados a 1e-5; ~70 KB no
+GENESIS, ~170 KB com MIKU + uma mão)
+
+- `frame`, `time`, `motion_time`, `movie`, `sim_time`, `sim_status`, `sim_speed`, `scenario`, `phase`, `mode`,
+  `selected`, `hud`, `cinematic`, `call_line_open`, `quality`, `viewport`, `context` (captura, imagem, gatilho);
+- `camera`: caminho, posição, direção, fov/near/far e, com `CameraDirector`, o rig (`target`, yaw, pitch, distância);
+- `tree`: `{caminho: "Classe [script.gd] [hidden]"}` de todos os nós (limite 4000);
+- `nodes`: nós relevantes — grupos `entity_*` e `dev_inspect`, `Skeleton3D`, `AnimationTree`, `AnimationPlayer`,
+  `Camera3D`, `BoneAttachment3D` (classe, script, grupos, visível, transform global; limite 400);
+- `skeletons`: por osso (limite 256) `index`, `parent`, `enabled`, `rest`, `pose` (pose de entrada, local),
+  `pose_global`, `final`/`final_global` (pose **após** a cadeia de `SkeletonModifier3D`, gravada no sinal
+  `skeleton_updated` — fora dele o Godot devolve a pose de entrada) e `world_position`; cada transform =
+  `{pos, quat, euler_deg (YXZ), scale}`. `modifiers`: nome, classe, `active`, `influence`, propriedades próprias da
+  classe (tudo abaixo de `Node3D`: ossos, alvos, eixos, limites, `settings/<i>/…` dos IK, variáveis de script),
+  `targets` (NodePath → nó + posição no mundo) e `status` (`LookAtModifier3D`: interpolando, restante, alvo dentro
+  do limite);
+- `animation_trees`: `active`, raiz, `anim_player`, todos os `parameters/*` não-objeto e cada playback de state
+  machine (`current_node`, `travel_path`, posição/duração, fade); `animation_players`: animação atual, posição;
+- `sections`: `inspect_state()` de cada nó do grupo `dev_inspect` (no `living` hoje: `interaction` — ação do
+  vocabulário em execução, plano, fila, último pedido, configuração; MIKU/mãos/fios/mundo-obra entram quando o
+  animator implementar o contrato); `errors`: violações do contrato (não fatais).
+
+**Leitura e correção**
+
+```bash
+tools/inspector/summarize.py <dir>/l07_failure.json                               # resumo
+tools/inspector/summarize.py <dir>/l07_failure.json --bones=all --section=interaction
+tools/inspector/summarize.py --diff antes/l07_failure.json depois/l07_failure.json --only=skeletons,sections
+```
+
+O diff compara folhas (números dentro de `--tol`, padrão 1e-4, são iguais), ignora `time`/`motion_time`/`frame` e
+os rótulos da árvore (lista nós adicionados/removidos); `--all` inclui tudo.
+
+**Prova de não contaminação (Fase 3, commit `f88c372`)**
+
+- `tools/pck_list.py` no `.exe` de dois checkouts limpos (clone do commit, `.godot/` novo): 311 arquivos, nenhum em
+  `tools/`, `tests/`, `docs/`, `build/`, `addons/gut/`; `uid_cache.bin` e `global_script_class_cache.cfg` do
+  pacote sem caminho `res://tools/`; a única menção ao inspector no pacote é a string do caminho dentro de
+  `automation.gdc` (o `load()` protegido). (`src/ui/inspector.gd` é o painel de entidade do HUD, outra coisa.)
+- O primeiro export desta fase, feito com capturas de prova em `build/inspector-proof/`, empacotou os `.json` e
+  `.png.import` delas (338 arquivos): origem da inclusão de `build/*` no `exclude_filter`.
+- Pacote exportado com `--inspect --inspect-every=1`: `tools/smoke_test.sh --pack <exe> --inspect --inspect-every=1`
+  → aviso `... not found (exported build?) - --inspect ignored.`, `modules=10/10`, `ui=present`, `RESULT=PASS`.
+  Rodando o mesmo pacote a partir da raiz do projeto, o inspector **carregava** (fallback de `res://` para o disco):
+  por isso o smoke de pacote agora roda num diretório vazio.
+- Reprodutível: os dois checkouts limpos e um terceiro export num deles após apagar `.godot/exported` geraram o
+  mesmo `.exe` (`6a04e64efce857e0ebfb366c28bf6725361a533751a5820f7ac0250e25a319f2`) e o mesmo zip
+  (`4a211f7dffc2a7125ad4ef8f066d35b9279be0bd9053a982abe8b8833a6a0352`).

@@ -22,3 +22,4 @@ Thumbs.db
 
 # One-run Godot settings override written by tools/record_genesis.sh (never versioned)
 /override.cfg
+__pycache__/
