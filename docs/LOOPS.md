@@ -150,4 +150,5 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   (branch local `sandbox/loop5-tooling` a partir de `b9b8672`, não enviado) com GodotPrompter parcial (3 skills, sem
   hook) e Coding-Solo/godot-mcp fixado em `1209744` (PASS 6/6); fase 3 inspector de runtime só-dev; fase 4 pesquisa
   da pilha nativa (SkeletonModifier3D/IK/SpringBone/AnimationTree). **Rodada 2 bloqueada até o Owner liberar o gate.**
-  mkdevkit/godot-mcp: candidato de segunda linha, não instalar.
+  mkdevkit/godot-mcp: candidato de segunda linha, não instalar. Fase 3 integrada (`50357a5`, ADR-017); Fase 4 no
+  sandbox (`8dc5c1a`, `docs/research/native-character-runtime.md`).

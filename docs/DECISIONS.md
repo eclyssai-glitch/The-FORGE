@@ -128,3 +128,16 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
   `appearance` só expõe propriedades com suporte real (ossos/materiais); o resto é `REQUIRES_ASSET`.
 - Consequência: trocar/perder provider não muda a personagem; pedidos locais não gastam tokens; voz futura reusa o
   mesmo input.
+
+## ADR-017 — Inspector de runtime só de desenvolvimento
+- Contexto: o ciclo inspect → run → see → correct da personagem viva precisa ver esqueletos, modificadores,
+  AnimationTree e estado da mente por quadro. MCPs de terceiros que fazem isso injetam addons/autoloads e portas no
+  projeto (mkdevkit/godot-mcp: candidato de segunda linha, não instalado — decisão do Owner).
+- Decisão: `tools/inspector/` (excluído do export), carregado por `load()` pelo caminho só com `--inspect`/
+  `--inspect-every`/F9 em desenvolvimento; sem autoload, sem `class_name`, sem mudança em `project.godot`. Dump JSON
+  por quadro (mesmo nome-base da captura): árvore de cena, Skeleton3D (rest/pose/final via `skeleton_updated`),
+  SkeletonModifier3D (classe, influência, propriedades, alvos resolvidos), AnimationTree (parameters, playback), câmera
+  e seções de nós no grupo `dev_inspect` com `inspect_state() -> Dictionary`. `tools/inspector/summarize.py` resume e
+  compara dumps. `build/*` excluído do export; smoke de pack roda em diretório vazio.
+- Consequência: export sem contaminação (PCK listado por `tools/pck_list.py`) e reproduzível; módulos de jogo expõem
+  estado só por um método de leitura.
