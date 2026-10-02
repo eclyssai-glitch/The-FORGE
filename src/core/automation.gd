@@ -89,8 +89,26 @@ const SMOKE_LIVING_REQUESTS: Array = [
 	["say", "Miku, me dê asas", InteractionRouter.ST_REQUIRES_ASSET],
 	["say", "Miku, fique mais curiosa, mas menos impulsiva", InteractionRouter.ST_PROVIDER_UNAVAILABLE],
 ]
-## Real seconds the LIVING smoke waits for one request's plan (the body performs every action).
-const SMOKE_REQUEST_TIMEOUT := 45.0
+## LIVING smoke budget (real seconds, derived — no fixed global timeout; docs/BUILD.md):
+##   budget   = roteiro (LivingScript.DURATION / SMOKE_SPEED) + sum of the estimates of the test
+##              plans (router.estimate_plan: Miku.estimate_duration) + margin, where
+##              margin = SMOKE_FIXED_MARGIN + SMOKE_PLAN_SLACK x estimates + SMOKE_REQUEST_MARGIN per request.
+##              Using more than the budget FAILS the smoke.
+##   deadline = worst case of a correct run: the roteiro guard + every plan ending by its step timeouts
+##              (router.plan_deadline) + SMOKE_REQUEST_MARGIN per request + SMOKE_FIXED_MARGIN. Printed as
+##              `smoke_deadline_seconds=` before anything else: tools/smoke_test.sh uses it as its hang guard.
+## Each request is awaited by its own id (Session.interaction_started -> Session.interaction_reported),
+## up to its plan's deadline (started.deadline) + SMOKE_REQUEST_MARGIN.
+const SMOKE_FIXED_MARGIN := 30.0
+const SMOKE_PLAN_SLACK := 0.5
+const SMOKE_REQUEST_MARGIN := 3.0
+## Real seconds the roteiro may take at SMOKE_SPEED before the smoke gives up on it.
+const SMOKE_ROTEIRO_GUARD := 120.0
+## A request must be recognised (interaction_started) within this many real seconds of being sent.
+const SMOKE_ACK_LIMIT := 2.0
+## MIKU's first step should visibly start within this many seconds (contract; reported, WARN above).
+const SMOKE_FIRST_STEP_LATENCY := 0.3
+const CANCEL_RESULTS: Array[String] = [InteractionRouter.R_CANCELLED, InteractionRouter.R_INTERRUPTED]
 ## Real seconds a capture waits after seek/mode change (and after a focus request).
 const CAPTURE_SETTLE := 2.4
 const FOCUS_SETTLE := 3.6
@@ -471,6 +489,10 @@ func _run_smoke_living() -> void:
 	var lines: PackedStringArray = []
 	var ok := true
 	var received: Array[StringName] = []
+	var smoke_start := Time.get_ticks_msec()
+	var budget := living_budget(_world())
+	print("smoke_deadline_seconds=%d" % ceili(float(budget["deadline"])))
+	print("smoke_budget_seconds=%d" % ceili(float(budget["total"])))
 	Simulation.event_emitted.connect(func(e: SimEvent) -> void: received.append(e.id))
 	Session.set_mode(Session.Mode.FORGE)
 	Simulation.set_speed(SMOKE_SPEED)
@@ -480,7 +502,7 @@ func _run_smoke_living() -> void:
 	while Simulation.status != EventTimeline.Status.COMPLETE:
 		await get_tree().process_frame
 		frames += 1
-		if Time.get_ticks_msec() - started > 120_000:
+		if Time.get_ticks_msec() - started > int(SMOKE_ROTEIRO_GUARD * 1000.0):
 			lines.append("FAIL timeout after %d frames at t=%.1f" % [frames, Simulation.time])
 			ok = false
 			break
@@ -533,9 +555,51 @@ func _run_smoke_living() -> void:
 	lines.append("pause_holds=%s seek_refused=%s reset_ok=%s recomposed=%s" % [pause_holds, seek_refused, reset_ok, recomposed])
 	await get_tree().process_frame
 	ok = await _smoke_ui(lines) and ok
+	var used := (Time.get_ticks_msec() - smoke_start) / 1000.0
+	var within := used <= float(budget["total"])
+	ok = ok and within
+	lines.append("%sliving_budget used=%.1fs budget=%.1fs (roteiro %.1f + plans %.1f + margin %.1f) deadline=%.1fs" % [
+		"" if within else "FAIL ", used, float(budget["total"]), float(budget["roteiro"]), float(budget["plans"]),
+		float(budget["margin"]), float(budget["deadline"])])
 	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
 	_write_report(lines)
 	_quit(0 if ok else 1)
+
+
+## Derived budget of the LIVING smoke (see SMOKE_FIXED_MARGIN): {"roteiro", "plans", "margin",
+## "total", "deadline", "requests": [{"plan": Array[StringName], "estimate", "deadline"}]}. Plans are
+## previewed with the module's router on the executor bound to MIKU (her estimates); without the
+## module, the null executor's.
+static func living_budget(world: Node) -> Dictionary:
+	var li: LivingInteraction = null
+	if world != null and world.get(&"modules") is Dictionary:
+		li = (world.get(&"modules") as Dictionary).get("LivingInteraction") as LivingInteraction
+	var router: InteractionRouter = li.router if li != null and li.router != null else InteractionRouter.new()
+	if li != null:
+		li.bind_miku()
+	var dirs: Array = li.world_directory() if li != null else LivingScript.world_directory()
+	var per: Array = []
+	var plans := 0.0
+	var deadlines := 0.0
+	for req: Array in SMOKE_LIVING_REQUESTS:
+		var intent: Intent
+		if String(req[0]) == "click":
+			var id := StringName(req[1])
+			intent = Intent.make(Intent.Kind.ATTENTION if id == &"miku" else Intent.Kind.WORLD_TARGET, "", id)
+		else:
+			intent = LocalParser.parse(String(req[1]), dirs)
+		var plan := router.preview_plan(intent)
+		var est := router.estimate_plan(plan)
+		var dl := router.plan_deadline(plan)
+		plans += est
+		deadlines += dl
+		per.append({"plan": ActionVocabulary.names(plan), "estimate": est, "deadline": dl})
+	var n := SMOKE_LIVING_REQUESTS.size()
+	var roteiro := LivingScript.DURATION / SMOKE_SPEED
+	var margin := SMOKE_FIXED_MARGIN + SMOKE_PLAN_SLACK * plans + SMOKE_REQUEST_MARGIN * n
+	return {"roteiro": roteiro, "plans": plans, "margin": margin, "total": roteiro + plans + margin,
+		"deadline": SMOKE_ROTEIRO_GUARD + deadlines + SMOKE_REQUEST_MARGIN * n + SMOKE_FIXED_MARGIN,
+		"requests": per}
 
 
 ## Sends SMOKE_LIVING_REQUESTS and checks their reports and the configuration round trip.
@@ -553,33 +617,85 @@ func _smoke_living_requests(world: WorldScript, lines: PackedStringArray) -> boo
 	lines.append("interaction executor=%s provider=%s" % ["miku" if li.is_bound() else "null",
 		"available" if li.router.port.is_available() else "unavailable"])
 	var reports: Array[Dictionary] = []
+	var starts: Array[Dictionary] = []
 	var on_report := func(r: Dictionary) -> void: reports.append(r)
+	var on_start := func(r: Dictionary) -> void:
+		var d := r.duplicate()
+		d["at_msec"] = Time.get_ticks_msec()
+		starts.append(d)
 	Session.interaction_reported.connect(on_report)
+	Session.interaction_started.connect(on_start)
+	var correlated := li.router.executor.is_correlated() and li.is_bound()
+	lines.append("interaction protocol=%s" % ("correlated" if correlated else "legacy"))
 	var ok := true
 	var done := 0
+	var step_failures := 0
+	var timeouts := 0
+	var cancellations := 0
 	for req: Array in SMOKE_LIVING_REQUESTS:
-		var count := reports.size()
+		var n_starts := starts.size()
+		var sent_at := Time.get_ticks_msec()
 		if String(req[0]) == "click":
 			Session.click(StringName(req[1]))
 		else:
 			Session.open_call_line()
 			Session.submit_call(String(req[1]))
-		var until := Time.get_ticks_msec() + int(SMOKE_REQUEST_TIMEOUT * 1000.0)
-		while (reports.size() == count or li.router.busy()) and Time.get_ticks_msec() < until:
+		# Recognition: the request's interaction_started (its id identifies the final report).
+		while starts.size() == n_starts and Time.get_ticks_msec() - sent_at < int(SMOKE_ACK_LIMIT * 1000.0):
 			await get_tree().process_frame
-		if reports.size() == count:
-			lines.append("FAIL request %s %s: no report within %.0fs" % [req[0], req[1], SMOKE_REQUEST_TIMEOUT])
+		if starts.size() == n_starts:
+			lines.append("FAIL request %s \"%s\": not recognised within %.1fs (no interaction_started)" % [
+				req[0], req[1], SMOKE_ACK_LIMIT])
 			ok = false
 			continue
-		var r: Dictionary = reports[count]
-		var good := String(r["status"]) == String(req[2])
+		var st: Dictionary = starts[n_starts]
+		var ack := (int(st["at_msec"]) - sent_at) / 1000.0
+		var rep_id := int(st["id"])
+		var wait_limit := float(st.get("deadline", 0.0)) + SMOKE_REQUEST_MARGIN
+		var r: Dictionary = {}
+		while r.is_empty():
+			for x: Dictionary in reports:
+				if int(x.get("id", -1)) == rep_id:
+					r = x
+			if not r.is_empty() or Time.get_ticks_msec() - sent_at > int(wait_limit * 1000.0):
+				break
+			await get_tree().process_frame
+		if r.is_empty():
+			lines.append("FAIL request #%d %s \"%s\": no report within its deadline %.1fs (router did not end it)" % [
+				int(st["request_id"]), req[0], req[1], wait_limit])
+			ok = false
+			continue
+		var steps: Array = r.get("steps", [])
+		var fails: Array = r.get("failures", [])
+		var n_timeout := steps.filter(func(x: Dictionary) -> bool: return x["result"] == InteractionRouter.R_TIMEOUT).size()
+		var n_cancel := steps.filter(func(x: Dictionary) -> bool: return x["result"] in CANCEL_RESULTS).size()
+		step_failures += fails.size()
+		timeouts += n_timeout
+		cancellations += n_cancel
+		var first_latency := float(steps[0].get("latency", -1.0)) if not steps.is_empty() else -1.0
+		var good := String(r["status"]) == String(req[2]) and steps.size() == (r["plan"] as Array).size()
+		# Correlated body: every step must end by its own event (no timeout).
+		if correlated and n_timeout > 0:
+			good = false
 		ok = ok and good
 		if good:
 			done += 1
-		lines.append("%srequest %s \"%s\" -> %s/%s %s plan=%d%s" % ["" if good else "FAIL ", req[0], req[1],
-			r["kind"], r["route"], r["status"], (r["plan"] as Array).size(),
+		lines.append("%srequest #%d %s \"%s\" -> %s/%s %s steps=%d/%d real=%.2fs est=%.2fs ack=%.2fs first_step=%.2fs failures=%d timeouts=%d cancelled=%d%s" % [
+			"" if good else "FAIL ", int(r.get("request_id", 0)), req[0], req[1], r["kind"], r["route"], r["status"],
+			steps.size(), (r["plan"] as Array).size(), float(r.get("duration", 0.0)), float(r.get("estimate", 0.0)),
+			ack, first_latency, fails.size(), n_timeout, n_cancel,
 			(" %s %s->%s" % [r["path"], str(r["old_value"]), str(r["new_value"])]) if String(r["path"]) != "" else ""])
+		for x: Dictionary in steps:
+			lines.append("  step %d %s %s real=%.2fs est=%.2fs timeout=%.1fs%s" % [int(x["step"]), x["action"], x["result"],
+				float(x["elapsed"]), float(x["estimate"]), float(x["timeout"]),
+				(" (%s)" % x["reason"]) if String(x.get("reason", "")) != "" else ""])
+		if first_latency > SMOKE_FIRST_STEP_LATENCY:
+			lines.append("  WARN first step started %.2fs after dispatch (> %.1fs)" % [first_latency, SMOKE_FIRST_STEP_LATENCY])
 	Session.interaction_reported.disconnect(on_report)
+	Session.interaction_started.disconnect(on_start)
+	lines.append("%sstep_failures=%d timeouts=%d cancellations=%d ignored_events=%d" % [
+		"WARN " if (timeouts > 0 and not correlated) else "", step_failures, timeouts, cancellations,
+		li.router.ignored_events])
 	lines.append("requests=%d/%d" % [done, SMOKE_LIVING_REQUESTS.size()])
 	var height := float(config.get_value("appearance.height"))
 	var mutated := is_equal_approx(height, 1.04) and config.has_user_file()

@@ -88,6 +88,29 @@ const ARGS := {
 }
 
 
+## Correlation keys the InteractionRouter adds to the args of every dispatched action
+## (docs/contracts/loop-05-round2.md): `request_id` (int > 0) and `step` (index in the plan). They
+## are not vocabulary arguments — validate() rejects them, so a provider cannot forge them.
+const CORRELATION_ARGS: Array[String] = ["request_id", "step"]
+
+## Nominal real-time duration (seconds) of each action on MIKU's body at tempo 1 — the end beat of
+## the animator's ActionScript plus a typical wait. Used ONLY when the executor gives no
+## estimate (legacy body without Miku.estimate_duration); the body's own estimate always wins.
+const NOMINAL_SECONDS := {
+	LOOK_AT_USER: 2.5, LOOK_AT_WORLD: 2.7, ACKNOWLEDGE: 1.5, THINK: 3.1, WORK: 1.0, INSPECT: 3.0,
+	SUMMON_HAND: 1.8, SUMMON_HANDS: 4.4, GRAB_FILE: 2.8, EDIT_FILE: 2.0, POINT: 2.6, DISCARD: 1.6,
+	FRUSTRATED: 3.1, ANGRY: 2.6, RECOVER: 5.0, SATISFIED: 2.8,
+}
+
+
+## Nominal duration of `action` with `args` (see NOMINAL_SECONDS); THINK follows its `seconds`.
+static func nominal_duration(action: Variant, args: Dictionary = {}) -> float:
+	var a := StringName(str(action))
+	if a == THINK and args.has("seconds"):
+		return 3.1 * clampf(float(args["seconds"]) / 3.0, 0.35, 3.0)
+	return float(NOMINAL_SECONDS.get(a, 3.0))
+
+
 static func is_valid(action: Variant) -> bool:
 	return (action is StringName or action is String) and ALL.has(StringName(action))
 

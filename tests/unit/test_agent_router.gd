@@ -25,6 +25,7 @@ var config: MikuConfig
 var executor: ActionExecutor
 var router: InteractionRouter
 var reports: Array[Dictionary]
+var started: Array[Dictionary]
 
 
 func before_each() -> void:
@@ -35,7 +36,9 @@ func before_each() -> void:
 	router = InteractionRouter.new(config, executor)
 	router.worlds = LivingScript.world_directory()
 	reports = []
+	started = []
 	router.request_finished.connect(func(r: Dictionary) -> void: reports.append(r))
+	router.request_started.connect(func(r: Dictionary) -> void: started.append(r))
 
 
 func after_each() -> void:
@@ -49,6 +52,19 @@ func _clean() -> void:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
 	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(TMP_DIR)):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(TMP_DIR))
+
+
+## Args of a dispatched step without the correlation keys (request_id, step).
+func _vocab_args(args: Dictionary) -> Dictionary:
+	var d := args.duplicate()
+	for k in ActionVocabulary.CORRELATION_ARGS:
+		d.erase(k)
+	return d
+
+
+## request_id of the n-th started request (from the router's request_started).
+func r_id(n: int) -> int:
+	return int(started[n]["request_id"])
 
 
 func test_defaults_are_null_executor_and_unbound_port() -> void:
@@ -134,7 +150,9 @@ func test_local_config_route_mutates_after_edit_file() -> void:
 		executor.finish()
 	assert_eq(executor.performed(), expected as Array[StringName])
 	var edit: Array = executor.calls.filter(func(c: Array) -> bool: return c[0] == &"perform" and c[1] == V.EDIT_FILE)
-	assert_eq(edit[0][2], {"file": ConfigSchema.FILE, "path": "appearance.height", "value": 1.03, "old_value": 1.0})
+	assert_eq(_vocab_args(edit[0][2]), {"file": ConfigSchema.FILE, "path": "appearance.height", "value": 1.03, "old_value": 1.0})
+	assert_eq(edit[0][2]["request_id"], r_id(0), "correlated")
+	assert_eq(edit[0][2]["step"], 5)
 	var r := reports[0]
 	assert_eq(r["kind"], "CONFIG_PATCH")
 	assert_eq(r["route"], "LOCAL")
@@ -187,7 +205,7 @@ func test_semantic_without_provider_declines_gracefully() -> void:
 	assert_eq(r["reason"], ProviderPort.UNAVAILABLE)
 	assert_eq(r["plan"], [V.LOOK_AT_USER, V.THINK, V.ACKNOWLEDGE, V.WORK])
 	var ack: Array = executor.calls.filter(func(c: Array) -> bool: return c[0] == &"perform" and c[1] == V.ACKNOWLEDGE)
-	assert_eq(ack[0][2], {"tone": "decline", "reason": ProviderPort.UNAVAILABLE})
+	assert_eq(_vocab_args(ack[0][2]), {"tone": "decline", "reason": ProviderPort.UNAVAILABLE})
 	assert_eq(config.values(), config.defaults(), "nothing applied")
 
 
@@ -256,10 +274,14 @@ func test_queue_timeout_and_cancel() -> void:
 	router.submit_text("Miku, aumente sua altura")
 	assert_true(router.busy())
 	assert_eq(reports.size(), 0)
-	# The body never answers: each step is skipped after STEP_TIMEOUT.
+	# The body never answers: each step times out after estimate x 2 + 3 s (null estimate 0 -> 3 s).
+	assert_eq(InteractionRouter.step_timeout(0.0), 3.0)
 	for i in 3:
-		router.tick(InteractionRouter.STEP_TIMEOUT + 0.1)
+		router.tick(InteractionRouter.step_timeout(0.0) + 0.1)
 	assert_eq(reports.size(), 1, "attention plan ended by timeouts")
+	assert_eq(reports[0]["status"], InteractionRouter.ST_ATTENTION, "non-critical failures: the plan goes on")
+	assert_eq((reports[0]["failures"] as Array).size(), 3)
+	assert_true(String(reports[0]["failures"][0]["reason"]).begins_with("timeout"))
 	assert_eq(router.current_step()["action"], V.LOOK_AT_USER, "next request started")
 	router.cancel()
 	assert_false(router.busy())
@@ -267,7 +289,7 @@ func test_queue_timeout_and_cancel() -> void:
 	assert_eq(config.get_value("appearance.height"), 1.0, "cancelled before the edit: nothing applied")
 	# Queue limit.
 	for i in InteractionRouter.MAX_QUEUE + 3:
-		router.submit_text("Miku!")
+		router.submit_text("Miku, aumente sua altura")
 	var cancelled := reports.filter(func(r: Dictionary) -> bool: return r["status"] == InteractionRouter.ST_CANCELLED)
 	assert_eq(cancelled.size(), 1 + 2, "oldest waiting requests dropped beyond MAX_QUEUE")
 	router.cancel()
@@ -341,3 +363,382 @@ class _FakeMiku:
 		var a := current
 		current = &""
 		action_finished.emit(a)
+
+
+## Correlated stand-in for the animator's Miku (docs/contracts/loop-05-round2.md): action_event,
+## estimate_duration, cancel; `own(action)` simulates a perform of MIKU herself (request_id 0).
+class _FakeMikuCorrelated:
+	extends Node
+	signal action_event(request_id: int, action: StringName, phase: StringName, info: Dictionary)
+	signal action_finished(action: StringName)
+	var calls_log: Array = []
+	var running: Array = []  # [request_id, action, step]
+	var refuse := false
+
+	func perform(action: StringName, args: Dictionary = {}) -> bool:
+		calls_log.append([&"perform", action, args])
+		if refuse:
+			return false
+		var rid := int(args.get("request_id", 0))
+		var step := int(args.get("step", -1))
+		running.append([rid, action, step])
+		action_event.emit(rid, action, &"accepted", {"step": step})
+		action_event.emit(rid, action, &"started", {"step": step})
+		return true
+
+	func estimate_duration(action: StringName, _args: Dictionary = {}) -> float:
+		return 2.0 if action == &"SUMMON_HANDS" else 1.0
+
+	func cancel(request_id: int) -> void:
+		calls_log.append([&"cancel", request_id])
+		for r: Array in running.duplicate():
+			if r[0] == request_id:
+				running.erase(r)
+				action_event.emit(r[0], r[1], &"cancelled", {"step": r[2], "reason": "cancel"})
+
+	func notice_user() -> void:
+		calls_log.append([&"notice_user"])
+
+	func target_world(id: StringName) -> void:
+		calls_log.append([&"target_world", id])
+
+	## Ends the oldest running action of the router (request_id > 0).
+	func finish_current(phase: StringName = &"finished", info: Dictionary = {}) -> void:
+		for r: Array in running:
+			if r[0] > 0:
+				running.erase(r)
+				var d := info.duplicate()
+				d["step"] = r[2]
+				action_event.emit(r[0], r[1], phase, d)
+				action_finished.emit(r[1])
+				return
+
+	## A perform of MIKU herself (roteiro / agenda): request_id 0, start to finish.
+	func own(action: StringName) -> void:
+		action_event.emit(0, action, &"accepted", {"step": -1})
+		action_event.emit(0, action, &"started", {"step": -1})
+		action_event.emit(0, action, &"finished", {"step": -1})
+		action_finished.emit(action)
+
+
+func test_request_ids_are_unique_and_args_correlated() -> void:
+	router.submit_text("Miku!")
+	router.submit_text("Miku!")
+	var other := InteractionRouter.new(config, ActionExecutor.new())
+	var other_started: Array = []
+	other.request_started.connect(func(r: Dictionary) -> void: other_started.append(r))
+	other.submit_text("Miku!")
+	assert_gt(r_id(0), 0)
+	assert_gt(r_id(1), r_id(0))
+	assert_gt(int(other_started[0]["request_id"]), r_id(1), "unique across routers (recomposition)")
+	assert_eq(reports[0]["request_id"], r_id(0))
+	var performs: Array = executor.calls.filter(func(c: Array) -> bool: return c[0] == &"perform")
+	for i in 3:
+		assert_eq(performs[i][2]["request_id"], r_id(0))
+		assert_eq(performs[i][2]["step"], i)
+	assert_eq(performs[3][2]["request_id"], r_id(1))
+	assert_eq(performs[3][2]["step"], 0)
+	# A provider cannot forge the correlation keys.
+	assert_false(ActionVocabulary.validate(V.THINK, {"request_id": 7}).is_empty())
+
+
+func test_events_of_other_requests_and_steps_are_ignored() -> void:
+	executor.auto_finish = false
+	router.submit_text("Miku!")
+	var rid := r_id(0)
+	assert_eq(router.current_step()["action"], V.LOOK_AT_USER)
+	executor.emit_event(rid + 1000, V.LOOK_AT_USER, &"finished", {"step": 0})
+	executor.emit_event(rid, V.LOOK_AT_USER, &"finished", {"step": 1})
+	executor.emit_event(rid, V.ACKNOWLEDGE, &"finished", {"step": 0})
+	executor.emit_event(0, V.LOOK_AT_USER, &"finished", {"step": 0})
+	executor.emit_event(0, V.LOOK_AT_USER, &"finished", {})
+	assert_eq(router.current_step()["action"], V.LOOK_AT_USER, "still waiting for its own step")
+	assert_eq(router.snapshot()["step_index"], 0)
+	assert_gte(router.ignored_events, 5)
+	executor.finish()
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE, "its own event advances")
+	# A late event of a finished step changes nothing.
+	executor.emit_event(rid, V.LOOK_AT_USER, &"finished", {"step": 0})
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE)
+	while router.busy():
+		executor.finish()
+	assert_eq(reports[0]["status"], InteractionRouter.ST_ATTENTION)
+	assert_eq((reports[0]["steps"] as Array).size(), 3)
+	assert_eq((reports[0]["failures"] as Array).size(), 0)
+
+
+func test_miku_own_performs_are_never_consumed() -> void:
+	var body := _FakeMikuCorrelated.new()
+	add_child_autofree(body)
+	var e := MikuNodeExecutor.new(body)
+	assert_true(e.is_correlated())
+	router.set_executor(e)
+	router.submit_text("Miku, trabalhe no planeta da direita")
+	body.finish_current()  # LOOK_AT_WORLD
+	body.finish_current()  # POINT
+	assert_eq(router.current_step()["action"], V.SUMMON_HANDS)
+	# The roteiro (living.hands) makes MIKU summon hands herself: request_id 0.
+	body.own(V.SUMMON_HANDS)
+	assert_eq(router.current_step()["action"], V.SUMMON_HANDS, "her own SUMMON_HANDS is not the router's")
+	body.finish_current()
+	assert_eq(router.current_step()["action"], V.WORK)
+	body.own(V.WORK)
+	assert_true(router.busy())
+	body.finish_current()
+	assert_false(router.busy())
+	assert_eq(reports[0]["status"], InteractionRouter.ST_WORLD)
+	assert_eq((reports[0]["failures"] as Array).size(), 0)
+
+
+func test_node_executor_correlated_estimate_cancel_and_refusal() -> void:
+	var body := _FakeMikuCorrelated.new()
+	add_child_autofree(body)
+	var e := MikuNodeExecutor.new(body)
+	router.set_executor(e)
+	assert_eq(e.estimate_duration(V.SUMMON_HANDS, {}), 2.0, "the body's estimate")
+	router.indicate_world(&"world_vesper")
+	var s := router.snapshot()
+	assert_eq(s["step_estimate"], 1.0)
+	assert_eq(s["step_timeout"], 1.0 * InteractionRouter.TIMEOUT_FACTOR + InteractionRouter.TIMEOUT_MARGIN)
+	assert_eq(s["step_phase"], "started")
+	var rid := r_id(0)
+	router.cancel()
+	assert_has(body.calls_log, [&"cancel", rid], "reset cancels on the body")
+	assert_eq(body.running.size(), 0)
+	assert_eq(reports[0]["status"], InteractionRouter.ST_CANCELLED)
+	assert_false(router.busy())
+	# A refused perform fails at once; the plan goes on.
+	body.refuse = true
+	router.submit_text("Miku!")
+	assert_false(router.busy(), "every step refused -> failed -> plan over, nothing blocks")
+	assert_eq((reports[1]["failures"] as Array).size(), 3)
+	assert_true(String(reports[1]["failures"][0]["reason"]).contains("refused"))
+
+
+func test_step_timeout_is_derived_from_the_estimate() -> void:
+	executor.auto_finish = false
+	executor.durations = {V.LOOK_AT_USER: 1.0, V.ACKNOWLEDGE: 0.5, V.WORK: 2.0}
+	router.submit_text("Miku!")
+	var rid := r_id(0)
+	assert_eq(router.snapshot()["step_timeout"], 5.0, "1.0 x 2 + 3")
+	router.tick(4.9)
+	assert_eq(router.current_step()["action"], V.LOOK_AT_USER, "not yet")
+	router.tick(0.2)
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE, "timed out -> next step")
+	assert_has(executor.calls, [&"cancel", rid], "the timed-out action is cancelled on the body")
+	assert_eq(router.snapshot()["step_timeout"], 4.0, "0.5 x 2 + 3")
+	executor.finish()
+	executor.finish()
+	var r := reports[0]
+	assert_eq(r["status"], InteractionRouter.ST_ATTENTION)
+	assert_eq(r["steps"][0]["result"], InteractionRouter.R_TIMEOUT)
+	assert_eq(r["steps"][1]["result"], InteractionRouter.R_FINISHED)
+	assert_eq(r["failures"].size(), 1)
+	assert_eq(r["failures"][0]["action"], String(V.LOOK_AT_USER))
+	assert_true(String(r["failures"][0]["reason"]).contains("estimate 1.0s"))
+
+
+func test_edit_timeout_or_failure_applies_nothing() -> void:
+	executor.auto_finish = false
+	router.submit_text("Miku, aumente sua altura")
+	for i in 5:
+		executor.finish()
+	assert_eq(router.current_step()["action"], V.EDIT_FILE)
+	router.tick(InteractionRouter.step_timeout(0.0) + 0.1)
+	assert_eq(config.get_value("appearance.height"), 1.0, "the edit never finished: nothing applied")
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE, "not-applied tail")
+	while router.busy():
+		executor.finish()
+	var r := reports[0]
+	assert_eq(r["status"], InteractionRouter.ST_COMMIT_FAILED)
+	assert_true(String(r["reason"]).contains("EDIT_FILE timeout"))
+	assert_eq(r["plan"].slice(-3), [V.ACKNOWLEDGE, V.DISCARD, V.WORK])
+	assert_false(executor.performed().has(V.SATISFIED))
+	assert_false(config.has_user_file())
+	# GRAB_FILE failing: same (the file never reached her hand).
+	router.submit_text("Miku, aumente sua altura")
+	for i in 3:
+		executor.finish()
+	assert_eq(router.current_step()["action"], V.GRAB_FILE)
+	executor.fail("no hand")
+	while router.busy():
+		executor.finish()
+	assert_eq(reports[1]["status"], InteractionRouter.ST_COMMIT_FAILED)
+	assert_true(String(reports[1]["reason"]).contains("no hand"))
+	assert_false(executor.performed().slice(-4).has(V.EDIT_FILE))
+	assert_eq(config.get_value("appearance.height"), 1.0)
+
+
+func test_non_critical_failure_goes_on() -> void:
+	executor.auto_finish = false
+	router.indicate_world(&"world_calyx")
+	executor.finish()
+	executor.fail("arm busy")  # POINT
+	assert_eq(router.current_step()["action"], V.SUMMON_HANDS)
+	executor.finish()
+	executor.finish()
+	assert_eq(reports[0]["status"], InteractionRouter.ST_WORLD)
+	assert_eq(reports[0]["failures"][0]["reason"], "failed: arm busy")
+	# A cancellation the router did not ask for counts as a failure too.
+	router.submit_text("Miku!")
+	executor.cancel(r_id(1))
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE)
+	assert_eq(reports.size(), 1)
+	while router.busy():
+		executor.finish()
+	assert_eq(reports[1]["steps"][0]["result"], InteractionRouter.R_CANCELLED)
+
+
+func test_simulated_duration_and_report_timings() -> void:
+	executor.simulated_duration = 1.0
+	router.submit_text("Miku!")
+	assert_eq(started[0]["estimate"], 3.0)
+	assert_eq(started[0]["deadline"], 3 * 5.0)
+	assert_eq(router.current_step()["action"], V.LOOK_AT_USER)
+	router.tick(0.5)
+	assert_eq(router.current_step()["action"], V.LOOK_AT_USER)
+	router.tick(0.6)
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE)
+	for i in 10:
+		router.tick(0.5)
+	assert_false(router.busy())
+	var r := reports[0]
+	assert_almost_eq(float(r["duration"]), 3.0, 0.6)
+	assert_almost_eq(float(r["estimate"]), 3.0, 1e-6)
+	assert_eq(r["steps"][0]["latency"], 0.0, "started at once")
+	var phases: Array = executor.events.filter(func(x: Array) -> bool: return x[1] == V.LOOK_AT_USER).map(
+		func(x: Array) -> StringName: return x[2])
+	assert_eq(phases, [&"accepted", &"started", &"finished"])
+
+
+func test_interaction_started_comes_before_any_finished() -> void:
+	var log: Array = []
+	router.request_started.connect(func(r: Dictionary) -> void: log.append(["started", r]))
+	executor.action_event.connect(func(_rid: int, a: StringName, ph: StringName, _i: Dictionary) -> void:
+		log.append([String(ph), a]))
+	router.request_finished.connect(func(r: Dictionary) -> void: log.append(["reported", r]))
+	router.submit_text("Miku, aumente sua altura")
+	assert_eq(log[0][0], "started", "first: the request is recognised")
+	var st: Dictionary = log[0][1]
+	assert_eq(st["status"], InteractionRouter.ST_STARTED)
+	assert_eq(st["kind"], "CONFIG_PATCH")
+	assert_eq(st["route"], "LOCAL")
+	assert_eq(st["path"], "appearance.height")
+	assert_eq(st["expected_status"], InteractionRouter.ST_APPLIED)
+	assert_eq(st["plan"].size(), 10)
+	assert_gt(int(st["request_id"]), 0)
+	assert_eq(st["id"], reports[0]["id"])
+	var first_finished := log.map(func(x: Array) -> String: return x[0]).find("finished")
+	assert_gt(first_finished, 0)
+	assert_eq(log.back()[0], "reported")
+
+
+func test_fifo_queue_one_active_plan() -> void:
+	executor.auto_finish = false
+	router.indicate_world(&"world_vesper")
+	router.submit_text("Miku, me dê asas")
+	router.submit_text("appearance.glow 0.9")
+	assert_eq(started.size(), 1, "one plan runs")
+	assert_eq(router.snapshot()["queue"], 2)
+	while router.busy():
+		executor.finish()
+	assert_eq(started.map(func(x: Dictionary) -> String: return x["kind"]), ["WORLD_TARGET", "CONFIG_PATCH", "CONFIG_PATCH"])
+	assert_eq(reports.map(func(x: Dictionary) -> String: return x["status"]),
+		[InteractionRouter.ST_WORLD, InteractionRouter.ST_REQUIRES_ASSET, InteractionRouter.ST_APPLIED])
+
+
+func _set_tolerance(v: float) -> void:
+	assert_true(config.apply(ConfigValidator.validate(StructuredPatch.absolute("behaviour.interruption_tolerance", v),
+		config.values())))
+
+
+func test_attention_interrupts_by_tolerance() -> void:
+	executor.auto_finish = false
+	router.indicate_world(&"world_vesper")
+	executor.finish()  # LOOK_AT_WORLD; POINT in flight: 3 of 4 steps remain (0.75 > 1 - 0.5)
+	var world_rid := r_id(0)
+	assert_true(router.should_interrupt())
+	router.call_attention()
+	assert_has(executor.calls, [&"cancel", world_rid], "the running plan is cancelled on the body")
+	assert_eq(started[1]["kind"], "ATTENTION", "attention runs now")
+	assert_eq(router.snapshot()["queue"], 1, "the interrupted plan waits right after it")
+	while router.busy():
+		executor.finish()
+	assert_eq(reports[0]["status"], InteractionRouter.ST_ATTENTION)
+	var w := reports[1]
+	assert_eq(w["status"], InteractionRouter.ST_WORLD, "restarted and completed")
+	assert_eq(w["interrupted"], 1)
+	assert_eq(w["request_ids"].size(), 2)
+	assert_ne(int(w["request_id"]), world_rid, "a new request_id for the restart")
+	assert_true(started[2]["restart"])
+	assert_eq(started[2]["plan"][0], V.LOOK_AT_WORLD, "from its first step")
+	# Tolerance 0: never interrupted (FIFO).
+	_set_tolerance(0.0)
+	router.indicate_world(&"world_vesper")
+	assert_false(router.should_interrupt())
+	router.call_attention()
+	assert_eq(router.current_step()["action"], V.LOOK_AT_WORLD, "she finishes first")
+	while router.busy():
+		executor.finish()
+	assert_eq(reports[2]["kind"], "WORLD_TARGET")
+	assert_eq(reports[2]["interrupted"], 0)
+	assert_eq(reports[3]["kind"], "ATTENTION")
+
+
+func test_attention_never_interrupts_the_file_section_or_attention() -> void:
+	_set_tolerance(1.0)
+	executor.auto_finish = false
+	router.submit_text("Miku, aumente sua altura")
+	executor.finish()
+	assert_true(router.should_interrupt(), "before the file: interruptible")
+	executor.finish()
+	executor.finish()
+	assert_eq(router.current_step()["action"], V.GRAB_FILE)
+	assert_false(router.should_interrupt(), "file in her hands")
+	router.call_attention()
+	assert_eq(router.current_step()["action"], V.GRAB_FILE)
+	executor.finish()
+	executor.finish()
+	executor.finish()  # EDIT_FILE -> commit
+	assert_almost_eq(float(config.get_value("appearance.height")), 1.03, 1e-6)
+	assert_eq(router.current_step()["action"], V.INSPECT)
+	# After the commit the queued attention waits FIFO; a new one interrupts and the applied
+	# request simply ends (nothing to restart).
+	assert_true(router.should_interrupt())
+	router.call_attention()
+	assert_eq(reports[0]["status"], InteractionRouter.ST_APPLIED)
+	assert_eq(reports[0]["interrupted"], 1)
+	assert_true(str(reports[0]["notes"]).contains("interrupted"))
+	assert_false(router.should_interrupt(), "attention is not interrupted by attention")
+	while router.busy():
+		executor.finish()
+	assert_eq(reports.size(), 3)
+
+
+func test_cancel_on_reset_ignores_late_events_and_executor_swap() -> void:
+	executor.auto_finish = false
+	router.submit_text("Miku, aumente sua altura")
+	router.submit_text("Miku, me dê asas")
+	var rid := r_id(0)
+	executor.finish()
+	router.cancel()
+	assert_has(executor.calls, [&"cancel", rid])
+	assert_eq(reports.size(), 2)
+	for r in reports:
+		assert_eq(r["status"], InteractionRouter.ST_CANCELLED)
+	assert_eq(reports[0]["steps"].back()["result"], InteractionRouter.R_CANCELLED)
+	var ignored := router.ignored_events
+	executor.emit_event(rid, V.ACKNOWLEDGE, &"finished", {"step": 1})
+	assert_eq(router.ignored_events, ignored + 1, "late event after reset: ignored")
+	assert_false(router.busy())
+	assert_eq(config.get_value("appearance.height"), 1.0)
+	# Executor swapped mid-step: the step fails ("executor replaced"), the plan goes on.
+	router.submit_text("Miku!")
+	var fresh := ActionExecutor.new()
+	fresh.auto_finish = false
+	router.set_executor(fresh)
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE)
+	assert_eq(fresh.performed(), [V.ACKNOWLEDGE] as Array[StringName])
+	while router.busy():
+		fresh.finish()
+	assert_eq(reports.back()["failures"][0]["reason"], "failed: executor replaced")

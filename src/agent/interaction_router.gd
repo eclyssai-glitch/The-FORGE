@@ -8,8 +8,31 @@ extends RefCounted
 ##
 ## Entry points: submit_text(text) (call line), call_attention() (click on MIKU),
 ## indicate_world(id) (click on a world). Perception is immediate (executor.notice_user() /
-## target_world(id) as the request arrives); plans run in arrival order (a queue of at most
-## MAX_QUEUE; older waiting requests are dropped beyond it).
+## target_world(id) as the request arrives).
+##
+## CORRELATED ACTIONS (docs/contracts/loop-05-round2.md). Every request gets a `request_id` (int > 0,
+## unique in the process: a static counter shared by every router, so a recomposed scenario never
+## reuses one). Each dispatched step carries `args.request_id` and `args.step` (index in the plan);
+## the router listens to executor.action_event(request_id, action, phase, info) and accepts ONLY
+## events of its active request and current step (`info.step`; without it, the action name must
+## match). MIKU's own performs (roteiro, agenda) use request_id 0 and are never consumed.
+## Step timeout = executor.estimate_duration(action, args) x TIMEOUT_FACTOR + TIMEOUT_MARGIN, on the
+## router's clock (tick(delta); LivingInteraction feeds it MotionClock time, the body's clock). A
+## timed-out step is cancelled on the body (executor.cancel(request_id)) and recorded as a failure.
+## Failures (&"failed", a &"cancelled" the router did not ask for, timeout): the plan goes on, except
+## GRAB_FILE / EDIT_FILE of a configuration plan before its commit — then the change is NOT applied
+## and the rest of the plan becomes the "not applied" tail (status commit_failed, reason).
+## Nothing waits on an external event without a timeout; perform() never blocks.
+##
+## QUEUE: one plan runs, the others wait in FIFO order (at most MAX_QUEUE waiting; the oldest
+## waiting request is dropped beyond it). A new ATTENTION request may INTERRUPT the running plan
+## (not another attention): never inside the file section of a configuration plan (GRAB_FILE ..
+## EDIT_FILE); otherwise when the fraction of the plan still to run is greater than
+## 1 - behaviour.interruption_tolerance (0 = never interrupted, 1 = always). The interrupted plan is
+## cancelled on the body (executor.cancel) and re-queued right after the attention plan with a new
+## request_id (it restarts from its first step; nothing was committed) — or, when its change was
+## already committed, it simply ends (its report says `interrupted`). cancel() (reset /
+## recomposition) cancels the running plan on the body and drops every waiting request.
 ##
 ## Configuration requests are validated up front (to choose the plan) and COMMITTED when the
 ## EDIT_FILE step finishes — validated again against the configuration of that moment, then
@@ -28,22 +51,32 @@ extends RefCounted
 ##   requires asset   LOOK_AT_USER, THINK, INSPECT(self), ACKNOWLEDGE(decline), WORK(resume)
 ##   rejected/unknown LOOK_AT_USER, THINK, ACKNOWLEDGE(puzzled), WORK(resume)
 ##   semantic, no provider  LOOK_AT_USER, THINK, ACKNOWLEDGE(decline, provider_unavailable), WORK(resume)
-## Steps that do not finish within STEP_TIMEOUT seconds (tick) are skipped with a warning.
 
 ## A request was understood (before its plan runs).
 signal intent_parsed(intent: Intent)
+## A request's plan starts — emitted BEFORE its first step is dispatched (so before any action can
+## finish). started = {"id", "request_id", "kind", "route", "status": &"started", "target", "path",
+## "plan": Array[StringName], "text", "source", "expected_status", "estimate" (s), "deadline" (worst
+## case: sum of the step timeouts, s), "restart": bool}.
+signal request_started(started: Dictionary)
 ## A plan starts (report: see `report` fields below).
 signal plan_started(plan: Array, report: Dictionary)
-## One step is handed to the executor.
+## One step is handed to the executor (args include request_id and step).
 signal action_dispatched(index: int, action: StringName, args: Dictionary)
 ## A configuration value really changed (game state).
 signal mutation_applied(path: String, old_value: Variant, new_value: Variant)
-## A request's plan ended. report = {"id", "kind", "route", "text", "rule", "target", "status",
-## "plan": Array[StringName], "path", "old_value", "new_value", "notes", "reason"}.
+## A request's plan ended. report = {"id", "request_id", "kind", "route", "text", "rule", "target",
+## "status", "plan": Array[StringName], "path", "old_value", "new_value", "notes", "reason", "source",
+## "steps": [{"step", "action", "estimate", "timeout", "elapsed", "latency", "result", "reason"}],
+## "failures": [{"step", "action", "reason"}], "estimate", "duration", "interrupted", "request_ids"}.
 signal request_finished(report: Dictionary)
 
-const STEP_TIMEOUT := 15.0
+## Step timeout = estimate x TIMEOUT_FACTOR + TIMEOUT_MARGIN (seconds).
+const TIMEOUT_FACTOR := 2.0
+const TIMEOUT_MARGIN := 3.0
 const MAX_QUEUE := 4
+## Default of behaviour.interruption_tolerance when the configuration has none.
+const DEFAULT_INTERRUPTION_TOLERANCE := 0.5
 
 ## Report statuses.
 const ST_ATTENTION := "attention"
@@ -57,6 +90,21 @@ const ST_PROVIDER_INVALID := "provider_invalid"
 const ST_UNKNOWN := "unknown"
 const ST_COMMIT_FAILED := "commit_failed"
 const ST_CANCELLED := "cancelled"
+## Status of request_started's payload.
+const ST_STARTED := &"started"
+
+## Step results (report["steps"][i]["result"]).
+const R_FINISHED := "finished"
+const R_FAILED := "failed"
+const R_TIMEOUT := "timeout"
+const R_CANCELLED := "cancelled"
+const R_INTERRUPTED := "interrupted"
+
+## Actions whose failure before the commit means the change cannot be applied.
+const CRITICAL: Array[StringName] = [ActionVocabulary.GRAB_FILE, ActionVocabulary.EDIT_FILE]
+
+## Last request_id handed out in this process (shared by every router: unique per session).
+static var _request_seq := 0
 
 var config: MikuConfig
 var executor: ActionExecutor
@@ -66,6 +114,8 @@ var port: ProviderPort
 var worlds: Array = []
 ## Reports of every finished request (newest last).
 var history: Array[Dictionary] = []
+## Events received that were not for the step in flight (other request/step, request_id 0, late).
+var ignored_events := 0
 
 var _queue: Array[Dictionary] = []
 var _active: Dictionary = {}
@@ -73,7 +123,16 @@ var _plan: Array = []
 var _index := -1
 var _waiting := false
 var _pumping := false
+## Router clock (sum of tick deltas) and the step in flight: dispatch time, estimate, timeout,
+## time of its accepted/started events, last phase.
+var _clock := 0.0
 var _elapsed := 0.0
+var _step_at := 0.0
+var _step_estimate := 0.0
+var _step_timeout := 0.0
+var _step_started_at := -1.0
+var _step_phase: StringName = &""
+var _plan_at := 0.0
 var _next_id := 1
 
 
@@ -83,15 +142,24 @@ func _init(p_config: MikuConfig = null, p_executor: ActionExecutor = null, p_por
 	set_executor(p_executor if p_executor != null else ActionExecutor.new())
 
 
-## Swaps the executor (the step in flight, if any, is considered finished).
+## A new request id (> 0, never reused in this process).
+static func next_request_id() -> int:
+	_request_seq += 1
+	return _request_seq
+
+
+## Swaps the executor. A step in flight is cancelled on the old executor and recorded as failed
+## ("executor replaced"); the plan goes on with the new one.
 func set_executor(e: ActionExecutor) -> void:
-	if executor != null and executor.action_finished.is_connected(_on_action_finished):
-		executor.action_finished.disconnect(_on_action_finished)
+	var old := executor
+	if old != null and old.action_event.is_connected(_on_action_event):
+		old.action_event.disconnect(_on_action_event)
 	executor = e if e != null else ActionExecutor.new()
-	executor.action_finished.connect(_on_action_finished)
-	if _waiting:
+	executor.action_event.connect(_on_action_event)
+	if _waiting and old != null:
 		_waiting = false
-		_pump()
+		old.cancel(int(_active["request_id"]))
+		_step_failed(R_FAILED, "executor replaced")
 
 
 # ------------------------------------------------------------------ entry points
@@ -123,7 +191,8 @@ func indicate_world(id: StringName, source: StringName = &"click") -> Intent:
 	return intent
 
 
-## Routes an intent: perception now, plan queued. Returns the request's initial report.
+## Routes an intent: perception now, plan queued (or run now; an ATTENTION may interrupt the
+## running plan, see QUEUE). Returns the request's report (filled in as the plan runs).
 func handle(intent: Intent) -> Dictionary:
 	intent_parsed.emit(intent)
 	var req := _build_request(intent)
@@ -133,7 +202,13 @@ func handle(intent: Intent) -> Dictionary:
 		Intent.Kind.WORLD_TARGET:
 			if _has_world(intent.target):
 				executor.target_world(intent.target)
-	_queue.append(req)
+	if intent.kind == Intent.Kind.ATTENTION and should_interrupt():
+		var interrupted := _interrupt_active()
+		_queue.push_front(req)
+		if not interrupted.is_empty():
+			_queue.insert(1, interrupted)
+	else:
+		_queue.append(req)
 	while _queue.size() > MAX_QUEUE:
 		var dropped: Dictionary = _queue.pop_front()
 		var rep: Dictionary = dropped["report"]
@@ -144,16 +219,24 @@ func handle(intent: Intent) -> Dictionary:
 	return req["report"]
 
 
-## Advances the step timeout (call every frame with the frame's delta).
+## Advances the router's clock (call every frame with the frame's delta, on the body's clock):
+## the executor's simulated time, then the step timeout.
 func tick(delta: float) -> void:
+	if delta <= 0.0:
+		return
+	_clock += delta
+	executor.advance(delta)
 	if not _waiting:
 		return
-	_elapsed += delta
-	if _elapsed >= STEP_TIMEOUT:
+	_elapsed = _clock - _step_at
+	if _elapsed >= _step_timeout:
 		var s: Dictionary = _plan[_index]
-		push_warning("InteractionRouter: %s did not finish in %.0fs; skipped." % [s["action"], STEP_TIMEOUT])
-		executor.pending = &""
-		_step_done()
+		push_warning("InteractionRouter: request %d step %d %s did not finish in %.1fs (estimate %.1fs); cancelled." % [
+			int(_active["request_id"]), _index, s["action"], _step_timeout, _step_estimate])
+		var rid := int(_active["request_id"])
+		_waiting = false  # the body's &"cancelled" answer is not for a step in flight any more
+		executor.cancel(rid)
+		_step_failed(R_TIMEOUT, "timeout after %.1fs (estimate %.1fs)" % [_elapsed, _step_estimate])
 
 
 ## True while a plan runs or requests wait.
@@ -161,9 +244,52 @@ func busy() -> bool:
 	return not _plan.is_empty() or not _queue.is_empty()
 
 
+## True while request `request_id` runs or waits.
+func has_request(request_id: int) -> bool:
+	if not _active.is_empty() and int(_active["request_id"]) == request_id:
+		return true
+	for q in _queue:
+		if int(q["request_id"]) == request_id:
+			return true
+	return false
+
+
+## request_id of the running plan (0 when idle).
+func active_request_id() -> int:
+	return int(_active.get("request_id", 0))
+
+
 ## The step in flight ({"action", "args"}) or {}.
 func current_step() -> Dictionary:
 	return _plan[_index] if _waiting and _index >= 0 and _index < _plan.size() else {}
+
+
+## Seconds `plan` should take on the current executor (sum of its estimates).
+func estimate_plan(plan: Array) -> float:
+	var total := 0.0
+	for s: Dictionary in plan:
+		total += maxf(0.0, executor.estimate_duration(s["action"], s["args"]))
+	return total
+
+
+## Worst case of `plan` on the current executor: every step ends by its timeout at the latest
+## (sum of step_timeout(estimate)). A request never runs longer than this once started.
+func plan_deadline(plan: Array) -> float:
+	var total := 0.0
+	for s: Dictionary in plan:
+		total += step_timeout(executor.estimate_duration(s["action"], s["args"]))
+	return total
+
+
+## The plan `intent` would get now, without side effects: no request id, nothing queued, no
+## provider asked (a SEMANTIC intent previews as the "no provider" decline). For budgets (smoke).
+func preview_plan(intent: Intent) -> Array:
+	return _build_request(intent, true)["plan"]
+
+
+## Timeout of one step whose estimate is `estimate` seconds.
+static func step_timeout(estimate: float) -> float:
+	return maxf(0.0, estimate) * TIMEOUT_FACTOR + TIMEOUT_MARGIN
 
 
 ## Read-only view of the pipeline (LivingInteraction.inspect_state, dev inspector): the vocabulary
@@ -174,7 +300,11 @@ func snapshot() -> Dictionary:
 	return {
 		"action": String(step.get("action", &"")),
 		"action_args": (step.get("args", {}) as Dictionary).duplicate(true),
+		"request_id": active_request_id(),
 		"step_index": _index,
+		"step_phase": String(_step_phase) if _waiting else "",
+		"step_estimate": _step_estimate if _waiting else 0.0,
+		"step_timeout": _step_timeout if _waiting else 0.0,
 		"plan": ActionVocabulary.names(_plan),
 		"waiting": _waiting,
 		"step_elapsed": _elapsed,
@@ -182,17 +312,25 @@ func snapshot() -> Dictionary:
 		"active_request": (_active["report"] as Dictionary).duplicate(true) if not _active.is_empty() else {},
 		"last_report": history.back().duplicate(true) if not history.is_empty() else {},
 		"requests_finished": history.size(),
+		"ignored_events": ignored_events,
 		"executor_bound": executor.is_bound(),
+		"executor_correlated": executor.is_correlated(),
 		"executor_pending": String(executor.pending),
 		"provider_available": port.is_available(),
 	}
 
 
-## Drops the running plan and every waiting request (scenario reset/recomposition). Nothing that
-## was not committed is applied.
+## Cancels the running plan on the body and drops every waiting request (scenario reset /
+## recomposition). Nothing that was not committed is applied. Never waits for the body.
 func cancel() -> void:
 	var pending: Array[Dictionary] = []
 	if not _active.is_empty():
+		var rid := int(_active["request_id"])
+		var was_waiting := _waiting
+		_waiting = false
+		if was_waiting:
+			_record_step(R_CANCELLED, "router cancelled")
+		executor.cancel(rid)
 		pending.append(_active["report"])
 	for q in _queue:
 		pending.append(q["report"])
@@ -201,22 +339,42 @@ func cancel() -> void:
 	_plan = []
 	_index = -1
 	_waiting = false
-	executor.pending = &""
 	for rep in pending:
 		rep["status"] = ST_CANCELLED
+		if String(rep.get("reason", "")) == "":
+			rep["reason"] = "cancelled"
 		_finish_report(rep)
+
+
+## True when a new ATTENTION request would interrupt the running plan now (see QUEUE).
+func should_interrupt() -> bool:
+	if _active.is_empty() or _plan.is_empty():
+		return false
+	var rep: Dictionary = _active["report"]
+	if String(rep["kind"]) == "ATTENTION":
+		return false
+	if _in_file_section():
+		return false
+	var tolerance := clampf(float(_config_value("behaviour.interruption_tolerance",
+		DEFAULT_INTERRUPTION_TOLERANCE)), 0.0, 1.0)
+	var remaining := float(_plan.size() - maxi(_index, 0)) / float(_plan.size())
+	return remaining > 1.0 - tolerance
 
 
 # ------------------------------------------------------------------ plans
 
 
 ## {"intent", "plan", "commit_at" (step index or -1), "validation", "report"}.
-func _build_request(intent: Intent) -> Dictionary:
-	var rep := {"id": _next_id, "kind": intent.kind_name(), "route": intent.route_name(), "text": intent.text,
-		"rule": intent.rule, "target": intent.target, "status": "", "plan": [], "path": "",
-		"old_value": null, "new_value": null, "notes": [], "reason": "", "source": intent.source}
-	_next_id += 1
-	var req := {"intent": intent, "plan": [], "commit_at": -1, "validation": null, "report": rep}
+func _build_request(intent: Intent, preview := false) -> Dictionary:
+	var rid := 0 if preview else next_request_id()
+	var rep := {"id": _next_id, "request_id": rid, "kind": intent.kind_name(), "route": intent.route_name(),
+		"text": intent.text, "rule": intent.rule, "target": intent.target, "status": "", "plan": [], "path": "",
+		"old_value": null, "new_value": null, "notes": [], "reason": "", "source": intent.source,
+		"steps": [], "failures": [], "estimate": 0.0, "duration": 0.0, "interrupted": 0, "request_ids": [rid]}
+	if not preview:
+		_next_id += 1
+	var req := {"intent": intent, "plan": [], "commit_at": -1, "validation": null, "report": rep,
+		"request_id": rid, "committed": false}
 	match intent.kind:
 		Intent.Kind.ATTENTION:
 			rep["status"] = ST_ATTENTION
@@ -231,6 +389,9 @@ func _build_request(intent: Intent) -> Dictionary:
 				req["plan"] = puzzled_plan(rep["reason"])
 		Intent.Kind.CONFIG_PATCH:
 			_config_request(req, intent.patch, [])
+		Intent.Kind.SEMANTIC when preview:
+			rep["status"] = ST_PROVIDER_UNAVAILABLE if not port.is_available() else "provider_actions"
+			req["plan"] = decline_plan(ProviderPort.UNAVAILABLE)
 		Intent.Kind.SEMANTIC:
 			_semantic_request(req, intent)
 		_:
@@ -400,6 +561,7 @@ func _has_world(id: StringName) -> bool:
 	return false
 
 
+
 # ------------------------------------------------------------------ execution
 
 
@@ -416,24 +578,46 @@ func _pump() -> void:
 		if _index + 1 >= _plan.size():
 			_end_active()
 			continue
-		_index += 1
-		var s: Dictionary = _plan[_index]
-		_waiting = true
-		_elapsed = 0.0
-		action_dispatched.emit(_index, s["action"], s["args"])
-		executor.perform(s["action"], s["args"])
+		_dispatch(_index + 1)
 	_pumping = false
+
+
+## Hands step `i` of the active plan to the executor, with its correlation and its timeout.
+func _dispatch(i: int) -> void:
+	_index = i
+	var s: Dictionary = _plan[i]
+	var args: Dictionary = (s["args"] as Dictionary).duplicate()
+	args["request_id"] = int(_active["request_id"])
+	args["step"] = i
+	_step_estimate = maxf(0.0, executor.estimate_duration(s["action"], args))
+	_step_timeout = step_timeout(_step_estimate)
+	_step_at = _clock
+	_elapsed = 0.0
+	_step_started_at = -1.0
+	_step_phase = &"dispatched"
+	_waiting = true
+	action_dispatched.emit(i, s["action"], args)
+	executor.perform(s["action"], args)
 
 
 func _begin(req: Dictionary) -> void:
 	_active = req
 	_plan = req["plan"]
 	_index = -1
-	plan_started.emit(_plan, req["report"])
+	_plan_at = _clock
+	var rep: Dictionary = req["report"]
+	rep["request_id"] = int(req["request_id"])
+	request_started.emit({"id": rep["id"], "request_id": rep["request_id"], "kind": rep["kind"],
+		"route": rep["route"], "status": ST_STARTED, "target": rep["target"], "path": rep["path"],
+		"plan": ActionVocabulary.names(_plan), "text": rep["text"], "source": rep["source"],
+		"expected_status": rep["status"], "estimate": snappedf(estimate_plan(_plan), 0.01),
+		"deadline": snappedf(plan_deadline(_plan), 0.01), "restart": bool(req.get("restart", false))})
+	plan_started.emit(_plan, rep)
 
 
 func _end_active() -> void:
 	var rep: Dictionary = _active["report"]
+	rep["duration"] = snappedf(float(rep["duration"]) + _clock - _plan_at, 0.001)
 	_active = {}
 	_plan = []
 	_index = -1
@@ -441,28 +625,123 @@ func _end_active() -> void:
 
 
 func _finish_report(rep: Dictionary) -> void:
+	rep["estimate"] = snappedf(float(rep.get("estimate", 0.0)), 0.01)
 	history.append(rep)
 	request_finished.emit(rep)
 
 
-func _on_action_finished(action: StringName) -> void:
-	if not _waiting or _index < 0 or _index >= _plan.size():
+## Correlation: only events of the active request and of the step in flight count.
+func _on_action_event(request_id: int, action: StringName, phase: StringName, info: Dictionary) -> void:
+	if request_id <= 0 or not _waiting or _active.is_empty() or request_id != int(_active["request_id"]) \
+			or _index < 0 or _index >= _plan.size():
+		ignored_events += 1
 		return
-	if StringName(_plan[_index]["action"]) != action:
+	if action != StringName(_plan[_index]["action"]) or (info.has("step") and int(info["step"]) != _index):
+		ignored_events += 1
 		return
-	_step_done()
+	match phase:
+		ActionExecutor.PH_ACCEPTED, ActionExecutor.PH_PROGRESS:
+			_step_phase = phase
+		ActionExecutor.PH_STARTED:
+			_step_phase = phase
+			if _step_started_at < 0.0:
+				_step_started_at = _clock
+		ActionExecutor.PH_FINISHED:
+			_step_done()
+		ActionExecutor.PH_FAILED:
+			_step_failed(R_FAILED, str(info.get("reason", "failed")))
+		ActionExecutor.PH_CANCELLED:
+			_step_failed(R_CANCELLED, "cancelled by the body (%s)" % str(info.get("reason", "")))
+		_:
+			ignored_events += 1
 
 
 func _step_done() -> void:
 	_waiting = false
-	if not _active.is_empty() and int(_active["commit_at"]) == _index:
+	_record_step(R_FINISHED, "")
+	if int(_active["commit_at"]) == _index:
 		_commit()
 	_pump()
+
+
+## The step in flight failed / timed out / was cancelled by the body. The plan goes on, unless the
+## step is GRAB_FILE / EDIT_FILE of a change not committed yet: then nothing is applied and the
+## rest of the plan becomes the "not applied" tail.
+func _step_failed(result: String, reason: String) -> void:
+	_waiting = false
+	_record_step(result, reason)
+	var rep: Dictionary = _active["report"]
+	var s: Dictionary = _plan[_index]
+	(rep["failures"] as Array).append({"step": _index, "action": String(s["action"]), "reason": "%s: %s" % [result, reason]})
+	var commit_at := int(_active["commit_at"])
+	if commit_at >= 0 and _index <= commit_at and not bool(_active["committed"]) and StringName(s["action"]) in CRITICAL:
+		_not_applied(ST_COMMIT_FAILED, "%s %s: %s" % [s["action"], result, reason])
+	_pump()
+
+
+## Appends the step in flight to the report (timings on the router's clock).
+func _record_step(result: String, reason: String) -> void:
+	var rep: Dictionary = _active["report"]
+	var s: Dictionary = _plan[_index]
+	(rep["steps"] as Array).append({"step": _index, "action": String(s["action"]),
+		"estimate": snappedf(_step_estimate, 0.01), "timeout": snappedf(_step_timeout, 0.01),
+		"elapsed": snappedf(_clock - _step_at, 0.001),
+		"latency": snappedf(_step_started_at - _step_at, 0.001) if _step_started_at >= 0.0 else -1.0,
+		"result": result, "reason": reason})
+	rep["estimate"] = float(rep["estimate"]) + _step_estimate
+	_step_phase = StringName(result)
+
+
+## Stops the running plan for an ATTENTION request: cancelled on the body; returns the request to
+## re-queue (new request_id, restarts from its first step) or {} when its change was already
+## committed (then its report ends here).
+func _interrupt_active() -> Dictionary:
+	var req := _active
+	var rep: Dictionary = req["report"]
+	var rid := int(req["request_id"])
+	if _waiting:
+		_waiting = false
+		_record_step(R_INTERRUPTED, "attention")
+	executor.cancel(rid)
+	rep["interrupted"] = int(rep["interrupted"]) + 1
+	rep["duration"] = float(rep["duration"]) + _clock - _plan_at
+	_active = {}
+	_plan = []
+	_index = -1
+	if bool(req["committed"]):
+		(rep["notes"] as Array).append("interrupted by attention after the change was committed")
+		rep["duration"] = snappedf(float(rep["duration"]), 0.001)
+		_finish_report(rep)
+		return {}
+	var nrid := next_request_id()
+	req["request_id"] = nrid
+	rep["request_id"] = nrid
+	(rep["request_ids"] as Array).append(nrid)
+	req["restart"] = true
+	return req
+
+
+## True while the running configuration plan is between its GRAB_FILE and its commit (EDIT_FILE):
+## the file is in her hands — she does not let go of it for a call.
+func _in_file_section() -> bool:
+	var commit_at := int(_active.get("commit_at", -1))
+	if commit_at < 0 or bool(_active.get("committed", false)) or _index < 0:
+		return false
+	var first := _index_of(_plan, ActionVocabulary.GRAB_FILE)
+	if first < 0 or first > commit_at:
+		first = commit_at
+	return _index >= first and _index <= commit_at
+
+
+func _config_value(path: String, fallback: Variant) -> Variant:
+	var v: Variant = config.get_value(path) if config != null else null
+	return v if v != null else fallback
 
 
 ## The hand finished editing: validate again against the configuration of this moment and
 ## apply. On failure the rest of the plan becomes the "not applied" tail.
 func _commit() -> void:
+	_active["committed"] = true
 	var rep: Dictionary = _active["report"]
 	var first: ConfigValidator.Result = _active["validation"]
 	var patch := StructuredPatch.absolute(first.path, first.value)
@@ -474,11 +753,20 @@ func _commit() -> void:
 		mutation_applied.emit(v.path, old, v.value)
 		executor.config_changed(v.path, old, v.value)
 		return
-	rep["status"] = ST_COMMIT_FAILED if v.applicable() else ST_UNCHANGED
-	rep["reason"] = "write failed" if v.applicable() else "already %s" % str(v.value)
+	_not_applied(ST_COMMIT_FAILED if v.applicable() else ST_UNCHANGED,
+		"write failed" if v.applicable() else "already %s" % str(v.value))
+
+
+## Nothing is applied: status/reason set and the rest of the plan replaced by
+## ACKNOWLEDGE(decline), DISCARD(not applied), WORK(resume).
+func _not_applied(status: String, reason: String) -> void:
+	var rep: Dictionary = _active["report"]
+	rep["status"] = status
+	rep["reason"] = reason
 	rep["new_value"] = null
+	_active["commit_at"] = -1
 	var tail := [
-		ActionVocabulary.step(ActionVocabulary.ACKNOWLEDGE, {"tone": "decline", "reason": rep["status"]}),
+		ActionVocabulary.step(ActionVocabulary.ACKNOWLEDGE, {"tone": "decline", "reason": status}),
 		ActionVocabulary.step(ActionVocabulary.DISCARD, {"file": ConfigSchema.FILE, "applied": false}),
 		ActionVocabulary.step(ActionVocabulary.WORK, {"resume": true}),
 	]
