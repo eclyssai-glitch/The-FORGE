@@ -1,0 +1,55 @@
+[living 0.00] == TEST 1 LIFE (12 s of her own life) | mood=calm act= task=false
+[living 1.03] EVENT living.hands { "count": 1, "world": &"world_calyx" }  [calyx dormant 0.00 crack 0.00 hands 0] | mood=calm act= task=false
+[living 6.07] finished SUMMON_HAND | mood=calm act=SUMMON_HAND task=false
+[living 7.07] EVENT living.hands { "count": 2, "world": &"world_calyx" }  [calyx dormant 0.00 crack 0.00 hands 1] | mood=calm act= task=false
+[living 9.10] notice_user -> { "reaction": &"curious", "hold": 3.72, "turn": 0.76, "leave_work": true } | mood=calm act=SUMMON_HANDS task=false
+[living 13.07] EVENT living.hands { "count": 4, "world": &"world_calyx" }  [calyx dormant 0.00 crack 0.00 hands 2] | mood=calm act=SUMMON_HANDS task=false
+[living 13.20] finished SUMMON_HANDS | mood=calm act=SUMMON_HANDS task=false
+[living 19.53] EVENT living.work_order { "world": &"world_calyx" }  [calyx dormant 0.00 crack 0.00 hands 4] | mood=calm act=SUMMON_HANDS task=false
+[living 19.53] MOOD -> focused | mood=focused act=SUMMON_HANDS task=true
+[living 19.53] finished SUMMON_HANDS | mood=focused act=SUMMON_HANDS task=true
+[living 21.03] EVENT living.work_step { "step": 0, "attempt": 1, "hands": 2, "world": &"world_calyx" }  [calyx dormant 0.00 crack 0.00 hands 4] | mood=focused act= task=t
+[living 27.03] EVENT living.work_step { "step": 1, "attempt": 1, "hands": 2, "world": &"world_calyx" }  [calyx gather 0.09 crack 0.00 hands 2] | mood=focused act= task=tr
+[living 33.03] EVENT living.work_step { "step": 2, "attempt": 1, "hands": 3, "world": &"world_calyx" }  [calyx core 0.34 crack 0.00 hands 2] | mood=focused act= task=true
+[living 39.03] EVENT living.work_step { "step": 3, "attempt": 1, "hands": 4, "world": &"world_calyx" }  [calyx layers 0.51 crack 0.00 hands 3] | mood=focused act= task=tr
+[living 45.57] EVENT living.work_step { "step": 4, "attempt": 1, "hands": 2, "world": &"world_calyx" }  [calyx layers 0.67 crack 0.00 hands 4] | mood=focused act= task=tr
+[living 49.07] EVENT living.work_failed { "attempt": 1, "world": &"world_calyx" }  [calyx layers 0.75 crack 0.00 hands 2] | mood=focused act= task=true
+[living 52.57] EVENT living.work_step { "step": 4, "attempt": 2, "hands": 2, "world": &"world_calyx" }  [calyx layers 0.75 crack 0.60 hands 2] | mood=focused act= task=tr
+[living 56.07] EVENT living.work_failed { "attempt": 2, "world": &"world_calyx" }  [calyx layers 0.75 crack 0.31 hands 2] | mood=focused act= task=true
+[living 56.07] MOOD -> angry | mood=angry act= task=true
+[living 58.57] EVENT living.work_dismantled { "hands": 6, "world": &"world_calyx" }  [calyx layers 0.75 crack 0.60 hands 2] | mood=angry act= task=true
+[living 63.07] EVENT living.work_step { "step": 4, "attempt": 3, "hands": 4, "world": &"world_calyx" }  [calyx layers 0.67 crack 0.00 hands 6] | mood=angry act= task=true
+[living 67.07] EVENT living.work_recovered { "world": &"world_calyx" }  [calyx layers 0.84 crack 0.00 hands 4] | mood=angry act= task=true
+[living 67.07] MOOD -> recovering | mood=recovering act= task=true
+[living 71.07] EVENT living.world_complete { "world": &"world_calyx" }  [calyx layers 0.84 crack 0.00 hands 2] | mood=recovering act= task=true
+[living 71.30] MOOD -> focused | mood=focused act= task=true
+[living 75.47] MOOD -> calm | mood=calm act= task=false
+[living 79.53] == TEST 5 USER ATTENTION (calm) | mood=calm act= task=false
+[living 79.57] notice_user -> { "reaction": &"curious", "hold": 3.72, "turn": 0.76, "leave_work": true } | mood=calm act= task=false
+[living 83.30] finished LOOK_AT_USER | mood=calm act= task=false
+[living 84.60] finished ACKNOWLEDGE | mood=calm act= task=false
+[living 85.30] finished WORK | mood=calm act=WORK task=false
+[living 88.37] == TEST 6 WORLD TARGET | mood=calm act= task=false
+[living 89.97] finished LOOK_AT_WORLD | mood=calm act= task=false
+[living 92.53] finished POINT | mood=calm act=POINT task=false
+[living 97.73] finished SUMMON_HANDS | mood=calm act=SUMMON_HANDS task=false
+[living 97.77] MOOD -> focused | mood=focused act=WORK task=true
+[living 98.40] finished WORK | mood=focused act=WORK task=true
+[living 107.47] == TEST 5 USER ATTENTION (focused) | mood=focused act= task=true
+[living 107.50] notice_user -> { "reaction": &"brief", "hold": 1.45, "turn": 0.275, "leave_work": false } | mood=focused act= task=true
+[living 108.77] finished LOOK_AT_USER | mood=focused act= task=true
+[living 109.87] finished ACKNOWLEDGE | mood=focused act= task=true
+[living 110.47] finished WORK | mood=focused act=WORK task=true
+[living 114.53] == TEST 7 CONFIGURATION MOCK (Miku, aumente sua altura) | mood=focused act= task=true
+[living 116.70] finished LOOK_AT_USER | mood=focused act= task=true
+[living 117.40] finished ACKNOWLEDGE | mood=focused act= task=true
+[living 119.43] finished SUMMON_HAND | mood=focused act=SUMMON_HAND task=true
+[living 122.53] finished GRAB_FILE | mood=focused act=GRAB_FILE task=true
+[living 124.53] finished SUMMON_HAND | mood=focused act=SUMMON_HAND task=true
+[living 128.43] finished EDIT_FILE | mood=focused act=EDIT_FILE task=true
+[living 128.43] applied appearance.height 1.00 -> 1.06 | mood=focused act=EDIT_FILE task=true
+[living 131.67] finished INSPECT | mood=focused act=INSPECT task=true
+[living 134.07] finished SATISFIED | mood=focused act=SATISFIED task=true
+[living 135.43] finished DISCARD | mood=focused act=DISCARD task=true
+[living 136.03] finished WORK | mood=focused act=WORK task=true
+[living 142.10] == END | mood=focused act= task=true
