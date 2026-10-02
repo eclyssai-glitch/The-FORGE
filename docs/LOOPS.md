@@ -152,3 +152,10 @@ pendente e como retomar. Procedimento de fechamento: skill `loop-checkpoint`.
   da pilha nativa (SkeletonModifier3D/IK/SpringBone/AnimationTree). **Rodada 2 bloqueada até o Owner liberar o gate.**
   mkdevkit/godot-mcp: candidato de segunda linha, não instalar. Fase 3 integrada (`50357a5`, ADR-017); Fase 4 no
   sandbox (`8dc5c1a`, `docs/research/native-character-runtime.md`).
+- Rodada 1 integrada (rig `7424ba0`, interação `b8ddadf`, materiais `0ec99e7`, linha de chamada `e0e70f5`, personagem
+  spike `3722f46`): 520/520; smokes ORIGIN/GENESIS PASS; **smoke LIVING FAIL** (timeout 240 s: ações com duração real
+  em série no roteador estouram o orçamento; o roteador também precisa ignorar `action_finished` de performs que não
+  são dele) — item da rodada 2. Evidência: `docs/evidence/loop-05/animator-r1/`, `docs/evidence/loop-05/inspector/`.
+  Código de corpo/ossos manual da rodada 1 (a migrar): `src/miku/motion/{miku_motor,pose_rig,limb_ik,finger_set,arm_channel}.gd`,
+  `src/miku/body/{rig_bones,miku_body(pose),miku_mannequin}.gd`, `src/entities/living/{hand_mannequin,puppet_hand(step/_apply_frame)}.gd`.
+- **Aguardando o Owner (gate).** Rodada 2 não iniciada.
