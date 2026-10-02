@@ -237,8 +237,9 @@ static func summon_role_beats(role: StringName, side: StringName) -> Array[Dicti
 static func acknowledge_beats(tone: StringName) -> Array[Dictionary]:
 	match tone:
 		&"brief":
-			return [b(0.0, &"pose", {"nod": 0.15, "secs": 0.35}), b(0.4, &"pose", {"nod": 0.0, "secs": 0.3}),
-				b(0.8, &"done")]
+			return [b(0.0, &"breath", {"depth": 1.3, "rate": 1.2, "secs": 0.6}),
+				b(0.06, &"pose", {"nod": 0.15, "secs": 0.35}), b(0.45, &"pose", {"nod": 0.0, "secs": 0.3}),
+				b(0.85, &"done")]
 		&"decline":
 			return [b(0.0, &"gaze", {"at": &"user", "secs": 1.6}), b(0.05, &"pose", {"tilt": -0.07, "nod": 0.04, "secs": 0.35}),
 				b(0.4, &"pose", {"tilt": 0.07, "secs": 0.35}), b(0.75, &"pose", {"tilt": -0.04, "secs": 0.3}),
@@ -247,9 +248,10 @@ static func acknowledge_beats(tone: StringName) -> Array[Dictionary]:
 		&"puzzled":
 			return [b(0.0, &"gaze", {"at": &"user", "secs": 1.8}), b(0.05, &"pose", {"tilt": 0.17, "lean": -0.03, "secs": 1.6}),
 				b(0.2, &"arm", {"side": &"free", "g": Gestures.CHIN, "speed": 0.8, "secs": 1.4}), b(1.7, &"done")]
-	return [b(0.0, &"pose", {"nod": 0.17, "secs": 0.4}), b(0.45, &"pose", {"nod": -0.03, "lift": 0.08, "secs": 0.5}),
-		b(0.1, &"arm", {"side": &"free", "g": Gestures.PALM_UP, "at": &"user", "secs": 1.2}),
-		b(1.3, &"done")]
+	return [b(0.0, &"gaze", {"at": &"user", "secs": 1.3}), b(0.06, &"pose", {"nod": 0.17, "secs": 0.4}),
+		b(0.5, &"pose", {"nod": -0.03, "lift": 0.08, "secs": 0.5}),
+		b(0.12, &"arm", {"side": &"free", "g": Gestures.PALM_UP, "at": &"user", "secs": 1.2}),
+		b(1.35, &"done")]
 
 
 ## The configuration artifact is called into being over her raised palm; a puppet hand is
@@ -284,38 +286,40 @@ static func edit_beats(grab_first: bool, keep: bool, router := false) -> Array[D
 	if grab_first:
 		out = grab_beats()
 		t0 = 2.4
+	# The call (a gesture) comes before the thread: anticipation -> gesture -> thread -> hand -> matter.
 	out.append_array([
 		b(t0 + 0.0, &"summon", {"n": 1, "near": &"miku", "role": &"editor"}),
 		b(t0 + 0.0, &"arm", {"side": &"lead", "g": Gestures.WINDUP, "at": &"file"}),
-		b(t0 + 0.05, &"cast", {"force": 0.0, "side": &"lead", "only": &"editor"}),
-		b(t0 + 0.5, &"pull", {"force": 0.55, "only": &"editor"}),
-		b(t0 + 0.5, &"send", {"place": &"card_edit", "only": &"editor"}),
-		b(t0 + 0.55, &"wait", {"until": &"arrived", "timeout": 3.5}),
-		b(t0 + 0.6, &"arm", {"side": &"lead", "g": Gestures.PINCH, "at": &"file"}),
-		b(t0 + 0.6, &"gaze", {"at": &"file", "scan": true, "secs": 3.0}),
-		b(t0 + 0.6, &"pose", {"lean": 0.08, "tilt": 0.08, "secs": 3.0}),
-		b(t0 + 0.65, &"artifact", {"state": &"edit"}),
-		b(t0 + 0.7, &"wait", {"until": &"edited", "timeout": 4.0}),
-		b(t0 + 0.75, &"commit", {}),
+		b(t0 + 0.2, &"arm", {"side": &"lead", "g": Gestures.CALL, "at": &"file", "speed": 1.2}),
+		b(t0 + 0.25, &"cast", {"force": 0.0, "side": &"lead", "only": &"editor"}),
+		b(t0 + 0.55, &"pull", {"force": 0.55, "only": &"editor"}),
+		b(t0 + 0.55, &"send", {"place": &"card_edit", "only": &"editor"}),
+		b(t0 + 0.6, &"wait", {"until": &"arrived", "timeout": 3.5}),
+		b(t0 + 0.65, &"arm", {"side": &"lead", "g": Gestures.PINCH, "at": &"file"}),
+		b(t0 + 0.65, &"gaze", {"at": &"file", "scan": true, "secs": 3.0}),
+		b(t0 + 0.65, &"pose", {"lean": 0.08, "tilt": 0.08, "secs": 3.0}),
+		b(t0 + 0.7, &"artifact", {"state": &"edit"}),
+		b(t0 + 0.75, &"wait", {"until": &"edited", "timeout": 4.0, "critical": true}),
+		b(t0 + 0.8, &"commit", {}),
 	])
 	if router:
 		# The interaction system applies the change now and goes on with INSPECT(self) etc.
-		out.append_array([b(t0 + 0.8, &"arm", {"side": &"lead", "g": &"rest"}), b(t0 + 0.9, &"pull", {"force": 0.3}),
-			b(t0 + 1.0, &"done")])
+		out.append_array([b(t0 + 0.85, &"arm", {"side": &"lead", "g": &"rest"}), b(t0 + 0.95, &"pull", {"force": 0.3}),
+			b(t0 + 1.05, &"done")])
 		return out
 	out.append_array([
-		b(t0 + 0.8, &"wait", {"until": &"applied", "timeout": 4.0}),
-		b(t0 + 0.85, &"artifact", {"state": &"valid"}),
-		b(t0 + 0.9, &"arm", {"side": &"lead", "g": &"rest"}),
-		b(t0 + 1.0, &"self_react", {}),
+		b(t0 + 0.85, &"wait", {"until": &"applied", "timeout": 4.0, "critical": true}),
+		b(t0 + 0.9, &"artifact", {"state": &"valid"}),
+		b(t0 + 0.95, &"arm", {"side": &"lead", "g": &"rest"}),
+		b(t0 + 1.05, &"self_react", {}),
 	])
 	if not keep:
 		out.append_array([
-			b(t0 + 1.1, &"artifact", {"state": &"vanish"}),
-			b(t0 + 1.2, &"relax", {"all": true}),
-			b(t0 + 1.5, &"release", {"all": true}),
+			b(t0 + 1.15, &"artifact", {"state": &"vanish"}),
+			b(t0 + 1.25, &"relax", {"all": true}),
+			b(t0 + 1.55, &"release", {"all": true}),
 		])
-	out.append(b(t0 + 1.7, &"done"))
+	out.append(b(t0 + 1.75, &"done"))
 	return out
 
 

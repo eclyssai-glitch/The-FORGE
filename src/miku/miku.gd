@@ -29,7 +29,21 @@ extends Node3D
 ##                            validates, her body/personality take it (she reacts in INSPECT(self))
 ##   inspect_state() -> Dictionary  (group `dev_inspect`)
 ##   world_ids(), mood(), current_action(), is_busy(), story_focus()
-## Signals: action_started(action), action_finished(action), mood_changed(state),
+## Correlated actions (docs/contracts/loop-05-round2.md, Bloco 1):
+##   perform(action, {request_id: int (> 0 from the InteractionRouter, 0 = her own), step: int, ...})
+##   action_event(request_id, action, phase, info): phase &"accepted" (info.estimate) -> &"started"
+##       -> &"progress" (info.t 0..1, info.stage = causal stage reached) -> exactly ONE terminal
+##       &"finished" | &"failed" (info.reason) | &"cancelled" (info.reason) per accepted perform.
+##       Every info carries `step`.
+##   estimate_duration(action, args) -> float   honest real seconds from now (queue included)
+##   cancel(request_id) -> int   cancels that request's actions (queued, running, followers, the
+##       task it started) with &"cancelled", and dissolves its hands, threads and artifact.
+##   A user plan's first step (LOOK_AT_USER / LOOK_AT_WORLD with request_id > 0) never waits: it
+##       starts in the same frame and the eyes move at once (overlay when the main channel is busy).
+##   inspect_state().causality: per request/action timeline of the causal chain (game seconds of
+##       her clock): intent, anticipation, gesture, thread, hand, matter, result (CAUSAL_STAGES).
+## Signals: action_started(action), action_finished(action) (compatibility: one per accepted
+##   perform, also when it fails or is cancelled), action_event(...), mood_changed(state),
 ##   attention_changed(kind, id), file_committed(args).
 ## Roteiro: Simulation.event_emitted `living.hands|work_order|work_step|work_failed|
 ## work_dismantled|work_recovered|world_complete` (LivingScript) drive the task.
@@ -39,6 +53,7 @@ extends Node3D
 
 signal action_started(action: StringName)
 signal action_finished(action: StringName)
+signal action_event(request_id: int, action: StringName, phase: StringName, info: Dictionary)
 signal mood_changed(state: StringName)
 signal attention_changed(kind: StringName, id: StringName)
 signal file_committed(args: Dictionary)
@@ -73,16 +88,29 @@ const WORK_MIRROR_GAIN := 1.6
 ## Seconds a camera story focus is held at least (no restless camera).
 const FOCUS_HOLD := 2.2
 
+## Phases of action_event.
+const PH_ACCEPTED := &"accepted"
+const PH_STARTED := &"started"
+const PH_PROGRESS := &"progress"
+const PH_FINISHED := &"finished"
+const PH_FAILED := &"failed"
+const PH_CANCELLED := &"cancelled"
+const TERMINAL: Array[StringName] = [PH_FINISHED, PH_FAILED, PH_CANCELLED]
+## The causal chain, in order (inspect_state().causality[i].t keys). A stage that applies is
+## stamped once, the first time it happens; `result` is the end of the run.
+const CAUSAL_STAGES: Array[StringName] = [&"intent", &"anticipation", &"gesture", &"thread", &"hand",
+	&"matter", &"result"]
+## Timeline entries kept for the inspector.
+const TIMELINE_MAX := 48
+## Expected extra seconds a `wait` beat holds an action (estimate_duration), by condition, at
+## tempo 1; measured on the runtime (tests/unit/test_animation_living_protocol.gd).
+const WAIT_ESTIMATE := {&"arrived": 1.45, &"edited": 2.5, &"applied": 0.3}
+## A user plan's first look starts within this many seconds of its perform (contract: 0.3 s).
+const ACK_LATENCY := 0.3
+
 ## Posture of each mood (MikuMind.Mood order): lean, lean_side, chest lift, shoulder raise,
-## shoulders forward, head tilt, nod. Calm = the dancer's carriage; angry = vertical, square,
-## chin down, no tilt.
-const MOOD_POSTURE: Array = [
-	[0.0, 0.015, 0.2, -0.12, -0.18, 0.065, 0.0],
-	[0.08, 0.0, 0.1, 0.0, 0.08, 0.03, 0.07],
-	[0.06, 0.0, -0.05, 0.5, 0.25, 0.0, 0.05],
-	[0.0, 0.0, 0.06, 0.3, 0.0, 0.0, 0.08],
-	[0.02, 0.0, 0.12, -0.2, -0.1, 0.05, 0.08],
-]
+## shoulders forward, head tilt, nod (MikuPoses: both bodies use it).
+const MOOD_POSTURE: Array = MikuPoses.MOOD_POSTURE
 ## Breath of each mood: [rate (Hz), depth].
 const MOOD_BREATH: Array = [
 	[1.0 / Palette.T_BREATH, 1.0], [1.0 / 4.6, 0.7], [1.0 / 3.0, 0.75], [1.0 / 3.8, 0.22],
@@ -138,6 +166,8 @@ var _bound := false
 var _last_mood: MikuMind.Mood = MikuMind.Mood.CALM
 ## Roteiro events received (inspection / tests).
 var _events_seen := 0
+## Causal timelines (inspect_state().causality), oldest first.
+var _timeline: Array[Dictionary] = []
 
 
 func _init() -> void:
@@ -172,6 +202,8 @@ func _exit_tree() -> void:
 
 
 ## Performs an action of the vocabulary. Returns false for an unknown action (no signal then).
+## args.request_id (> 0: the InteractionRouter's request; 0 = her own) and args.step (index in
+## the plan) correlate the action_event phases; exactly one terminal per accepted perform.
 func perform(action: StringName, args := {}) -> bool:
 	if not ActionScript.is_action(action):
 		push_warning("Miku: unknown action %s" % action)
@@ -179,32 +211,126 @@ func perform(action: StringName, args := {}) -> bool:
 	_bind()
 	_pending_target = &""
 	var a := ActionScript.normalize(action, args, world_ids())
+	var tag := _tag(action, a)
+	_emit_phase(tag, PH_ACCEPTED, {"estimate": snappedf(estimate_duration(action, a), 0.01)})
+	# A user plan's first look is the immediate acknowledgement: it never waits in a queue.
+	var user_look := int(tag["request_id"]) > 0 and action in [ActionScript.LOOK_AT_USER, ActionScript.LOOK_AT_WORLD]
 	# The perception of the user's call / pointing is already playing: the plan's look joins it
 	# (finished when it ends) and an acknowledgement waits for it — the reaction is never cut.
 	var reacting: bool = not _overlay.is_empty() and _overlay["action"] in [NOTICE, TARGET]
 	if reacting and ((action == ActionScript.LOOK_AT_USER and _overlay["action"] == NOTICE)
 			or (action == ActionScript.LOOK_AT_WORLD and _overlay["action"] == TARGET)):
-		(_overlay["followers"] as Array).append(action)
-		action_started.emit(action)
+		(_overlay["followers"] as Array).append(tag)
+		_begin_tag(tag, &"follower")
 		return true
-	if action in ActionScript.OVERLAY:
-		if reacting:
-			_overlay_queue.append({"action": action, "args": a})
+	if action in ActionScript.OVERLAY or (user_look and not _main.is_empty()):
+		if reacting and not user_look:
+			_overlay_queue.append({"tag": tag, "args": a})
 		else:
-			_start_overlay(action, a)
+			_start_overlay(tag, a)
 		return true
 	if not _task.is_empty() and action in [ActionScript.FRUSTRATED, ActionScript.ANGRY, ActionScript.RECOVER]:
-		_start_overlay(action, a)
+		_start_overlay(tag, a)
 		return true
 	if action == ActionScript.DISCARD and not _main.is_empty() \
 			and _main["action"] in [ActionScript.EDIT_FILE, ActionScript.GRAB_FILE]:
-		_finish_run(_main, SRC_MAIN)
-		_main = {}
+		_end(SRC_MAIN, PH_CANCELLED, "discarded")
 	if _main.is_empty():
-		_start_main(action, a)
+		_start_main(tag, a)
 	else:
-		_queue.append({"action": action, "args": a})
+		_queue.append({"tag": tag, "args": a})
 	return true
+
+
+## Honest estimate (real seconds from now) of how long `action` with `args` would take if it were
+## performed now: the wait for the channel it would join (the running action and the queue), its
+## beats at her current tempo and the expected holds of its `wait` beats.
+func estimate_duration(action: StringName, args := {}) -> float:
+	if not ActionScript.is_action(action):
+		return 0.0
+	_bind()
+	var a := ActionScript.normalize(action, args, world_ids())
+	var own := _beats_estimate(_beats_for(action, a), 0.0, 0.0)
+	var rid := int(a.get("request_id", 0))
+	var user_look := rid > 0 and action in [ActionScript.LOOK_AT_USER, ActionScript.LOOK_AT_WORLD]
+	var reacting: bool = not _overlay.is_empty() and _overlay["action"] in [NOTICE, TARGET]
+	if reacting and ((action == ActionScript.LOOK_AT_USER and _overlay["action"] == NOTICE)
+			or (action == ActionScript.LOOK_AT_WORLD and _overlay["action"] == TARGET)):
+		return _run_remaining(_overlay)
+	if action in ActionScript.OVERLAY or (user_look and not _main.is_empty()):
+		if reacting and not user_look:
+			var lead := _run_remaining(_overlay)
+			for q: Dictionary in _overlay_queue:
+				lead += _beats_estimate(_beats_for(q["tag"]["action"], q["args"]), 0.0, 0.0)
+			return lead + own
+		return own
+	if not _task.is_empty() and action in [ActionScript.FRUSTRATED, ActionScript.ANGRY, ActionScript.RECOVER]:
+		return own
+	if _main.is_empty() or (action == ActionScript.DISCARD
+			and _main["action"] in [ActionScript.EDIT_FILE, ActionScript.GRAB_FILE]):
+		return own
+	var wait := _run_remaining(_main)
+	for q: Dictionary in _queue:
+		wait += _beats_estimate(_beats_for(q["tag"]["action"], q["args"]), 0.0, 0.0)
+	return wait + own
+
+
+## Cancels every action of `request_id` — queued, running (main / overlay / joined look) and the
+## work task it started — each ending with action_event(..., &"cancelled"); the hands it
+## summoned dissolve (their threads relax) and its configuration artifact vanishes. Returns the
+## number of actions cancelled.
+func cancel(request_id: int) -> int:
+	_bind()
+	var n := 0
+	for i in range(_queue.size() - 1, -1, -1):
+		var q: Dictionary = _queue[i]
+		if int(q["tag"]["request_id"]) == request_id:
+			_queue.remove_at(i)
+			_terminal(q["tag"], PH_CANCELLED, "cancelled")
+			n += 1
+	for i in range(_overlay_queue.size() - 1, -1, -1):
+		var oq: Dictionary = _overlay_queue[i]
+		if int(oq["tag"]["request_id"]) == request_id:
+			_overlay_queue.remove_at(i)
+			_terminal(oq["tag"], PH_CANCELLED, "cancelled")
+			n += 1
+	if not _overlay.is_empty():
+		var fs: Array = _overlay["followers"]
+		for i in range(fs.size() - 1, -1, -1):
+			if int(fs[i]["request_id"]) == request_id:
+				var f: Dictionary = fs[i]
+				fs.remove_at(i)
+				_terminal(f, PH_CANCELLED, "cancelled")
+				n += 1
+		if int(_overlay["tag"]["request_id"]) == request_id and _overlay["action"] in ActionScript.VOCABULARY:
+			_end(SRC_OVERLAY, PH_CANCELLED, "cancelled")
+			n += 1
+			_next_overlay()
+	if not _main.is_empty() and int(_main["tag"]["request_id"]) == request_id:
+		_end(SRC_MAIN, PH_CANCELLED, "cancelled")
+		n += 1
+		_next_main()
+	if not _task.is_empty() and int(_task["tag"]["request_id"]) == request_id:
+		_end(SRC_TASK, PH_CANCELLED, "cancelled")
+	_release_request(request_id)
+	return n
+
+
+## Cancels every accepted action that has not ended (reset / recomposition by the interaction
+## system): each request's cancel(), her own included. Returns the number cancelled.
+func cancel_all() -> int:
+	var ids := {}
+	for q: Dictionary in _queue + _overlay_queue:
+		ids[int(q["tag"]["request_id"])] = true
+	for run: Dictionary in [_main, _overlay, _task]:
+		if not run.is_empty():
+			ids[int(run["tag"]["request_id"])] = true
+			for f: Dictionary in run["followers"]:
+				ids[int(f["request_id"])] = true
+	var n := 0
+	for id: int in ids:
+		n += cancel(id)
+	return n
 
 
 ## The user called her (click on MIKU, "Miku, ..."): she reacts according to her state.
@@ -212,7 +338,7 @@ func notice_user() -> Dictionary:
 	_bind()
 	var r := mind.user_call()
 	agenda.interrupt()
-	_start_overlay_beats(NOTICE, {"reaction": r["reaction"]}, ActionScript.user_reaction(r))
+	_start_overlay_beats(_tag(NOTICE, {}), {"reaction": r["reaction"]}, ActionScript.user_reaction(r))
 	return r
 
 
@@ -225,7 +351,7 @@ func target_world(id: StringName) -> bool:
 		return false
 	mind.user_points(id)
 	agenda.interrupt()
-	_start_overlay_beats(TARGET, {"world": id}, ActionScript.world_target_reaction(id))
+	_start_overlay_beats(_tag(TARGET, {}), {"world": id}, ActionScript.world_target_reaction(id))
 	_pending_target = id
 	_pending_at = _clock + PLAN_GRACE
 	return true
@@ -288,7 +414,21 @@ func inspect_state() -> Dictionary:
 		"task": mind.task, "task_world": _task.get("world", &""), "action": current_action(),
 		"overlay": _overlay.get("action", &""), "queue": _queue.size(), "micro": agenda.current,
 		"hands": hs, "threads": ts, "worlds": ws, "artifact": artifact.state_id(),
-		"camera_focus": _focus["kind"], "events": _events_seen, "rig": "mannequin" if body.using_fallback else "MikuRig"}
+		"camera_focus": _focus["kind"], "events": _events_seen, "rig": "mannequin" if body.using_fallback else "MikuRig",
+		"body": body.inspect_state(), "clock": snappedf(_clock, 0.001), "causality": causality()}
+
+
+## Causal timelines, oldest first: [{request_id, step, action, channel (main | overlay | follower
+## | task), stage (work stage of a task entry, else ""), phase ("" while running, else the
+## terminal), t: {intent, anticipation, gesture, thread, hand, matter, result} (game seconds of
+## her clock, only the stages that happened)}]. A copy (safe to keep).
+func causality() -> Array:
+	var out := []
+	for e in _timeline:
+		out.append({"request_id": e["request_id"], "step": e["step"], "action": String(e["action"]),
+			"channel": String(e["channel"]), "stage": String(e["stage"]), "phase": String(e["phase"]),
+			"t": (e["t"] as Dictionary).duplicate()})
+	return out
 
 
 func world_ids() -> Array[StringName]:
@@ -339,26 +479,22 @@ func tick(dt: float) -> void:
 	_step_run(_overlay, dt, SRC_OVERLAY)
 	_emit_mood()
 	if not _main.is_empty() and _main["done"]:
-		_finish_run(_main, SRC_MAIN)
-		_main = {}
-		if not _queue.is_empty():
-			var q: Dictionary = _queue.pop_front()
-			_start_main(q["action"], q["args"])
+		_end(SRC_MAIN)
+		_next_main()
 	if not _task.is_empty() and _task["done"]:
-		_finish_run(_task, SRC_TASK)
-		_task = {}
+		_end(SRC_TASK)
 	if not _overlay.is_empty() and _overlay["done"]:
-		_finish_run(_overlay, SRC_OVERLAY)
-		_overlay = {}
-		if not _overlay_queue.is_empty():
-			var oq: Dictionary = _overlay_queue.pop_front()
-			_start_overlay(oq["action"], oq["args"])
+		_end(SRC_OVERLAY)
+		_next_overlay()
 	_idle_hands(dt)
 	agenda.step(dt, mind, _agenda_context())
 	_compose_body()
 	body.step(dt)
 	_drive_hands()
 	hands.step(dt)
+	_stamp_hands(_task)
+	_stamp_hands(_main)
+	_stamp_hands(_overlay)
 	_drive_work(dt)
 	threads.tremble = mind.rigidity()
 	threads.step(dt)
@@ -462,45 +598,69 @@ func _task_event(world: StringName, beats: Array[Dictionary]) -> void:
 # ================================================================== runs
 
 
-func _new_run(action: StringName, args: Dictionary, beats: Array[Dictionary]) -> Dictionary:
+func _new_run(tag: Dictionary, args: Dictionary, beats: Array[Dictionary], channel: StringName) -> Dictionary:
 	var sorted := beats.duplicate()
 	sorted.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return float(x["t"]) < float(y["t"]))
 	var world: StringName = args.get("world", work_world)
 	if worlds != null and not worlds.has_world(world):
 		world = work_world
-	return {"action": action, "args": args, "beats": sorted, "next": 0, "t": 0.0, "wait": 0.0,
+	return {"action": tag["action"], "tag": tag, "args": args, "beats": sorted, "next": 0, "t": 0.0, "wait": 0.0,
 		"done": false, "hands": [] as Array[PuppetHand], "world": world, "data": {}, "lead": _lead_for(world),
-		"followers": []}
+		"followers": [], "entry": _open_entry(tag, channel, &""), "failed": ""}
 
 
-func _start_main(action: StringName, args: Dictionary) -> void:
-	var beats: Array[Dictionary]
+## Beats `action` would play now (pure: no side effect; WORK = the engagement on the main channel).
+func _beats_for(action: StringName, args: Dictionary) -> Array[Dictionary]:
 	if action == ActionScript.WORK:
-		beats = _engage_work(args)
-	elif action == ActionScript.EDIT_FILE:
-		beats = ActionScript.edit_beats(not artifact.is_present(), bool(args.get("keep", false)),
+		var has_world := args.has("world") and worlds.has_world(StringName(args["world"]))
+		return _work_engage_beats(StringName(args["world"]) if has_world else work_world)
+	if action == ActionScript.EDIT_FILE:
+		return ActionScript.edit_beats(not artifact.is_present(), bool(args.get("keep", false)),
 			bool(args.get("router", false)))
-	else:
-		beats = ActionScript.beats(action, args)
-	_main = _new_run(action, args, beats)
+	return ActionScript.beats(action, args)
+
+
+func _start_main(tag: Dictionary, args: Dictionary) -> void:
+	var action: StringName = tag["action"]
+	if action == ActionScript.WORK:
+		_engage_work(tag, args)
+	var beats := _beats_for(action, args)
+	_main = _new_run(tag, args, beats, &"main")
 	if action == ActionScript.EDIT_FILE or action == ActionScript.GRAB_FILE:
 		_applied = false
 	if action in [ActionScript.SUMMON_HAND, ActionScript.SUMMON_HANDS] and not args.has("role"):
 		_adopt_idle_hands(_main)
 	agenda.interrupt()
-	action_started.emit(action)
+	_begin_tag(tag, &"main")
 
 
-## WORK on the main channel: start / switch / resume the task, then a short engagement (she
-## looks at the world and turns to it) so action_finished(WORK) comes once she is at it.
-func _engage_work(args: Dictionary) -> Array[Dictionary]:
+## The next queued foreground action starts (if any).
+func _next_main() -> void:
+	if _main.is_empty() and not _queue.is_empty():
+		var q: Dictionary = _queue.pop_front()
+		_start_main(q["tag"], q["args"])
+
+
+func _next_overlay() -> void:
+	if _overlay.is_empty() and not _overlay_queue.is_empty():
+		var oq: Dictionary = _overlay_queue.pop_front()
+		_start_overlay(oq["tag"], oq["args"])
+
+
+## WORK on the main channel: start / switch / resume the task (the task belongs to WORK's request);
+## the engagement beats (_work_engage_beats) end WORK once she is at it.
+func _engage_work(tag: Dictionary, args: Dictionary) -> void:
 	var has_world := args.has("world") and worlds.has_world(StringName(args["world"]))
 	var world: StringName = StringName(args["world"]) if has_world else work_world
 	if _task.is_empty():
 		if has_world or not worlds.site(world).build.is_stable():
-			_start_task(world, args)
+			_start_task(world, args, tag)
 	elif StringName(_task["world"]) != world and has_world:
 		_switch_task(world)
+
+
+## She looks at the world and turns to it, so WORK finishes once she is at it.
+func _work_engage_beats(world: StringName) -> Array[Dictionary]:
 	var B := ActionScript
 	return [B.b(0.0, &"gaze", {"at": &"world", "world": world, "secs": 1.0}),
 		B.b(0.05, &"turn", {"at": &"world", "world": world, "amount": 0.4, "secs": 1.0}),
@@ -508,8 +668,9 @@ func _engage_work(args: Dictionary) -> Array[Dictionary]:
 
 
 ## Starts the work on `world` (task channel). args: fail (planned failure), events (stages come
-## from the roteiro), point_first (she points at it first).
-func _start_task(world: StringName, args: Dictionary) -> void:
+## from the roteiro), point_first (she points at it first). `tag`: the request that started it
+## (WORK's), else her own.
+func _start_task(world: StringName, args: Dictionary, tag := {}) -> void:
 	if not _task.is_empty():
 		if StringName(_task["world"]) == world:
 			if args.get("events", false):
@@ -528,28 +689,49 @@ func _start_task(world: StringName, args: Dictionary) -> void:
 		beats = _point_then_work(world)
 	else:
 		beats = [ActionScript.b(0.0, &"next_stage")]
-	_task = _new_run(ActionScript.WORK, {"world": world}, beats)
+	var t: Dictionary = tag if not tag.is_empty() else _tag(ActionScript.WORK, {})
+	_task = _new_run(t, {"world": world}, beats, &"task")
 	_task["data"]["fail"] = bool(args.get("fail", false))
 	_task["data"]["events"] = bool(args.get("events", false))
 	mind.begin_task(&"build", world)
 	_adopt_idle_hands(_task)
 
 
-func _start_overlay(action: StringName, args: Dictionary) -> void:
-	_start_overlay_beats(action, args, ActionScript.beats(action, args))
+func _start_overlay(tag: Dictionary, args: Dictionary) -> void:
+	_start_overlay_beats(tag, args, ActionScript.beats(tag["action"], args))
 
 
-func _start_overlay_beats(action: StringName, args: Dictionary, beats: Array[Dictionary]) -> void:
-	if not _overlay.is_empty():
-		_finish_run(_overlay, SRC_OVERLAY)
-	_overlay = _new_run(action, args, beats)
+func _start_overlay_beats(tag: Dictionary, args: Dictionary, beats: Array[Dictionary]) -> void:
+	# (A terminal may make the interaction system perform synchronously — and start another
+	# overlay: that one is preempted too, with its own terminal.)
+	while not _overlay.is_empty():
+		_end(SRC_OVERLAY, PH_CANCELLED, "preempted")
+	_overlay = _new_run(tag, args, beats, &"overlay")
 	_gaze_beat[SRC_OVERLAY] = {}
 	_turn_beat[SRC_OVERLAY] = {}
-	if action in ActionScript.VOCABULARY:
-		action_started.emit(action)
+	_begin_tag(tag, &"overlay")
 
 
-func _finish_run(run: Dictionary, src: int) -> void:
+## Ends the run on channel `src`: the channel is emptied FIRST and its body channels cleared, THEN
+## the terminal is emitted — the interaction system may call perform() synchronously from it (the
+## new action finds the channel free, or queues normally). The caller moves the queue on.
+func _end(src: int, phase := PH_FINISHED, reason := "") -> void:
+	var run: Dictionary = _task if src == SRC_TASK else (_main if src == SRC_MAIN else _overlay)
+	if run.is_empty():
+		return
+	match src:
+		SRC_TASK:
+			_task = {}
+		SRC_MAIN:
+			_main = {}
+		_:
+			_overlay = {}
+	_finish_run(run, src, phase, reason)
+
+
+## Ends a run: its channels are cleared and its owner (and the looks that joined it) get their
+## terminal phase — `finished`, or `failed` when a critical wait timed out, or the given one.
+func _finish_run(run: Dictionary, src: int, phase := PH_FINISHED, reason := "") -> void:
 	if src == SRC_TASK:
 		mind.end_task(false)
 		for s in worlds.sites.values():
@@ -558,12 +740,175 @@ func _finish_run(run: Dictionary, src: int) -> void:
 	_turn_beat[src] = {}
 	_gaze_beat[src] = {}
 	_arm_specs[src] = [{}, {}]
-	# The task is a background channel (WORK's perform got its own finished signal); internal
-	# overlays (the self-reaction) are not actions either.
-	if src != SRC_TASK and run["action"] in ActionScript.VOCABULARY:
-		action_finished.emit(run["action"])
-	for f: StringName in run.get("followers", []):
-		action_finished.emit(f)
+	var ph := phase
+	var why := reason
+	if ph == PH_FINISHED and String(run.get("failed", "")) != "":
+		ph = PH_FAILED
+		why = String(run["failed"])
+	_close_entry(run["entry"], ph)
+	# The task is a background channel (WORK's perform got its own terminal); internal overlays
+	# (perception, the self-reaction) are not actions either (_terminal ignores them).
+	if src != SRC_TASK:
+		_terminal(run["tag"], ph, why)
+	for f: Dictionary in run.get("followers", []):
+		_terminal(f, ph, why)
+
+
+# ================================================================== protocol & causality
+
+
+## Correlation tag of one perform: {action, request_id, step, ended, entry}.
+func _tag(action: StringName, args: Dictionary) -> Dictionary:
+	return {"action": action, "request_id": maxi(int(args.get("request_id", 0)), 0), "step": int(args.get("step", 0)),
+		"ended": false, "entry": {}}
+
+
+func _emit_phase(tag: Dictionary, phase: StringName, info := {}) -> void:
+	if not tag["action"] in ActionScript.VOCABULARY:
+		return
+	var i := info.duplicate()
+	i["step"] = tag["step"]
+	action_event.emit(int(tag["request_id"]), tag["action"], phase, i)
+
+
+## The action starts now (channel: main, overlay or follower — a look that joins her reaction,
+## already under way: its eyes are moving, so its anticipation is now).
+func _begin_tag(tag: Dictionary, channel: StringName) -> void:
+	if channel == &"follower":
+		tag["entry"] = _open_entry(tag, channel, &"")
+		_stamp_entry(tag["entry"], &"anticipation")
+	_emit_phase(tag, PH_STARTED, {"channel": channel})
+	if tag["action"] in ActionScript.VOCABULARY:
+		action_started.emit(tag["action"])
+
+
+## Exactly one terminal per accepted perform (idempotent).
+func _terminal(tag: Dictionary, phase: StringName, reason: String) -> void:
+	if tag.get("ended", false):
+		return
+	tag["ended"] = true
+	_close_entry(tag["entry"], phase)
+	if not tag["action"] in ActionScript.VOCABULARY:
+		return
+	var info := {}
+	if reason != "":
+		info["reason"] = reason
+	_emit_phase(tag, phase, info)
+	action_finished.emit(tag["action"])
+
+
+func _open_entry(tag: Dictionary, channel: StringName, stage: StringName) -> Dictionary:
+	var e := {"request_id": int(tag["request_id"]), "step": int(tag["step"]), "action": tag["action"],
+		"channel": channel, "stage": stage, "phase": &"", "t": {&"intent": snappedf(_clock, 0.001)}}
+	_timeline.append(e)
+	if _timeline.size() > TIMELINE_MAX:
+		_timeline.pop_front()
+	return e
+
+
+func _close_entry(e: Dictionary, phase: StringName) -> void:
+	if e.is_empty() or e["phase"] != &"":
+		return
+	_stamp_entry(e, &"result")
+	e["phase"] = phase
+
+
+## Stamps causal stage `stage` of entry `e` (first time only, while the entry is open).
+func _stamp_entry(e: Dictionary, stage: StringName) -> bool:
+	if e.is_empty() or e["phase"] != &"" or (e["t"] as Dictionary).has(stage):
+		return false
+	e["t"][stage] = snappedf(_clock, 0.001)
+	return true
+
+
+## Stamps a stage of `run` and reports its progress to the owner of the action.
+func _stamp(run: Dictionary, stage: StringName) -> void:
+	if not _stamp_entry(run["entry"], stage):
+		return
+	var tag: Dictionary = run["tag"]
+	if tag.get("ended", false) or run["entry"]["channel"] == &"task":
+		return
+	_emit_phase(tag, PH_PROGRESS, {"t": snappedf(_run_progress(run), 0.01), "stage": stage})
+
+
+## Causal stage a beat op marks (anticipation, gesture, thread) or &"".
+static func _op_stage(bt: Dictionary) -> StringName:
+	match StringName(bt["op"]):
+		&"gaze", &"breath":
+			return &"anticipation"
+		&"arm":
+			var g: StringName = bt.get("g", &"rest")
+			if g == Gestures.WINDUP:
+				return &"anticipation"
+			return &"" if g == &"rest" or g == Gestures.FREEZE else &"gesture"
+		&"turn", &"pose", &"wave":
+			return &"gesture"
+		&"cast", &"pull":
+			return &"thread"
+	return &""
+
+
+## `hand`: the first frame one of the run's hands answers the pull this run gave it.
+func _stamp_hands(run: Dictionary) -> void:
+	if run.is_empty() or not run["data"].get("pulled", false) or (run["entry"]["t"] as Dictionary).has(&"hand"):
+		return
+	for h: PuppetHand in run["hands"]:
+		# Moving under the pull, or holding its place with it (already there: it works now).
+		if is_instance_valid(h) and h.active and h.pull > HandDynamics.SLACK \
+				and (h.speed() > 0.05 or (h.presence.y > 0.6 and h.error() < WORK_DIST)):
+			_stamp(run, &"hand")
+			return
+
+
+## 0..1 progress of a run through its beats.
+func _run_progress(run: Dictionary) -> float:
+	var end := _beats_end(run["beats"])
+	return clampf(float(run["t"]) / end, 0.0, 1.0) if end > 0.0 else 0.0
+
+
+static func _beats_end(beats: Array) -> float:
+	var end := 0.0
+	for x: Dictionary in beats:
+		end = maxf(end, float(x["t"]))
+	return end
+
+
+## Real seconds `beats` take from beat time `from` at her current tempo, plus the expected holds of
+## their waits not passed yet (`waited` = seconds already spent in the current wait).
+func _beats_estimate(beats: Array, from: float, waited: float) -> float:
+	var end := _beats_end(beats)
+	var tempo := maxf(mind.tempo(), 0.1)
+	var holds := 0.0
+	for x: Dictionary in beats:
+		if x["op"] != &"wait" or float(x["t"]) < from:
+			continue
+		var exp_s := float(WAIT_ESTIMATE.get(StringName(x.get("until", &"")), 0.5)) / sqrt(tempo)
+		holds += minf(exp_s, float(x.get("timeout", 5.0)))
+	return maxf(end - from, 0.0) / tempo + maxf(holds - waited, 0.0)
+
+
+func _run_remaining(run: Dictionary) -> float:
+	if run.is_empty():
+		return 0.0
+	return _beats_estimate(run["beats"], float(run["t"]), float(run["wait"]))
+
+
+## Dissolves what belonged to a cancelled request: the hands it summoned (their threads relax)
+## and the configuration artifact it called.
+func _release_request(request_id: int) -> void:
+	for h in hands.active_hands():
+		if int(h.get_meta(&"request_id", -1)) != request_id or h.goal_presence <= 0.0:
+			continue
+		threads.relax_hand(h)
+		hands.release(h)
+		for run: Dictionary in [_task, _main, _overlay]:
+			if run.is_empty():
+				continue
+			(run["hands"] as Array).erase(h)
+			var places: Dictionary = run["data"].get("places", {})
+			places.erase(h)
+	if artifact.is_present() and int(artifact.get_meta(&"request_id", -1)) == request_id:
+		artifact.vanish()
 
 
 func _step_run(run: Dictionary, dt: float, src: int) -> void:
@@ -584,6 +929,9 @@ func _step_run(run: Dictionary, dt: float, src: int) -> void:
 				if float(run["wait"]) < float(bt.get("timeout", 5.0)):
 					run["t"] = float(bt["t"])
 					break
+				# A wait the action cannot do without timed out: it goes on, and ends as failed.
+				if bool(bt.get("critical", false)) and String(run["failed"]) == "":
+					run["failed"] = "timeout:%s" % String(bt.get("until", &""))
 			run["wait"] = 0.0
 			run["next"] = int(run["next"]) + 1
 			continue
@@ -722,6 +1070,16 @@ func _wait_ok(run: Dictionary, bt: Dictionary) -> bool:
 func _op(run: Dictionary, bt: Dictionary, src: int) -> void:
 	var op: StringName = bt["op"]
 	var world: StringName = bt.get("world", run["world"])
+	if op == &"stage" and src == SRC_TASK:
+		# Each stage of the work is its own causal sentence (a new timeline entry).
+		_close_entry(run["entry"], PH_FINISHED)
+		run["entry"] = _open_entry(run["tag"], &"task", StringName(WorldBuild.Stage.keys()[bt.get("s", 0)]))
+		run["data"].erase("pulled")
+	var stage := _op_stage(bt)
+	if stage != &"":
+		_stamp(run, stage)
+	if op == &"pull":
+		run["data"]["pulled"] = true
 	match op:
 		&"done":
 			run["done"] = true
@@ -870,6 +1228,7 @@ func _op_summon(run: Dictionary, bt: Dictionary, world: StringName) -> void:
 		var face := (body.chest_position() - at).normalized()
 		h.summon(at, basis.y, -face, &"relaxed")
 		h.set_meta(&"role", role)
+		h.set_meta(&"request_id", int(run["tag"]["request_id"]))
 		list.append(h)
 		added += 1
 		have += 1
@@ -1015,6 +1374,7 @@ func _op_artifact(run: Dictionary, state: StringName) -> void:
 		&"appear":
 			var spot := _target(run, &"file_spot", run["world"])
 			artifact.appear(spot, (_user_point() - spot).normalized())
+			artifact.set_meta(&"request_id", int(run["tag"]["request_id"]))
 			_applied = false
 		&"held":
 			var holder: PuppetHand = null
@@ -1025,8 +1385,10 @@ func _op_artifact(run: Dictionary, state: StringName) -> void:
 				holder = (run["hands"] as Array)[0]
 			if holder != null:
 				artifact.hold(holder)
+				_stamp(run, &"matter")
 		&"edit":
 			artifact.begin_edit()
+			_stamp(run, &"matter")
 		&"valid":
 			artifact.validate()
 		&"reject":
@@ -1169,6 +1531,8 @@ func _drive_work(dt: float) -> void:
 	if agenda.current == MicroAgenda.HESITATE:
 		k *= 0.2
 	site.via = nearest.global_position + nearest.palm_s.y * site.radius * 0.35 if nearest != null else Vector3.INF
+	if k > 0.05:
+		_stamp(_task, &"matter")
 	if data.has("work"):
 		site.build.work(float(data["work"]["rate"]) * dt * k)
 	if data.has("repair"):
@@ -1238,6 +1602,7 @@ func _compose_body() -> void:
 	var m: int = mind.mood
 	var stiff := mind.rigidity()
 	body.set_character(stiff, mind.tempo())
+	body.set_mood(m)
 	var micro := agenda.current
 	var mp := agenda.progress()
 	# Posture: mood + beats + micro-behaviour.

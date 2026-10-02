@@ -81,6 +81,10 @@ var float_amount := 1.0
 ## 0 = composed, 1 = lost composure (MikuMind.rigidity()).
 var stiff := 0.0
 var tempo := 1.0
+## Native torso (migration STEP 1, MikuBody layer `torso`): the AnimationTree (MikuDirector)
+## poses hips, spine, chest, neck, head and clavicles before step(); this class reads that pose
+## and only adds the gaze chain to it (turn, float, arms, fingers and skirt stay here).
+var torso_native := false
 ## Seconds of motion time (ambient float).
 var time := 0.0
 
@@ -286,17 +290,20 @@ func _step_breath(dt: float, k: float) -> void:
 
 
 func _step_posture(dt: float, k: float) -> void:
-	var pc := POSTURE_CALM.lerp(POSTURE_STIFF, k)
-	var f := pc.x * tempo
-	for s in _posture:
-		s.set_params(f, pc.y, pc.z)
-	_lean.step(lean, dt)
-	_lean_side.step(lean_side, dt)
-	_chest_lift.step(chest_lift, dt)
-	_sh_raise.step(shoulder_raise, dt)
-	_sh_fwd.step(shoulder_fwd, dt)
-	_tilt.step(head_tilt, dt)
-	_nod.step(head_nod, dt)
+	# Native torso: the director owns the posture springs (MikuDirector); only turn and hip drift
+	# stay here.
+	if not torso_native:
+		var pc := POSTURE_CALM.lerp(POSTURE_STIFF, k)
+		var f := pc.x * tempo
+		for s in _posture:
+			s.set_params(f, pc.y, pc.z)
+		_lean.step(lean, dt)
+		_lean_side.step(lean_side, dt)
+		_chest_lift.step(chest_lift, dt)
+		_sh_raise.step(shoulder_raise, dt)
+		_sh_fwd.step(shoulder_fwd, dt)
+		_tilt.step(head_tilt, dt)
+		_nod.step(head_nod, dt)
 	var t := TURN.lerp(TURN_STIFF, k)
 	_turn.set_params(t.x * sqrt(tempo), t.y, t.z)
 	_turn.step(body_turn, dt)
@@ -353,20 +360,32 @@ func _compose(dt: float) -> void:
 	var roll := _hip.y * HIP_ROLL
 	var root := b_root if b_root >= 0 else b_hips
 	rig.set_rel(root, LimbIK.euler(0.0, _turn.y, 0.0))
-	if b_hips >= 0 and b_hips != root:
-		rig.set_rel(b_hips, LimbIK.euler(0.0, 0.0, roll))
-	elif b_hips >= 0:
-		rig.add_rel(b_hips, LimbIK.euler(0.0, 0.0, roll))
 	var ch_y := _chest_y.y * SHARE_CHEST
 	var ch_p := _chest_p.y * SHARE_CHEST
-	rig.set_rel(b_spine, LimbIK.euler(_lean.y * 0.45 - _chest_lift.y * 0.25 - breath * BREATH_CHEST * 0.3,
-		ch_y * 0.4, -roll * 0.7 + _lean_side.y * 0.5))
-	rig.set_rel(b_chest, LimbIK.euler(_lean.y * 0.4 - _chest_lift.y * 0.45 - breath * BREATH_CHEST + ch_p,
-		ch_y * 0.6, -roll * 0.45 + _lean_side.y * 0.5))
-	# The neck keeps the head over the body while she leans (a dancer's carriage).
-	rig.set_rel(b_neck, LimbIK.euler(_neck_p.y * SHARE_NECK - _lean.y * 0.35 + _chest_lift.y * 0.3,
-		_neck_y.y * SHARE_NECK, roll * 0.3))
-	rig.set_rel(b_head, LimbIK.euler(_head_p.y * SHARE_HEAD + _nod.y, _head_y.y * SHARE_HEAD, _tilt.y))
+	if torso_native:
+		# The AnimationTree posed the torso (mood, composure, posture, weight, breath) this frame;
+		# the gaze chain (still this class's, migration step 2) turns it from there.
+		if b_hips >= 0 and b_hips != root:
+			rig.set_rel(b_hips, rig.rel_from_skeleton(b_hips))
+		elif b_hips >= 0:
+			rig.add_rel(b_hips, rig.rel_from_skeleton(b_hips))
+		_torso(b_spine, 0.0, ch_y * 0.4)
+		_torso(b_chest, ch_p, ch_y * 0.6)
+		_torso(b_neck, _neck_p.y * SHARE_NECK, _neck_y.y * SHARE_NECK)
+		_torso(b_head, _head_p.y * SHARE_HEAD, _head_y.y * SHARE_HEAD)
+	else:
+		if b_hips >= 0 and b_hips != root:
+			rig.set_rel(b_hips, LimbIK.euler(0.0, 0.0, roll))
+		elif b_hips >= 0:
+			rig.add_rel(b_hips, LimbIK.euler(0.0, 0.0, roll))
+		rig.set_rel(b_spine, LimbIK.euler(_lean.y * 0.45 - _chest_lift.y * 0.25 - breath * BREATH_CHEST * 0.3,
+			ch_y * 0.4, -roll * 0.7 + _lean_side.y * 0.5))
+		rig.set_rel(b_chest, LimbIK.euler(_lean.y * 0.4 - _chest_lift.y * 0.45 - breath * BREATH_CHEST + ch_p,
+			ch_y * 0.6, -roll * 0.45 + _lean_side.y * 0.5))
+		# The neck keeps the head over the body while she leans (a dancer's carriage).
+		rig.set_rel(b_neck, LimbIK.euler(_neck_p.y * SHARE_NECK - _lean.y * 0.35 + _chest_lift.y * 0.3,
+			_neck_y.y * SHARE_NECK, roll * 0.3))
+		rig.set_rel(b_head, LimbIK.euler(_head_p.y * SHARE_HEAD + _nod.y, _head_y.y * SHARE_HEAD, _tilt.y))
 	# Eyes take what the chain does not give yet (only rigs with eye bones show it).
 	var given_y := ch_y + _neck_y.y * SHARE_NECK + _head_y.y * SHARE_HEAD
 	var given_p := ch_p + _neck_p.y * SHARE_NECK + _head_p.y * SHARE_HEAD
@@ -375,8 +394,12 @@ func _compose(dt: float) -> void:
 			rig.set_rel(b_eye[s], LimbIK.euler(clampf(_eye_p.y - given_p, -0.4, 0.4),
 				clampf(_eye_y.y - given_y, -0.6, 0.6), 0.0))
 		var sx := 1.0 if s == 0 else -1.0
-		var raise := _sh_raise.y * 0.2 + breath * BREATH_SHOULDER
-		rig.set_rel(b_clav[s], LimbIK.euler(0.0, -sx * _sh_fwd.y * 0.25, sx * raise))
+		if torso_native:
+			if b_clav[s] >= 0:
+				rig.set_rel(b_clav[s], rig.rel_from_skeleton(b_clav[s]))
+		else:
+			var raise := _sh_raise.y * 0.2 + breath * BREATH_SHOULDER
+			rig.set_rel(b_clav[s], LimbIK.euler(0.0, -sx * _sh_fwd.y * 0.25, sx * raise))
 		var a := arms[s]
 		fingers[s].apply(_finger_curls(a), a.spread.y)
 	# Skirt: pendulums driven by the hips' motion and the body's turn, cascading down.
@@ -391,6 +414,12 @@ func _compose(dt: float) -> void:
 			0.0, _skirt_z[i].y * (1.0 if i == 0 else 0.6)))
 		prev_x = _skirt_x[i].y * SKIRT_CASCADE
 		prev_z = _skirt_z[i].y * SKIRT_CASCADE
+
+
+## Native torso: the tree's pose of `b` with the gaze stage's pitch/yaw over it.
+func _torso(b: int, pitch: float, yaw: float) -> void:
+	if b >= 0:
+		rig.set_rel(b, LimbIK.euler(pitch, yaw, 0.0) * rig.rel_from_skeleton(b))
 
 
 func _finger_curls(a: ArmChannel) -> PackedFloat32Array:

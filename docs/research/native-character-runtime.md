@@ -203,6 +203,13 @@ CPU headless (4 vCPU compartilhadas com outros workers do Godot, N=16 rigs, 120 
 8. `add_blend_point` sem nome está depreciado (aviso) (P-22).
 9. Em todas as execuções headless do 4.7.2, ao sair aparecem avisos de RID/ObjectDB "leaked at exit". O mesmo acontece no
    projeto; não é do spike.
+10. (rodada 2, STEP 1) `AnimationNodeAdd2.add_amount` começa em **0**: um ramo aditivo de peso cheio fica mudo,
+   sem aviso, até ser aberto (`= 1`). Achado na 1ª tomada OLD vs NEW (peso, tensão e one-shots sem efeito).
+11. (rodada 2, STEP 1) `AnimationNodeStateMachinePlayback.travel()` pedido **durante** um xfade não o
+   interrompe: o novo xfade só começa quando o atual termina (sonda: a→b de 1 s, `travel(c)` aos 0,5 s → b
+   completo em 1,0 s, depois b→c). Sem estalo, mas com atraso de até um xfade inteiro: a resposta imediata
+   precisa de uma camada contínua (o `BlendSpace1D` de compostura). `AnimationNodeTimeScale` acima da máquina
+   escala também os xfades (1 s a ×2 = 0,5 s): para xfades em segundos reais, o `TimeScale` vai dentro de cada estado.
 
 ## 6. Ligação com o rig do procedural-modeler
 
