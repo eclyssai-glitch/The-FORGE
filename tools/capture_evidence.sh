@@ -10,6 +10,9 @@
 # simulation; slower under software rendering) with the user tests injected as real input, so
 # its default time limit is 2400 s.
 # Style frames (GENESIS, 1920x1080, HUD hidden) have their own script: tools/style_frames.sh.
+# --inspect: DEVELOPMENT ONLY - the dev inspector (tools/inspector) writes <shot>.json (game state of
+# the same frame) next to every <shot>.png; those JSON files are then expected too
+# (docs/BUILD.md, "Inspector de desenvolvimento"; read them with tools/inspector/summarize.py).
 # Quality: HIGH unless --quality= is given (evidence judges the target profile — a desktop with a
 # discrete GPU; AUTO would pick LOW under Xvfb + llvmpipe); --quality=auto keeps the detection.
 # Each "[capture]" log line names the level used.
@@ -30,6 +33,7 @@ resolution="1600x900"
 list="CAPTURES"
 quality="high"
 game_args=()
+inspect=0
 for a in "$@"; do
   case "$a" in
     --scenario=genesis) list="CAPTURES_GENESIS"; game_args+=("$a") ;;
@@ -39,6 +43,7 @@ for a in "$@"; do
     --resolution=*) resolution="${a#--resolution=}" ;;
     --capture-only=*) only="${a#--capture-only=}"; game_args+=("$a") ;;
     --quality=*) quality="${a#--quality=}" ;;
+    --inspect|--inspect=*) inspect=1; game_args+=("$a") ;;
     *) game_args+=("$a") ;;
   esac
 done
@@ -54,7 +59,10 @@ mkdir -p "$dir"
 expected=()
 while IFS= read -r name; do
   [ -n "$name" ] || continue
-  if [ -z "$only" ] || [[ "$name" == "$only"* ]]; then expected+=("$dir/$name.png"); fi
+  if [ -z "$only" ] || [[ "$name" == "$only"* ]]; then
+    expected+=("$dir/$name.png")
+    [ "$inspect" -eq 0 ] || expected+=("$dir/$name.json")
+  fi
 done < <(awk -v head="const ${list}: Array = [" '$0 == head {f=1; next} f && /^\]/{exit} f' src/core/automation.gd \
   | sed -nE 's/^[[:space:]]*\["([^"]+)".*/\1/p')
 if [ "${#expected[@]}" -eq 0 ]; then
@@ -94,5 +102,5 @@ case "$PROC_OUTCOME" in
   timeout) echo "capture_evidence: forced exit after captures (total timeout ${timeout_s}s)." >&2 ;;
   *) [ "$PROC_STATUS" -eq 0 ] || echo "capture_evidence: engine exited with status $PROC_STATUS after all captures." >&2 ;;
 esac
-echo "capture_evidence: ${#expected[@]}/${#expected[@]} captures in $dir (${resolution})"
+echo "capture_evidence: ${#expected[@]}/${#expected[@]} files in $dir (${resolution})$([ "$inspect" -eq 0 ] || echo ', PNG + inspector JSON')"
 ls -la "${expected[@]}"

@@ -19,6 +19,9 @@
 #   --until=<s>          stop after <s> tour seconds (the demo starts at 0.5 s); output *_preview
 #   --quality=<level>    low|medium|high|ultra (default high)
 #   --crf=<n>            x264 quality (default 18)
+#   --inspect-every=<s>  DEVELOPMENT ONLY: dev inspector JSON dumps every <s> s of game time into
+#                        <base>_inspect/ (no PNG: the video has the frames; `motion_time` in each
+#                        dump = video time). docs/BUILD.md, "Inspector de desenvolvimento".
 #   --timeout=<s>        total limit (default LIVING_TIMEOUT or 9000: software rendering takes
 #                        ~1 s or more per 1080p frame; the full take is ~4350 frames)
 # Output: build/review/living_<W>x<H>_hud-<on|off>[_preview].{avi,mp4,log}.
@@ -33,6 +36,7 @@ until_s=""
 hud="on"
 quality="high"
 crf="18"
+inspect_every=""
 timeout_s="${LIVING_TIMEOUT:-9000}"
 grace_s="${LIVING_GRACE:-120}"
 for a in "$@"; do
@@ -42,6 +46,7 @@ for a in "$@"; do
     --hud=*) hud="${a#--hud=}" ;;
     --quality=*) quality="${a#--quality=}" ;;
     --crf=*) crf="${a#--crf=}" ;;
+    --inspect-every=*) inspect_every="${a#--inspect-every=}" ;;
     --timeout=*) timeout_s="${a#--timeout=}" ;;
     *) echo "record_living: unknown option '$a'." >&2; exit 2 ;;
   esac
@@ -56,6 +61,9 @@ case "$hud" in on|off) ;; *) echo "record_living: --hud must be on or off, got '
 case "$quality" in low|medium|high|ultra) ;; *)
   echo "record_living: --quality must be low|medium|high|ultra, got '$quality'." >&2; exit 2 ;; esac
 [[ "$crf" =~ ^[0-9]+$ ]] || { echo "record_living: --crf must be an integer, got '$crf'." >&2; exit 2; }
+if [ -n "$inspect_every" ] && ! [[ "$inspect_every" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "record_living: --inspect-every must be seconds, got '$inspect_every'." >&2; exit 2
+fi
 for tool in ffmpeg ffprobe; do
   command -v "$tool" >/dev/null || { echo "record_living: $tool not found." >&2; exit 127; }
 done
@@ -69,6 +77,10 @@ if [ -n "$until_s" ]; then
   tour_args+=("--living-until=$until_s")
 fi
 avi="$base.avi"; mp4="$base.mp4"; log="$base.log"
+if [ -n "$inspect_every" ]; then
+  rm -rf "${base}_inspect"
+  tour_args+=("--inspect=${base}_inspect" "--inspect-every=$inspect_every" "--inspect-png=off")
+fi
 rm -f "$avi" "$mp4"
 
 tour_done() { grep -q "^\[living\] done" "$log"; }
@@ -144,5 +156,6 @@ printf 'record_living: %s — %.2f s, %s frames, %.1f MB\n' "$mp4" "$duration" "
 echo "record_living: video $vinfo · audio $ainfo"
 echo "record_living: audio ebur128 $loud"
 grep -E "^\[living\] cue " "$log" | sed 's/^/record_living: /' || true
+[ -z "$inspect_every" ] || echo "record_living: inspector $(find "${base}_inspect" -name '*.json' 2>/dev/null | wc -l) dumps in ${base}_inspect/"
 grep -qE "^\[living\] done .*config_restored=true" "$log" \
   || echo "record_living: WARNING - the player's MIKU configuration may not have been restored (see $log)." >&2
