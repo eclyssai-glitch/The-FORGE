@@ -1,0 +1,23 @@
+{
+  "format": "korium-inspect/1",
+  "frame": 200,
+  "sections": {
+    "Miku": {
+      "clock": 30.0,
+      "causality": [
+        {"request_id": 0, "step": 0, "action": "WORK", "channel": "task", "stage": "GATHER", "phase": "finished",
+         "t": {"intent": 12.0, "anticipation": 12.0, "gesture": 12.1, "thread": 12.4, "hand": 12.9, "matter": 13.5, "result": 16.0}},
+        {"request_id": 3, "step": 2, "action": "SUMMON_HANDS", "channel": "main", "stage": "", "phase": "finished",
+         "t": {"intent": 18.0, "anticipation": 18.0, "gesture": 18.5, "thread": 18.62, "hand": 19.2, "result": 22.4}},
+        {"request_id": 3, "step": 0, "action": "LOOK_AT_USER", "channel": "follower", "stage": "", "phase": "finished",
+         "t": {"intent": 17.5, "anticipation": 17.5, "result": 17.9}},
+        {"request_id": 0, "step": 0, "action": "ACKNOWLEDGE", "channel": "overlay", "stage": "", "phase": "finished",
+         "t": {"intent": 24.0, "anticipation": 24.0, "gesture": 24.3, "result": 25.1}},
+        {"request_id": 4, "step": 3, "action": "EDIT_FILE", "channel": "main", "stage": "", "phase": "cancelled",
+         "t": {"intent": 26.0, "anticipation": 26.0, "result": 26.4}},
+        {"request_id": 4, "step": 4, "action": "DISCARD", "channel": "main", "stage": "", "phase": "",
+         "t": {"intent": 29.5}}
+      ]
+    }
+  }
+}

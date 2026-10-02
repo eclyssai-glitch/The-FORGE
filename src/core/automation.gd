@@ -128,9 +128,23 @@ const UI_BADGE_WAIT := 1.5
 const INSPECTOR_PATH := "res://tools/inspector/dev_inspector.gd"
 const INSPECT_FLAGS: Array[String] = ["inspect", "inspect-every"]
 
+## LIVING smoke, --causality-dir=<dir> (docs/BUILD.md, "Gate de causalidade"): MIKU's causal
+## timeline (inspect_state().causality + clock, the last Miku.TIMELINE_MAX executions) is written
+## every CAUSALITY_SAMPLE_SECONDS real seconds as `causality_<n>_f<frame>.json` into <dir> (same
+## shape as the dev inspector's dumps: sections.Miku.{clock, causality}), from the start of the
+## roteiro to the end of the user requests (+ one last sample right before the reset), so no
+## execution leaves the window unseen. tools/smoke_test.sh passes the flag and checks the samples
+## with tools/inspector/causality.py. Shipped code (works with --pack); nothing else uses it.
+const CAUSALITY_FORMAT := "korium-causality/1"
+const CAUSALITY_SAMPLE_SECONDS := 0.5
+
 var options: Dictionary = {}
 ## The dev inspector node (child of this one) or null — always null without an --inspect* flag.
 var inspector: Node = null
+
+var _causality_dir := ""
+var _causality_files := 0
+var _causality_next_msec := 0
 
 
 func _ready() -> void:
@@ -496,6 +510,7 @@ func _run_smoke_living() -> void:
 	print("smoke_deadline_seconds=%d" % ceili(float(budget["deadline"])))
 	print("smoke_budget_seconds=%d" % ceili(float(budget["total"])))
 	Simulation.event_emitted.connect(func(e: SimEvent) -> void: received.append(e.id))
+	_causality_begin(String(options.get("causality-dir", "")))
 	Session.set_mode(Session.Mode.FORGE)
 	Simulation.set_speed(SMOKE_SPEED)
 	Simulation.start()
@@ -534,6 +549,7 @@ func _run_smoke_living() -> void:
 	ok = ok and modules_ok and audio_ok and received.size() == expected and Simulation.state.is_complete() \
 		and Mission.completed_count(mission) == mission.size()
 	ok = await _smoke_living_requests(world, lines) and ok
+	_causality_end(lines)
 	# Pause holds; seek is refused; reset recomposes.
 	Simulation.reset()
 	await get_tree().process_frame
@@ -567,6 +583,60 @@ func _run_smoke_living() -> void:
 	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
 	_write_report(lines)
 	_quit(0 if ok else 1)
+
+
+## Starts sampling MIKU's causal timeline into `dir` (absolute or user://; "" = off). Old
+## `causality_*.json` files of that directory are removed first (no stale samples).
+func _causality_begin(dir: String) -> void:
+	if dir == "":
+		return
+	_causality_dir = ProjectSettings.globalize_path(dir) if dir.begins_with("user://") or dir.begins_with("res://") \
+		else dir
+	DirAccess.make_dir_recursive_absolute(_causality_dir)
+	for f in DirAccess.get_files_at(_causality_dir):
+		if f.begins_with("causality_") and f.ends_with(".json"):
+			DirAccess.remove_absolute(_causality_dir.path_join(f))
+	_causality_files = 0
+	_causality_next_msec = 0
+	get_tree().process_frame.connect(_causality_tick)
+
+
+func _causality_tick() -> void:
+	if Time.get_ticks_msec() >= _causality_next_msec:
+		_causality_next_msec = Time.get_ticks_msec() + int(CAUSALITY_SAMPLE_SECONDS * 1000.0)
+		_causality_sample("every")
+
+
+## Last sample (before the reset recomposes MIKU), stop, and the report line
+## `causality_samples=N dir=<dir>` (tools/smoke_test.sh runs the checker on <dir>).
+func _causality_end(lines: PackedStringArray) -> void:
+	if _causality_dir == "":
+		return
+	if get_tree().process_frame.is_connected(_causality_tick):
+		get_tree().process_frame.disconnect(_causality_tick)
+	_causality_sample("smoke_living_end")
+	lines.append("causality_samples=%d dir=%s" % [_causality_files, _causality_dir])
+
+
+## Writes one sample of MIKU's timeline (no-op without the Miku module).
+func _causality_sample(trigger: String) -> void:
+	var world := _world()
+	var miku: Node = (world.modules.get("Miku") as Node) if world else null
+	if miku == null or not miku.has_method(&"inspect_state"):
+		return
+	var st: Dictionary = miku.call(&"inspect_state")
+	_causality_files += 1
+	var frame := Engine.get_process_frames()
+	var data := {"format": CAUSALITY_FORMAT, "frame": frame, "sim_time": Simulation.time,
+		"context": {"trigger": trigger}, "sections": {"Miku": {"clock": st.get("clock", 0.0),
+			"causality": st.get("causality", [])}}}
+	var path := _causality_dir.path_join("causality_%04d_f%07d.json" % [_causality_files, frame])
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		push_warning("automation: cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())])
+		return
+	f.store_string(JSON.stringify(data, "", true) + "\n")
+	f.close()
 
 
 ## Derived budget of the LIVING smoke (see SMOKE_FIXED_MARGIN): {"roteiro", "roteiro_nominal", "plans",

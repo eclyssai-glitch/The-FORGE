@@ -13,6 +13,11 @@
 # --inspect: DEVELOPMENT ONLY - the dev inspector (tools/inspector) writes <shot>.json (game state of
 # the same frame) next to every <shot>.png; those JSON files are then expected too
 # (docs/BUILD.md, "Inspector de desenvolvimento"; read them with tools/inspector/summarize.py).
+# --causality[=require]: DEVELOPMENT ONLY, with --inspect (LIVING): after the captures, run the causality
+# gate tools/inspector/causality.py on this run's <shot>.json files (with --require when =require);
+# exit 1 on causality=FAIL (docs/BUILD.md, "Gate de causalidade"). The shots are seconds apart, so
+# executions between two shots can be missed (the checker warns about gaps); the dense proof is
+# tools/record_living.sh --inspect-every=1 --causality.
 # Quality: HIGH unless --quality= is given (evidence judges the target profile — a desktop with a
 # discrete GPU; AUTO would pick LOW under Xvfb + llvmpipe); --quality=auto keeps the detection.
 # Each "[capture]" log line names the level used.
@@ -34,6 +39,7 @@ list="CAPTURES"
 quality="high"
 game_args=()
 inspect=0
+causality=""
 for a in "$@"; do
   case "$a" in
     --scenario=genesis) list="CAPTURES_GENESIS"; game_args+=("$a") ;;
@@ -44,6 +50,8 @@ for a in "$@"; do
     --capture-only=*) only="${a#--capture-only=}"; game_args+=("$a") ;;
     --quality=*) quality="${a#--quality=}" ;;
     --inspect|--inspect=*) inspect=1; game_args+=("$a") ;;
+    --causality) causality="order" ;;
+    --causality=require) causality="require" ;;
     *) game_args+=("$a") ;;
   esac
 done
@@ -51,6 +59,10 @@ done
 game_args+=("--quality=${quality}")
 if ! [[ "$resolution" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
   echo "capture_evidence: --resolution must be WxH (e.g. 1280x720), got '$resolution'." >&2; exit 2
+fi
+if [ -n "$causality" ]; then
+  [ "$inspect" -eq 1 ] || { echo "capture_evidence: --causality needs --inspect." >&2; exit 2; }
+  command -v python3 >/dev/null || { echo "capture_evidence: --causality needs python3." >&2; exit 127; }
 fi
 mkdir -p "$dir"
 
@@ -104,3 +116,14 @@ case "$PROC_OUTCOME" in
 esac
 echo "capture_evidence: ${#expected[@]}/${#expected[@]} files in $dir (${resolution})$([ "$inspect" -eq 0 ] || echo ', PNG + inspector JSON')"
 ls -la "${expected[@]}"
+if [ -n "$causality" ]; then
+  jsons=()
+  for f in "${expected[@]}"; do [[ "$f" == *.json ]] && jsons+=("$f"); done
+  caus_args=("${jsons[@]}")
+  [ "$causality" = "require" ] && caus_args=(--require "${caus_args[@]}")
+  set +e
+  python3 tools/inspector/causality.py "${caus_args[@]}"
+  caus_status=$?
+  set -e
+  [ "$caus_status" -eq 0 ] || { echo "capture_evidence: causality gate failed (status $caus_status)." >&2; exit 1; }
+fi

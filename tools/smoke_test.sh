@@ -22,6 +22,12 @@
 # SMOKE_ALLOW_MISSING_MODULES=1 (LIVING only) passes --allow-missing-modules: missing world modules
 # are reported as WARN and `modules=N/M` with N != M does not fail (only for branches where the
 # animator's LIVING modules do not exist yet).
+# Causality gate (LIVING, docs/BUILD.md "Gate de causalidade"): the game samples MIKU's causal
+# timeline into a temporary directory (--causality-dir, every 0.5 s from the roteiro to the end of
+# the requests) and reports `causality_samples=N`; this script then runs
+# tools/inspector/causality.py --require on the samples, prints its failing rows and summary and
+# the line `causality=PASS|FAIL n/m`, and FAILS on causality=FAIL. Without python3 the gate is
+# reported as `causality=SKIPPED` (WARN) and does not fail. SMOKE_CAUSALITY=0 turns it off.
 # Fails on: RESULT=FAIL, missing RESULT line (e.g. a script failed to load),
 # any SCRIPT ERROR / Parse Error in the log, a `modules=N/M` line with N != M (a world module
 # — entity, fx or camera script — failed to load), or the TIMEOUT (seconds, default 240) expiring.
@@ -49,8 +55,10 @@ GRACE="${SMOKE_GRACE:-15}"
 timeout -k 10 300 tools/godot.sh --headless --import --path . >/dev/null 2>&1 || true
 log="$(mktemp)"
 rundir="$(mktemp -d)"
-PROC_ON_EXIT='rm -f "$log"; rm -rf "$rundir"'
-trap 'rm -f "$log"; rm -rf "$rundir"' EXIT
+causdir="$(mktemp -d)"
+PROC_ON_EXIT='rm -f "$log"; rm -rf "$rundir" "$causdir"'
+trap 'rm -f "$log"; rm -rf "$rundir" "$causdir"' EXIT
+if [ "${SMOKE_CAUSALITY:-1}" != "0" ]; then game_flags+=("--causality-dir=$causdir"); fi
 if [ -n "$pack" ]; then
   [ -f "$pack" ] || { echo "smoke_test: pack $pack not found." >&2; exit 1; }
   pack_abs="$(cd "$(dirname "$pack")" && pwd)/$(basename "$pack")"
@@ -97,4 +105,19 @@ if [ "$ui_line" = "ui=absent" ] && [ "${SMOKE_ALLOW_MISSING_UI:-0}" != "1" ]; th
   echo "smoke_test: native UI absent (ui=absent) — failing (SMOKE_ALLOW_MISSING_UI=1 tolerates it)." >&2; exit 1
 fi
 grep -q "^RESULT=PASS" "$log" || { echo "smoke_test: no RESULT=PASS line." >&2; exit 1; }
+# Causality gate: only when the game sampled MIKU's timeline (LIVING).
+if grep -qE "^causality_samples=" "$log"; then
+  if command -v python3 >/dev/null; then
+    set +e
+    caus_out="$(python3 tools/inspector/causality.py --require --failures-only "$causdir" 2>&1)"
+    caus_status=$?
+    set -e
+    printf '%s\n' "$caus_out" | sed '$!s/^/smoke_test: /'
+    if [ "$caus_status" -ne 0 ]; then
+      echo "smoke_test: causality gate failed (status $caus_status) - failing." >&2; exit 1
+    fi
+  else
+    echo "smoke_test: WARN python3 not found - causality=SKIPPED" >&2
+  fi
+fi
 exit "$status"
