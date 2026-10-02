@@ -265,3 +265,67 @@ func test_world_directory_sides_without_camera_fall_back_to_catalog() -> void:
 	var dir := li.world_directory()
 	assert_eq(dir.size(), 3)
 	assert_eq(dir[0]["side"], &"left")
+
+
+func test_session_interaction_started_precedes_the_result() -> void:
+	var world: WorldScript = WorldScene.instantiate()
+	add_child_autofree(world)
+	Simulation.set_scenario(Scenario.LIVING)
+	var li := world.get_node_or_null(^"LivingInteraction") as LivingInteraction
+	li.config.reset()
+	var body := ActionExecutor.new()
+	body.simulated_duration = 0.5  # actions take time: the result comes later
+	li.router.set_executor(body)
+	var log: Array = []
+	var on_start := func(r: Dictionary) -> void: log.append(["started", r])
+	var on_report := func(r: Dictionary) -> void: log.append(["reported", r])
+	Session.interaction_started.connect(on_start)
+	Session.interaction_reported.connect(on_report)
+	Session.submit_call("Miku, aumente sua altura")
+	assert_eq(log.size(), 1, "recognised at once, nothing finished yet")
+	var st: Dictionary = log[0][1]
+	assert_eq(st["status"], InteractionRouter.ST_STARTED)
+	assert_eq(String(st["source"]), "text")
+	assert_gt(int(st["request_id"]), 0)
+	assert_eq(st["plan"].size(), 10)
+	for i in 40:
+		li.router.tick(0.5)
+	assert_eq(log.size(), 2)
+	var rep: Dictionary = log[1][1]
+	assert_eq(log[1][0], "reported")
+	assert_eq(rep["id"], st["id"])
+	assert_eq(rep["request_id"], st["request_id"])
+	assert_eq(rep["source"], st["source"])
+	assert_eq(rep["status"], InteractionRouter.ST_APPLIED)
+	assert_almost_eq(float(rep["estimate"]), 5.0, 1e-6)
+	# Recomposition (reset) cancels the running plan on the body; nothing applied.
+	Session.click(&"world_orrin")
+	var rid := li.router.active_request_id()
+	assert_gt(rid, int(st["request_id"]))
+	Simulation.reset()
+	assert_has(body.calls, [&"cancel", rid])
+	assert_eq(String(log.back()[1]["status"]), InteractionRouter.ST_CANCELLED)
+	Session.interaction_started.disconnect(on_start)
+	Session.interaction_reported.disconnect(on_report)
+
+
+func test_smoke_living_budget_is_derived() -> void:
+	var world: WorldScript = WorldScene.instantiate()
+	add_child_autofree(world)
+	Simulation.set_scenario(Scenario.LIVING)
+	var b := AutomationScript.living_budget(world)
+	assert_eq((b["requests"] as Array).size(), AutomationScript.SMOKE_LIVING_REQUESTS.size())
+	assert_almost_eq(float(b["roteiro"]), LivingScript.DURATION / AutomationScript.SMOKE_SPEED, 1e-6)
+	assert_gt(float(b["plans"]), 0.0, "MIKU's estimates (or nominal durations)")
+	assert_almost_eq(float(b["total"]), float(b["roteiro"]) + float(b["plans"]) + float(b["margin"]), 1e-6)
+	assert_gt(float(b["deadline"]), float(b["total"]), "the hang guard is the worst case, above the budget")
+	var sum := 0.0
+	for r: Dictionary in b["requests"]:
+		sum += float(r["estimate"])
+		assert_gt((r["plan"] as Array).size(), 0)
+	assert_almost_eq(sum, float(b["plans"]), 1e-6)
+	# After the roteiro played: its measured wall time (never below nominal).
+	var slow := AutomationScript.living_budget(world, 66.0)
+	assert_almost_eq(float(slow["roteiro"]), 66.0, 1e-6)
+	assert_almost_eq(float(slow["roteiro_nominal"]), float(b["roteiro"]), 1e-6)
+	assert_almost_eq(float(AutomationScript.living_budget(world, 1.0)["roteiro"]), float(b["roteiro"]), 1e-6)

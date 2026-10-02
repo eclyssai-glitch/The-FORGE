@@ -21,8 +21,15 @@ signal entity_clicked(id: StringName)
 signal call_line_changed(open: bool)
 ## Text sent from the call line (the line closes first). The interaction system routes it.
 signal call_submitted(text: String)
-## Outcome of an interaction (InteractionRouter report: kind, route, status, plan, path, values,
-## reason...), for diegetic feedback in the UI. Never contains anything sent anywhere.
+## An interaction was recognised and its plan STARTS (InteractionRouter.request_started), emitted
+## before any of its actions can finish — the UI shows "→ <subject>" (recognized) at once.
+## report = {"id", "request_id", "kind", "route", "status": &"started", "target", "path", "plan",
+## "text", "source", "expected_status", "estimate", "deadline", "restart"}. Never contains anything sent
+## anywhere.
+signal interaction_started(report: Dictionary)
+## Outcome of an interaction (InteractionRouter report: id, request_id, kind, route, status, plan,
+## path, values, reason, steps, failures...), emitted when its plan ENDS, for diegetic feedback in
+## the UI (the result). Never contains anything sent anywhere.
 signal interaction_reported(report: Dictionary)
 
 enum Mode { UNIVERSE, FORGE, OBSERVATORY }
@@ -118,6 +125,10 @@ func submit_call(text: String) -> bool:
 		return false
 	call_submitted.emit(t)
 	return true
+
+
+func report_interaction_started(report: Dictionary) -> void:
+	interaction_started.emit(report)
 
 
 func report_interaction(report: Dictionary) -> void:

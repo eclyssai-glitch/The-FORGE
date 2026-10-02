@@ -10,8 +10,10 @@ extends Node
 ## The call line itself is UI: Enter (Shortcuts, `call_line`) opens it through
 ## Session.open_call_line(); the art-director's UI shows it when a node of group CALL_LINE_UI_GROUP
 ## exists, otherwise this module shows a minimal placeholder (LivingCallLine).
-## Every finished request is reported with Session.report_interaction(report) (UI feedback) and
-## re-emitted here. No menus, no settings panel: configuration changes only happen through MIKU.
+## Every request is announced when its plan starts with Session.report_interaction_started(started)
+## (Session.interaction_started: immediate recognition) and reported when it ends with
+## Session.report_interaction(report) (Session.interaction_reported: the result); both re-emitted
+## here. No menus, no settings panel: configuration changes only happen through MIKU.
 ##
 ## Binding to MIKU: the sibling node named MIKU_NODE (or the first node of group MIKU_GROUP) that
 ## has `perform()` is driven through MikuNodeExecutor; without it the router uses the null
@@ -23,6 +25,7 @@ extends Node
 ## current camera shows each world's visual root (group Session.entity_group(id)); the catalog
 ## sides are used when fewer than two roots are on screen.
 
+signal request_started(started: Dictionary)
 signal plan_started(plan: Array, report: Dictionary)
 signal action_dispatched(index: int, action: StringName, args: Dictionary)
 signal config_changed(path: String, old_value: Variant, new_value: Variant)
@@ -37,11 +40,15 @@ const MIKU_GROUP := &"living_miku"
 ## read-only `inspect_state() -> Dictionary`. Nothing calls it in the game; the development-only
 ## inspector (tools/inspector, never exported) does when it is loaded.
 const DEV_INSPECT_GROUP := &"dev_inspect"
+## Longest router tick of one frame (seconds; a stalled frame does not time a step out at once).
+const MAX_TICK := 0.5
 
 var config: MikuConfig
 var router: InteractionRouter
 ## The placeholder call line (null while the UI provides one or before the first opening).
 var call_line: LivingCallLine
+## MotionClock time of the last frame (the router's step timeouts run on MIKU's clock).
+var _last_now := -1.0
 
 
 func _init() -> void:
@@ -55,6 +62,7 @@ func _ready() -> void:
 	config.reload()
 	router = InteractionRouter.new(config)
 	router.worlds = LivingScript.world_directory()
+	router.request_started.connect(_on_request_started)
 	router.plan_started.connect(func(plan: Array, rep: Dictionary) -> void: plan_started.emit(plan, rep))
 	router.action_dispatched.connect(func(i: int, a: StringName, args: Dictionary) -> void:
 		action_dispatched.emit(i, a, args))
@@ -77,8 +85,17 @@ func _exit_tree() -> void:
 	Session.close_call_line()
 
 
-func _process(delta: float) -> void:
-	router.tick(delta)
+## The router's clock is MotionClock (MIKU's real-time clock: wall clock, or the recorded time under
+## the Movie Maker), so a step's timeout is measured in the same seconds as her estimate. Frame
+## hitches are capped at Miku.MAX_DT-like 0.5 s per frame.
+func _process(_delta: float) -> void:
+	var now := MotionClock.now()
+	if _last_now < 0.0:
+		_last_now = now
+		return
+	var dt := clampf(now - _last_now, 0.0, MAX_TICK)
+	_last_now = now
+	router.tick(dt)
 
 
 ## (Re)binds the router to the MIKU node; returns true when a real body was found.
@@ -183,11 +200,24 @@ func _on_call_submitted(text: String) -> void:
 	submit_text(text)
 
 
+func _on_request_started(started: Dictionary) -> void:
+	print("[living] #%d started %s %s/%s plan=%s est=%.1fs%s" % [int(started.get("request_id", 0)),
+		started.get("kind", ""), started.get("route", ""), started.get("expected_status", ""),
+		",".join(PackedStringArray(started.get("plan", []))), float(started.get("estimate", 0.0)),
+		" (restart)" if bool(started.get("restart", false)) else ""])
+	Session.report_interaction_started(started)
+	request_started.emit(started)
+
+
 func _on_request_finished(report: Dictionary) -> void:
-	print("[living] %s %s/%s %s plan=%s%s" % [report.get("kind", ""), report.get("route", ""),
+	print("[living] #%d %s %s/%s %s plan=%s%s" % [int(report.get("request_id", 0)), report.get("kind", ""), report.get("route", ""),
 		report.get("status", ""), ("\"%s\"" % report["text"]) if String(report.get("text", "")) != "" else report.get("target", ""),
 		",".join(PackedStringArray(report.get("plan", []))),
 		(" %s %s->%s" % [report["path"], str(report["old_value"]), str(report["new_value"])]) if String(report.get("path", "")) != "" else ""])
+	if not (report.get("steps", []) as Array).is_empty():
+		print("[living] #%d steps=%d real=%.2fs est=%.2fs failures=%s" % [int(report.get("request_id", 0)),
+			(report["steps"] as Array).size(), float(report.get("duration", 0.0)), float(report.get("estimate", 0.0)),
+			str(report.get("failures", []))])
 	Session.report_interaction(report)
 	request_finished.emit(report)
 

@@ -10,7 +10,13 @@
 # (clicks on MIKU/a world, call-line texts: attention, world target, config patches, REQUIRES_ASSET,
 # SEMANTIC without provider) must end with their expected status, the configuration must change
 # and be restored exactly (`config_mutated=true`, `config_reverted=true`), seek is refused and
-# reset recomposes the scene.
+# reset recomposes the scene. Its time is a BUDGET DERIVED by the game (docs/BUILD.md): duration of
+# the roteiro + MIKU's estimates of the test plans + margin; the smoke FAILS itself when it uses more.
+# Each request is awaited by its own request_id (interaction_started -> interaction_reported) up to
+# its plan's worst case (sum of the step timeouts); the report lists request_id, steps, real vs
+# estimated durations, failures, timeouts and cancellations. The game prints
+# `smoke_deadline_seconds=N` (worst case of a correct run) first; this script then uses
+# N + SMOKE_BOOT_SLACK (default 30) as its hang guard instead of TIMEOUT (only if larger).
 # Exit 0 = PASS. A HUD without those groups fails (`ui=absent`) unless SMOKE_ALLOW_MISSING_UI=1,
 # which passes --allow-missing-ui to the game (only for branches where the UI does not exist yet).
 # SMOKE_ALLOW_MISSING_MODULES=1 (LIVING only) passes --allow-missing-modules: missing world modules
@@ -54,10 +60,20 @@ else
   cmd=(tools/godot.sh "${GODOT_AUDIO_FLAGS[@]}" --path . -- "${game_flags[@]}" "$@")
 fi
 has_result() { grep -qE "^RESULT=(PASS|FAIL)" "$log"; }
+BOOT_SLACK="${SMOKE_BOOT_SLACK:-30}"
+# Hang guard derived by the game (LIVING): its announced worst case + boot slack, if above TIMEOUT.
+derived_timeout() {
+  local d
+  d="$(grep -oE "^smoke_deadline_seconds=[0-9]+" "$log" | tail -n1 | cut -d= -f2 || true)"
+  [ -n "$d" ] || return 0
+  d=$((d + BOOT_SLACK))
+  if [ "$d" -gt "$TIMEOUT" ]; then echo "$d"; else echo "$TIMEOUT"; fi
+}
+PROC_TIMEOUT_FN=derived_timeout
 proc_start "$log" tools/_display.sh "${cmd[@]}"
 proc_supervise "$TIMEOUT" "$GRACE" has_result
 status=$PROC_STATUS
-if [ "$PROC_OUTCOME" = "timeout" ]; then echo "smoke_test: TIMEOUT after ${TIMEOUT}s" >&2; exit 1; fi
+if [ "$PROC_OUTCOME" = "timeout" ]; then echo "smoke_test: TIMEOUT (hang guard $(derived_timeout || true) ${TIMEOUT}s)" >&2; exit 1; fi
 if [ "$PROC_OUTCOME" = "forced" ]; then
   echo "smoke_test: forced exit after result (engine did not quit ${GRACE}s after RESULT)." >&2
   status=0  # the verdict below comes from the RESULT line

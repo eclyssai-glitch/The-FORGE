@@ -9,6 +9,9 @@
 #   proc_start LOG cmd...            start cmd in a new session; output -> LOG (and echoed live)
 #   proc_supervise TIMEOUT GRACE FN  wait for it; FN (optional) = "work is done" predicate.
 #                                    Once FN succeeds the process gets GRACE s to exit by itself.
+#                                    PROC_TIMEOUT_FN (optional, a function name): called every
+#                                    second; when it prints a number, that is the timeout from now
+#                                    on (seconds since start) — a budget the game derived itself.
 #   After proc_supervise: PROC_STATUS (exit status, 124 on timeout), PROC_OUTCOME
 #   (exited | forced | timeout). The whole session is always killed at the end.
 
@@ -66,8 +69,16 @@ proc_supervise() {
   local start now done_at=""
   start="$(date +%s)"
   PROC_OUTCOME="exited"
+  local derived=""
   while proc__alive "$PROC_PID"; do
     now="$(date +%s)"
+    if [ -n "${PROC_TIMEOUT_FN:-}" ]; then
+      derived="$("$PROC_TIMEOUT_FN" || true)"
+      if [ -n "$derived" ] && [ "$derived" != "$timeout_s" ]; then
+        echo "proc: timeout ${timeout_s}s -> ${derived}s (derived budget)" >&2
+        timeout_s="$derived"
+      fi
+    fi
     if [ $((now - start)) -ge "$timeout_s" ]; then PROC_OUTCOME="timeout"; break; fi
     if [ -n "$done_fn" ] && [ -z "$done_at" ] && "$done_fn"; then done_at="$now"; fi
     if [ -n "$done_at" ] && [ $((now - done_at)) -ge "$grace_s" ]; then PROC_OUTCOME="forced"; break; fi
