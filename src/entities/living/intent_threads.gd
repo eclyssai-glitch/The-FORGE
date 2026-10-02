@@ -7,7 +7,9 @@ extends Node3D
 ## lives its ends are re-read every frame, so it follows both her gesture and the hand's inertia.
 ## The tension is what moves the hand (tension_on(hand) -> PuppetHand.pull).
 ##
-## Geometry: SEGMENTS thin cylinders of a MultiMesh per thread, along a curve that sags with
+## Geometry: with the art-director's intent_thread() material, a centre-line strip per thread
+## (IntentThreadStrip.fill on an ImmediateMesh: the shader gives it its on-screen width); with the
+## placeholder, SEGMENTS thin cylinders of a MultiMesh. Both follow a curve that sags with
 ## gravity in proportion to (1 - tension) and trembles a little when taut and MIKU's composure is
 ## lost (`tremble`). Radius grows with tension. Material: LivingMaterials &"thread" duplicated per
 ## thread, uniforms `tension` and `presence` written when they change. Pool without limit:
@@ -30,6 +32,8 @@ var threads: Array[Dictionary] = []
 
 var _time := 0.0
 var _mesh: CylinderMesh
+## The art-director's strip encoder (IntentThreadStrip) when the project has it.
+var _strip_script: Script
 
 
 func _init() -> void:
@@ -46,6 +50,9 @@ func _init() -> void:
 
 func _ready() -> void:
 	add_to_group(GROUP)
+	var path := MikuBody.global_class_path(&"IntentThreadStrip")
+	if path != "":
+		_strip_script = load(path) as Script
 
 
 ## Casts a thread from MIKU's finger (`side` 0 left / 1 right, `finger` 0..4) to `hand`
@@ -176,16 +183,19 @@ func _update_ends(t: Dictionary) -> void:
 
 func _draw(t: Dictionary) -> void:
 	var c := t["cycle"] as ThreadCycle
-	var mm := (t["node"] as MultiMeshInstance3D).multimesh
 	var a: Vector3 = t["a"]
 	var b: Vector3 = t["b"]
 	var span := b - a
 	var length := span.length()
 	if length < 1e-4:
-		mm.visible_instance_count = 0
+		if not t["strip"]:
+			(t["node"] as MultiMeshInstance3D).multimesh.visible_instance_count = 0
 		return
 	var ten := clampf(c.tension.y, 0.0, 1.0)
 	var sag := Vector3.DOWN * length * SAG * pow(1.0 - ten, 1.5)
+	if t["strip"]:
+		_draw_strip(t, c, a, span, sag, ten)
+		return
 	# Lateral axis for the tremble (perpendicular to the thread, roughly horizontal).
 	var side := span.cross(Vector3.UP)
 	side = side.normalized() if side.length_squared() > 1e-8 else Vector3.RIGHT
@@ -193,6 +203,7 @@ func _draw(t: Dictionary) -> void:
 	var ph: float = t["phase0"]
 	var r := lerpf(RADIUS.x, RADIUS.y, ten) * clampf(c.presence.y * 1.5, 0.0, 1.0)
 	var n := int(ceil(c.reach * SEGMENTS))
+	var mm := (t["node"] as MultiMeshInstance3D).multimesh
 	mm.visible_instance_count = n
 	var prev := a
 	for i in n:
@@ -204,6 +215,27 @@ func _draw(t: Dictionary) -> void:
 		var basis := MikuMannequin._basis_y(d if l > 1e-6 else span)
 		mm.set_instance_transform(i, Transform3D(basis.scaled_local(Vector3(r, maxf(l, 1e-4), r)), (prev + p) * 0.5))
 		prev = p
+	_apply_material(t, c, ten)
+
+
+## Art-director material (intent_thread): a centre-line strip (IntentThreadStrip.fill) that the
+## shader widens on screen; the sag is this curve, the light/hum/width are the material's.
+func _draw_strip(t: Dictionary, c: ThreadCycle, a: Vector3, span: Vector3, sag: Vector3, ten: float) -> void:
+	var pts: PackedVector3Array = t["points"]
+	var n := maxi(int(ceil(c.reach * SEGMENTS)), 1) + 1
+	pts.resize(n)
+	for i in n:
+		var s1 := minf(float(i) / SEGMENTS, c.reach)
+		pts[i] = a + span * s1 + sag * sin(PI * s1)
+	t["points"] = pts
+	var node := t["node"] as MeshInstance3D
+	var box: Variant = _strip_script.call(&"fill", node.mesh, pts, t["mat"])
+	if box is AABB:
+		node.custom_aabb = box
+	_apply_material(t, c, ten)
+
+
+func _apply_material(t: Dictionary, c: ThreadCycle, ten: float) -> void:
 	var mat: Material = t["mat"]
 	if absf(float(t["applied_t"]) - ten) > 0.01:
 		t["applied_t"] = ten
@@ -212,25 +244,39 @@ func _draw(t: Dictionary) -> void:
 	if absf(float(t["applied_p"]) - pr) > 0.01:
 		t["applied_p"] = pr
 		LivingMaterials.set_param(mat, &"presence", pr)
+		# The thread dissolves into grains from the origin as it fades (intent_thread `release`).
+		LivingMaterials.set_param(mat, &"release", 1.0 - pr if c.phase == ThreadCycle.Phase.FADE else 0.0)
+	if absf(float(t.get("applied_anger", -1.0)) - tremble) > 0.02:
+		t["applied_anger"] = tremble
+		LivingMaterials.set_param(mat, &"anger", tremble)
 
 
 func _free_slot() -> int:
 	for i in threads.size():
 		if not (threads[i]["cycle"] as ThreadCycle).is_alive():
 			return i
-	var node := MultiMeshInstance3D.new()
-	node.name = "Thread%d" % threads.size()
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = _mesh
-	mm.instance_count = SEGMENTS
-	mm.visible_instance_count = 0
-	node.multimesh = mm
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := LivingMaterials.get_material(&"thread").duplicate()
-	node.material_override = mat
+	var strip := _strip_script != null and LivingMaterials.has_art(&"thread")
+	var node: GeometryInstance3D
+	if strip:
+		var mi := MeshInstance3D.new()
+		mi.mesh = ImmediateMesh.new()
+		node = mi
+	else:
+		var mmi := MultiMeshInstance3D.new()
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = _mesh
+		mm.instance_count = SEGMENTS
+		mm.visible_instance_count = 0
+		mmi.multimesh = mm
+		mmi.material_override = mat
+		node = mmi
+	node.name = "Thread%d" % threads.size()
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
+	LivingMaterials.set_param(mat, &"seed", float(threads.size()) * 0.37)
 	threads.append({"cycle": ThreadCycle.new(), "node": node, "mat": mat, "side": 0, "finger": 1,
 		"hand": null, "point": -1, "target": Vector3.ZERO, "a": Vector3.ZERO, "b": Vector3.ZERO,
-		"phase0": 0.0, "applied_t": -1.0, "applied_p": -1.0})
+		"phase0": 0.0, "applied_t": -1.0, "applied_p": -1.0, "strip": strip, "points": PackedVector3Array()})
 	return threads.size() - 1

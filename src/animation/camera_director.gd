@@ -267,6 +267,9 @@ func _zoom(factor: float) -> void:
 func _fly(delta: float) -> void:
 	if Session.mode != SessionState.Mode.UNIVERSE:
 		return
+	# Typing on the living call line (Session.call_line_open, interaction system): no flight.
+	if Session.get(&"call_line_open") == true:
+		return
 	var v := Input.get_vector("camera_left", "camera_right", "camera_forward", "camera_back")
 	if v == Vector2.ZERO:
 		return
