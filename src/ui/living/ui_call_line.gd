@@ -15,8 +15,14 @@ extends Control
 ##           Session closes the line and emits call_submitted -> InteractionRouter).
 ##   close   Esc / empty Enter / on_hidden() -> Session.close_call_line(); the line retracts on
 ##           Session.call_line_changed(false), whoever closed it.
+##   ack     Session.interaction_started(report) of a typed request (status "started", sent as soon as
+##           the plan begins) -> at once the whisper "→ <assunto>" (recognition_for(report): "→ altura",
+##           "→ atenção", "→ vesper", "→ pensando…" for SEMANTIC); it rests until its result.
+##           Connected only if Session has that signal (has_signal: tolerant of an older Session).
 ##   answer  Session.interaction_reported(report) of a typed request (source "text") -> the whisper
-##           (feedback_for(report) maps the report status to a kind and a short pt-BR text).
+##           (feedback_for(report) maps the report status to a kind and a short pt-BR text). While a
+##           started request is pending, only the report of the SAME request_id/id replaces its
+##           whisper (one line at a time, handed off, never overlapping); reports of other ids do not.
 ## Groups: GROUP "living_call_line" (UI automation) and UI_GROUP "living_call_line_ui"
 ## (LivingInteraction.CALL_LINE_UI_GROUP: its presence keeps the world placeholder from being built).
 ## Kept for automation and tests:
@@ -44,6 +50,10 @@ const MAX_CHARS := SessionState.CALL_MAX_CHARS
 const PLACEHOLDER := "miku, …"
 const FEEDBACK_KINDS: Array[StringName] = [&"recognized", &"applied", &"refused", &"heard"]
 const RECOGNIZED_PREFIX := "→ "
+## Session signal of a request that has just started (game-engineer; may be absent in older Sessions).
+const STARTED_SIGNAL := &"interaction_started"
+## Subject of the immediate whisper while a provider would have to interpret the words.
+const THINKING := "pensando…"
 ## Height (px) of the strip; the line sits LINE_INSET px above its bottom edge.
 const STRIP_HEIGHT := 96.0
 const LINE_INSET := 12.0
@@ -64,6 +74,8 @@ var _open_tween: Tween
 var _echo_tween: Tween
 var _sent_tween: Tween
 var _echo_kind: StringName = &""
+## request_id of the started typed request whose "→ <assunto>" waits for its result (null = none).
+var _pending_id: Variant = null
 
 
 func _init() -> void:
@@ -124,6 +136,7 @@ func _enter_tree() -> void:
 	for pair: Array in _session_links():
 		if not (pair[0] as Signal).is_connected(pair[1]):
 			(pair[0] as Signal).connect(pair[1])
+	link_started(Session)
 	if Session.call_line_open and not _open:
 		_on_call_line_changed(true)
 
@@ -132,11 +145,26 @@ func _exit_tree() -> void:
 	for pair: Array in _session_links():
 		if (pair[0] as Signal).is_connected(pair[1]):
 			(pair[0] as Signal).disconnect(pair[1])
+	if Session.has_signal(STARTED_SIGNAL):
+		var sig := Signal(Session, STARTED_SIGNAL)
+		if sig.is_connected(on_interaction_started):
+			sig.disconnect(on_interaction_started)
 
 
 func _session_links() -> Array:
 	return [[Session.call_line_changed, _on_call_line_changed],
 		[Session.interaction_reported, _on_interaction_reported]]
+
+
+## Connects `source`'s `interaction_started(report)` to on_interaction_started, when that signal exists.
+## Returns true when connected (or already connected); false, silently, when `source` has no such signal.
+func link_started(source: Object) -> bool:
+	if source == null or not source.has_signal(STARTED_SIGNAL):
+		return false
+	var sig := Signal(source, STARTED_SIGNAL)
+	if not sig.is_connected(on_interaction_started):
+		sig.connect(on_interaction_started)
+	return true
 
 
 ## True while the line is open (taking words).
@@ -168,8 +196,9 @@ func submit(text: String) -> void:
 		submitted.emit(t)
 
 
-## Whispers what MIKU understood above the line (see the header for the kinds).
-func show_feedback(kind: StringName, text: String) -> void:
+## Whispers what MIKU understood above the line (see the header for the kinds); it rests `hold`
+## seconds before dissolving.
+func show_feedback(kind: StringName, text: String, hold: float = Palette.T_CALL_ECHO_HOLD) -> void:
 	var t := text.strip_edges()
 	if t == "":
 		return
@@ -187,11 +216,28 @@ func show_feedback(kind: StringName, text: String) -> void:
 	var tw := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	if echo.modulate.a > 0.0:
 		tw.tween_property(echo, "modulate:a", 0.0, Palette.T_WHISPER_HANDOFF * echo.modulate.a)
-	tw.tween_callback(func() -> void: echo.text = t)
+		tw.tween_callback(func() -> void: echo.text = t)
+	else:
+		echo.text = t  # nothing showing: the words are there from this frame on
 	tw.tween_property(echo, "modulate:a", 1.0, Palette.T_CALL_ECHO_IN)
-	tw.tween_interval(Palette.T_CALL_ECHO_HOLD)
+	tw.tween_interval(hold)
 	tw.tween_property(echo, "modulate:a", 0.0, Palette.T_CALL_ECHO_OUT)
 	_echo_tween = tw
+
+
+## A typed request has just started (Session.interaction_started): whisper "→ <assunto>" at once and
+## remember its id so that only its own result replaces the whisper.
+func on_interaction_started(report: Dictionary) -> void:
+	var fb := recognition_for(report)
+	if fb.is_empty():
+		return
+	_pending_id = request_id_of(report)
+	show_feedback(fb[0], fb[1], Palette.T_CALL_ECHO_WAIT)
+
+
+## id of the started request still waiting for its result (null when none).
+func pending_request() -> Variant:
+	return _pending_id
 
 
 ## Text of the feedback whisper showing or about to show ("" when silent).
@@ -214,6 +260,45 @@ static func feedback_ink(kind: StringName) -> Color:
 		&"recognized":
 			return Palette.UI_INK_SOFT
 	return Palette.UI_INK_FAINT
+
+
+## Immediate whisper of a started request: [&"recognized", subject] or [] (gestures, nothing
+## recognisable — the result will say "não entendi"). SEMANTIC (or a PROVIDER route) -> "pensando…".
+static func recognition_for(report: Dictionary) -> Array:
+	var source := String(report.get("source", "text"))
+	if source != "text" and source != "":
+		return []
+	if String(report.get("route", "")) == "PROVIDER":
+		return [&"recognized", THINKING]
+	match String(report.get("kind", "")):
+		"ATTENTION":
+			return [&"recognized", "atenção"]
+		"WORLD_TARGET":
+			var w := _world_subject(String(report.get("target", "")))
+			return [&"recognized", w if w != "" else "mundo"]
+		"CONFIG_PATCH":
+			var p := _path_subject(String(report.get("path", "")))
+			return [&"recognized", p if p != "" else "configuração"]
+		"SEMANTIC":
+			return [&"recognized", THINKING]
+	return []
+
+
+## Correlation key of a report: "request_id" when present, else "id" (null when neither).
+static func request_id_of(report: Dictionary) -> Variant:
+	var rid: Variant = report.get("request_id", null)
+	return rid if rid != null else report.get("id", null)
+
+
+## True when two request ids name the same request (ints/floats by value, anything else by text).
+static func same_request(a: Variant, b: Variant) -> bool:
+	var na := typeof(a) == TYPE_INT or typeof(a) == TYPE_FLOAT
+	var nb := typeof(b) == TYPE_INT or typeof(b) == TYPE_FLOAT
+	if na and nb:
+		return is_equal_approx(float(a), float(b))
+	if na != nb:
+		return false
+	return str(a) == str(b)
 
 
 ## Whisper for an InteractionRouter report: [kind: StringName, text: String], or [] when the
@@ -252,19 +337,30 @@ static func feedback_for(report: Dictionary) -> Array:
 static func _subject(report: Dictionary) -> String:
 	var path := String(report.get("path", ""))
 	if path != "":
-		var parts := path.split(".")
-		var key := parts[parts.size() - 1]
-		var section := StringName(parts[0]) if parts.size() > 1 else &""
-		var props: Dictionary = ConfigSchema.PROPERTIES.get(section, {})
-		if props.has(key):
-			return String((props[key] as Dictionary).get("pt", key))
-		if ConfigSchema.ASSET_REQUESTS.has(key):
-			return String((ConfigSchema.ASSET_REQUESTS[key] as Dictionary).get("pt", key))
-		return key.replace("_", " ")
-	var target := String(report.get("target", ""))
-	if String(report.get("status", "")) == "world_target" and target != "":
-		return target.trim_prefix("world_").replace("_", " ").to_lower()
+		return _path_subject(path)
+	if String(report.get("status", "")) == "world_target":
+		return _world_subject(String(report.get("target", "")))
 	return ""
+
+
+## "appearance.height" -> "altura" (schema pt name), unknown keys spelled out; "" for "".
+static func _path_subject(path: String) -> String:
+	if path == "":
+		return ""
+	var parts := path.split(".")
+	var key := parts[parts.size() - 1]
+	var section := StringName(parts[0]) if parts.size() > 1 else &""
+	var props: Dictionary = ConfigSchema.PROPERTIES.get(section, {})
+	if props.has(key):
+		return String((props[key] as Dictionary).get("pt", key))
+	if ConfigSchema.ASSET_REQUESTS.has(key):
+		return String((ConfigSchema.ASSET_REQUESTS[key] as Dictionary).get("pt", key))
+	return key.replace("_", " ")
+
+
+## "world_vesper" -> "vesper"; "" for "".
+static func _world_subject(target: String) -> String:
+	return target.trim_prefix("world_").replace("_", " ").to_lower()
 
 
 ## Called when the LIVING HUD hides (H, scenario change): the line lets go, the whispers dissolve.
@@ -310,9 +406,29 @@ func _another_line_visible() -> bool:
 
 func _on_interaction_reported(report: Dictionary) -> void:
 	var fb := feedback_for(report)
+	if _pending_id != null:
+		var rid: Variant = request_id_of(report)
+		if rid != null and not same_request(rid, _pending_id):
+			return  # another request's result never replaces the waiting whisper
+		if rid != null or not fb.is_empty():
+			_pending_id = null
+			if fb.is_empty():
+				_release_echo()  # its request ended silently (cancelled): the "→ …" dissolves
+				return
 	if fb.is_empty():
 		return
 	show_feedback(fb[0], fb[1])
+
+
+## Lets the whisper showing dissolve now (sine, from its current ink).
+func _release_echo() -> void:
+	if _echo_tween and _echo_tween.is_valid():
+		_echo_tween.kill()
+	if not is_inside_tree() or echo.modulate.a <= 0.0:
+		echo.modulate.a = 0.0
+		return
+	_echo_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_echo_tween.tween_property(echo, "modulate:a", 0.0, Palette.T_CALL_ECHO_OUT * echo.modulate.a)
 
 
 func _on_field_input(event: InputEvent) -> void:

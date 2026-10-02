@@ -157,6 +157,9 @@ const T_CALL_CLOSE := 0.9
 const T_CALL_ECHO_IN := 0.5
 const T_CALL_ECHO_HOLD := 2.4
 const T_CALL_ECHO_OUT := 1.6
+## The immediate "→ <assunto>" of a request that has just started rests (instead of T_CALL_ECHO_HOLD)
+## until that request's result replaces it; past this cap it dissolves on its own.
+const T_CALL_ECHO_WAIT := 20.0
 ## Call line geometry (px): open width, resting hairline width, distance of the line from the
 ## bottom edge (clear of the transport arc and its revealed controls), echo gap above the line.
 const UI_CALL_WIDTH := 440.0
