@@ -927,12 +927,15 @@ func _op_send(run: Dictionary, bt: Dictionary, world: StringName) -> void:
 		var spread := (float(i) - float(n - 1) * 0.5)
 		match place:
 			&"present", &"hover":
-				pos = body.chest_position() + basis.z * 2.6 + basis.y * (0.7 + 0.15 * absf(spread)) \
-					+ basis.x * spread * 1.15 * lead_sx
+				# At her sides, never before her: alternating sides from her lead, rising in rows.
+				var side_x := lead_sx * (1.0 if i % 2 == 0 else -1.0)
+				var row := float(i / 2)
+				pos = body.chest_position() + basis.x * side_x * (2.1 + row * 1.25) + basis.z * (1.3 + row * 0.3) \
+					+ basis.y * (0.5 + row * 0.55)
 				if place == &"hover":
-					pos += basis.y * 0.5 - basis.z * 0.6 + basis.x * spread * 0.6 * lead_sx
-				palm = -basis.z
-				point = (basis.y * 0.9 + basis.x * spread * 0.2).normalized()
+					pos += basis.y * 0.6 - basis.z * 0.4
+				palm = (-basis.x * side_x * 0.8 - basis.z * 0.2).normalized()
+				point = (basis.y * 0.9 + basis.z * 0.2).normalized()
 				pose = &"open" if place == &"present" else &"relaxed"
 			&"ready":
 				var sx := 1.0 if h.left else -1.0
@@ -1568,9 +1571,12 @@ func _update_focus() -> void:
 	var m := mind.mood
 	var working := not _task.is_empty() and _main.is_empty()
 	var n_hands := hands.active_count()
-	if (m == MikuMind.Mood.ANGRY and t_mood < 2.6) or (m == MikuMind.Mood.FRUSTRATED and t_mood < 1.8) \
-			or (m == MikuMind.Mood.RECOVERING and t_mood < 3.0):
+	# The push-in on her face when composure frays or returns; the rage itself is shown wide (her
+	# many hands, the torn world): the camera opens instead of closing in.
+	if (m == MikuMind.Mood.FRUSTRATED and t_mood < 1.8) or (m == MikuMind.Mood.RECOVERING and t_mood < 3.0):
 		kind = &"emotion"
+	elif m == MikuMind.Mood.ANGRY:
+		kind = &"wide"
 	elif not _overlay.is_empty() and _overlay["action"] == ActionScript.LOOK_AT_USER:
 		kind = &"user"
 	elif artifact.is_present():
@@ -1582,7 +1588,7 @@ func _update_focus() -> void:
 	elif n_hands >= 1:
 		kind = &"puppet"
 	if _last_focus_kind != &"" and kind != _last_focus_kind and _clock - _focus_since < FOCUS_HOLD \
-			and kind != &"emotion" and kind != &"user":
+			and kind != &"emotion" and kind != &"user" and m != MikuMind.Mood.ANGRY:
 		kind = _last_focus_kind
 	if kind != _last_focus_kind:
 		_last_focus_kind = kind

@@ -17,7 +17,7 @@ const USER_FALLBACK := Vector3(0.0, 1.4, 12.0)
 ## [id, centre, radius, seed]
 const WORLDS: Array = [
 	[&"world_vesper", Vector3(-4.3, 0.9, 1.3), 0.8, 2602],
-	[&"world_calyx", Vector3(0.9, -1.25, 3.0), 1.0, 1301],
+	[&"world_calyx", Vector3(1.7, -1.55, 2.5), 1.0, 1301],
 	[&"world_orrin", Vector3(4.4, 1.1, 1.1), 0.75, 3903],
 ]
 ## The world of the scripted work order (LivingScript.WORK_WORLD).
@@ -59,26 +59,21 @@ static func summon_point(i: int, toward_left: bool) -> Vector3:
 
 
 ## Working place of hand `i` of `n` around a world of radius r at `center`, facing the world
-## (palm towards it), on the side that faces MIKU and the camera first. Returns
-## [position, finger direction, palm direction].
+## (palm towards it). The hands hold the world from above and from its sides — an arch over it
+## that opens away from MIKU — never between her and the world, never under it, so she, her
+## hands and her work read together from the front. Returns [position, finger direction, palm].
 static func work_place(center: Vector3, r: float, i: int, n: int, distance := 1.55) -> Array:
 	var count := maxi(n, 1)
-	# Around the world in a ring tilted towards MIKU (at the origin): first hands on her side.
-	var to_miku := (MIKU_POSITION - center)
-	to_miku.y = 0.0
-	to_miku = to_miku.normalized() if to_miku.length_squared() > 1e-6 else Vector3.BACK
-	var base_ang := atan2(to_miku.x, to_miku.z)
-	var spread := TAU / float(count) if count > 2 else 1.9
-	var ang := base_ang + (float(i) - float(count - 1) * 0.5) * spread
-	var lift := 0.35 if i % 2 == 0 else -0.25
-	var dir := Vector3(sin(ang), lift, cos(ang)).normalized()
+	var away := center - MIKU_POSITION
+	away.y = 0.0
+	away = away.normalized() if away.length_squared() > 1e-6 else Vector3.FORWARD
+	var lateral := Vector3.UP.cross(away).normalized()
+	# Angles over the arch: -ARCH .. +ARCH around the top (0 = straight up).
+	var arch := 1.25 if count > 1 else 0.0
+	var a := lerpf(-arch, arch, float(i) / float(count - 1)) if count > 1 else 0.35
+	var dir := (lateral * sin(a) + Vector3.UP * cos(a) * 0.85 + away * 0.45).normalized()
 	var pos := center + dir * r * distance
 	var palm := -dir
-	# Fingers wrap around the world: tangent, slightly upward.
-	var fingers := dir.cross(Vector3.UP).normalized()
-	if fingers.length_squared() < 1e-6:
-		fingers = Vector3.FORWARD
-	if i % 2 == 1:
-		fingers = -fingers
-	fingers = (fingers + Vector3.UP * 0.35 - dir * 0.2).normalized()
+	# Fingers wrap over the world, pointing along the arch towards its far side.
+	var fingers := (away * 0.8 - dir * 0.3 + lateral * -sin(a) * 0.3).normalized()
 	return [pos, fingers, palm]
