@@ -1,0 +1,45 @@
+  # S  req stp action        channel  stage   phase     verdict chain
+---------------------------------------------------------------------
+  1 0    0   0 SUMMON_HAND   main     -       finished  PASS    int 13.500 ant +0.03 ges +0.50 thr +0.63 hnd +1.37 res +5.13
+  2 0    0   0 SUMMON_HANDS  main     -       finished  PASS    int 19.467 ant +0.03 ges +0.50 thr +0.63 hnd +1.37 res +6.33 [req hnd]
+  3 0    0   0 SUMMON_HANDS  main     -       finished  PASS    int 25.800 ant +0.03 ges +0.50 thr +0.63 hnd +1.37 res +6.07 [req hnd]
+  4 0    0   0 WORK          task     -       finished  PASS    int 31.967 ant +0.03 ges +0.03 res +1.53
+  5 0    0   0 WORK          task     GATHER  finished  PASS    int 33.500 ant +0.00 ges +0.00 thr +0.63 hnd +1.17 mat +2.77 res +6.00 [req mat]
+  6 0    0   0 WORK          task     CORE    finished  FAIL    int 39.500 ant +0.00 ges +0.00 thr +0.63 hnd +0.97 mat +0.00 res +6.00 [req mat]
+        -> matter 39.500 before hand 40.467
+  7 0    0   0 WORK          task     LAYERS  finished  PASS    int 45.500 ant +0.00 ges +0.00 thr +0.63 hnd +0.97 mat +2.37 res +6.03 [req mat]
+  8 0    0   0 WORK          task     LAYERS  finished  PASS    int 51.533 ant +0.00 ges +0.00 thr +0.63 hnd +0.97 mat +2.27 res +6.50 [req mat]
+  9 0    0   0 WORK          task     LAYERS  finished  FAIL    int 58.033 ant +0.00 ges +0.00 thr +0.63 hnd +0.97 mat +0.00 res +7.00 [req mat]
+        -> matter 58.033 before hand 59.000
+ 10 0    0   0 WORK          task     LAYERS  finished  PASS    int 65.033 ant +0.00 ges +0.00 thr +0.63 hnd +0.97 mat +1.03 res +10.50 [req mat]
+ 11 0    0   0 WORK          task     LAYERS  finished  PASS    int 75.533 ant +0.00 ges +0.00 thr +0.40 hnd +0.63 mat +0.90 res +8.00 [req mat]
+ 12 0    0   0 WORK          task     ADJUST  finished  PASS    int 83.533 ant +0.00 ges +0.07 thr +0.17 hnd +0.77 mat +0.77 res +4.37 [req mat]
+ 13 0    0   0 _NOTICE_USER  overlay  -       finished  PASS    int 90.633 ant +0.03 ges +0.13 res +3.77
+ 14 0    1   0 LOOK_AT_USER  follower -       finished  PASS    int 90.633 ant +0.00 res +3.77
+ 15 0    1   1 ACKNOWLEDGE   overlay  -       finished  PASS    int 94.400 ant +0.03 ges +0.07 res +1.33
+ 16 0    1   2 WORK          main     -       finished  PASS    int 95.733 ant +0.03 ges +0.07 res +0.70
+ 17 0    0   0 _TARGET_WORLD overlay  -       finished  PASS    int 102.567 ant +0.03 ges +0.10 res +1.60
+ 18 0    2   0 LOOK_AT_WORLD follower -       finished  PASS    int 102.567 ant +0.00 res +1.60
+ 19 0    2   1 POINT         main     -       finished  PASS    int 104.167 ant +0.03 ges +0.07 res +2.57
+ 20 0    2   2 SUMMON_HANDS  main     -       finished  PASS    int 106.733 ant +0.03 ges +0.50 thr +0.63 hnd +1.37 res +5.17 [req hnd]
+ 21 0    2   3 WORK          task     -       finished  PASS    int 111.900 res +0.70
+ 22 0    2   3 WORK          main     -       finished  PASS    int 111.900 ant +0.03 ges +0.07 res +0.67
+ 23 0    2   3 WORK          task     GATHER  running   PASS    int 112.600 ant +0.00 ges +0.00 thr +0.77 hnd +1.33 mat +3.00
+ 24 0    3   0 LOOK_AT_USER  overlay  -       finished  PASS    int 117.733 ant +0.03 ges +0.13 res +2.13
+ 25 0    3   1 ACKNOWLEDGE   overlay  -       finished  PASS    int 119.867 ant +0.03 ges +0.07 res +0.73
+ 26 0    3   2 SUMMON_HAND   main     -       finished  PASS    int 120.600 ant +0.03 ges +0.37 thr +0.43 hnd +1.00 res +2.00
+ 27 0    3   3 GRAB_FILE     main     -       finished  PASS    int 122.600 ant +0.03 ges +0.40 thr +1.23 hnd +1.80 mat +2.87 res +3.10
+ 28 0    3   4 SUMMON_HAND   main     -       finished  PASS    int 125.700 ant +0.03 ges +0.37 thr +0.43 hnd +1.00 res +2.03
+ 29 0    3   5 EDIT_FILE     main     -       finished  PASS    int 127.733 ant +0.03 ges +0.20 thr +0.23 hnd +0.47 mat +1.63 res +4.07 [req mat]
+ 30 0    3   6 INSPECT       main     -       finished  PASS    int 131.800 ant +0.03 ges +0.07 res +3.23
+ 31 0    3   7 SATISFIED     main     -       finished  PASS    int 135.033 ant +0.03 ges +0.10 res +2.40
+ 32 0    3   8 DISCARD       main     -       finished  PASS    int 137.433 ant +0.03 ges +0.30 res +1.37 [req ges]
+ 33 0    3   9 WORK          main     -       finished  PASS    int 138.800 ant +0.03 ges +0.07 res +0.60
+ 34 0    4   0 LOOK_AT_USER  overlay  -       finished  PASS    int 139.400 ant +0.03 ges +0.13 res +2.13
+ 35 0    4   1 THINK         main     -       finished  PASS    int 141.533 ant +0.03 ges +0.13 res +1.33
+ 36 0    4   2 ACKNOWLEDGE   overlay  -       running   PASS    int 142.867 ant +0.03 ges +0.07
+---------------------------------------------------------------------
+causality: 36 executions from 144/144 dumps (1 session(s)) - finished 34, running 2
+causality: --require: 13/13 finished big actions with their whole chain
+causality: 34 PASS, 2 FAIL
+causality=FAIL 34/36
