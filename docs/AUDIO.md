@@ -83,6 +83,8 @@ O grave de GENESIS é **sentido, não empilhado**. Regras:
   `audio/buses/default_bus_layout` = `res://default_bus_layout.tres`; `project.godot` não muda):
   **Master** (HardLimiter, teto −1 dB) · **Ambience** → Master (passa-baixa "AmbienceTone",
   aberto em 20 kHz) · **SFX** → Master · **UI** → Master.
+  O arquivo está versionado na forma canônica que o Godot 4.7.2 grava ao importar (com
+  `uid://fxi7fabt56xw`, volumes 0 dB omitidos); `godot --headless --import` não o altera mais.
 - Ducking por *tween* de volume no `AudioDirector`, não por compressor sidechain: o
   `AudioEffectCompressor.sidechain` existe no 4.7, mas reagiria a qualquer SFX e dependeria do nível;
   o tween é determinístico e só atua nos momentos escolhidos (`DUCKING_SOUNDS`: ambiência inteira;
