@@ -44,6 +44,39 @@ static func is_action(a: StringName) -> bool:
 	return VOCABULARY.has(a)
 
 
+## Arguments of the interaction system's vocabulary (docs/AGENT.md: ActionVocabulary) mapped to
+## the runtime's: `target` (POINT/INSPECT) -> `world` when it is a world id; INSPECT `target`
+## "self"/"file" -> `inspect`; SUMMON_HAND `role` hold/edit -> holder/editor; DISCARD
+## `applied` false -> `rejected`; EDIT_FILE with `path` -> `router` (the interaction system
+## validates and applies after the edit, then calls Miku.on_config_changed); `intensity`,
+## `tone`, `seconds` pass through. Unknown keys are kept (harmless).
+static func normalize(action: StringName, args: Dictionary, worlds: Array[StringName]) -> Dictionary:
+	var a := args.duplicate()
+	var target := StringName(str(a.get("target", "")))
+	if target != &"" and worlds.has(target) and not a.has("world"):
+		a["world"] = target
+	if a.has("world"):
+		a["world"] = StringName(str(a["world"]))
+	match action:
+		INSPECT:
+			if target == &"self" or target == &"file":
+				a["inspect"] = target
+		SUMMON_HAND:
+			var role := StringName(str(a.get("role", "")))
+			if role == &"hold":
+				a["role"] = &"holder"
+			elif role == &"edit":
+				a["role"] = &"editor"
+		DISCARD:
+			if a.has("applied") and not bool(a["applied"]):
+				a["rejected"] = true
+		EDIT_FILE:
+			if a.has("path"):
+				a["router"] = true
+				a["keep"] = true
+	return a
+
+
 static func b(t: float, op: StringName, args := {}) -> Dictionary:
 	var d := args.duplicate()
 	d["t"] = t
@@ -66,14 +99,22 @@ static func beats(action: StringName, args: Dictionary) -> Array[Dictionary]:
 				b(0.2, &"turn", {"at": &"world", "world": at, "amount": 0.55, "secs": 2.6}),
 				b(0.35, &"pose", {"lean": 0.05, "secs": 2.2}), b(2.7, &"done")]
 		ACKNOWLEDGE:
-			out = [b(0.0, &"pose", {"nod": 0.17, "secs": 0.4}), b(0.45, &"pose", {"nod": -0.03, "lift": 0.08, "secs": 0.5}),
-				b(0.1, &"arm", {"side": &"free", "g": Gestures.PALM_UP, "at": &"user", "secs": 1.2}),
-				b(1.3, &"done")]
+			out = acknowledge_beats(StringName(str(args.get("tone", "warm"))))
 		THINK:
-			out = [b(0.0, &"gaze", {"at": &"think", "secs": 3.0}), b(0.15, &"arm", {"side": &"lead", "g": Gestures.CHIN, "secs": 2.8}),
-				b(0.4, &"wave", {"side": &"lead", "kind": &"tap", "secs": 2.2}),
-				b(0.2, &"pose", {"tilt": 0.11, "lean": 0.03, "nod": 0.06, "secs": 2.8}),
-				b(0.1, &"breath", {"depth": 1.4, "rate": 0.85, "secs": 3.0}), b(3.1, &"done")]
+			var k := clampf(float(args.get("seconds", 3.0)) / 3.0, 0.35, 3.0)
+			out = [b(0.0, &"gaze", {"at": &"think", "secs": 3.0 * k}),
+				b(0.15, &"arm", {"side": &"lead", "g": Gestures.CHIN, "secs": 2.8 * k}),
+				b(0.4, &"wave", {"side": &"lead", "kind": &"tap", "secs": 2.2 * k}),
+				b(0.2, &"pose", {"tilt": 0.11, "lean": 0.03, "nod": 0.06, "secs": 2.8 * k}),
+				b(0.1, &"breath", {"depth": 1.4, "rate": 0.85, "secs": 3.0 * k}), b(3.1 * k, &"done")]
+		INSPECT when args.get("inspect", &"") == &"self":
+			out = self_reaction(String(args.get("path", "")).begins_with("appearance"))
+		INSPECT when args.get("inspect", &"") == &"file":
+			out = [b(0.0, &"gaze", {"at": &"file", "scan": true, "secs": 2.2}),
+				b(0.0, &"attend", {"kind": &"file", "secs": 2.2}),
+				b(0.2, &"pose", {"lean": 0.12, "tilt": 0.1, "secs": 2.0}),
+				b(0.3, &"arm", {"side": &"lead", "g": Gestures.PINCH, "at": &"file", "speed": 0.8, "secs": 1.8}),
+				b(2.3, &"done")]
 		INSPECT:
 			out = [b(0.0, &"gaze", {"at": &"world", "world": at, "scan": true, "secs": 2.8}),
 				b(0.0, &"attend", {"kind": &"work", "world": at, "secs": 2.8}),
@@ -82,8 +123,11 @@ static func beats(action: StringName, args: Dictionary) -> Array[Dictionary]:
 				b(0.5, &"arm", {"side": &"lead", "g": Gestures.PINCH, "at": &"world", "world": at, "speed": 0.8, "secs": 2.2}),
 				b(2.9, &"done")]
 		SUMMON_HAND, SUMMON_HANDS:
-			var n: int = 1 if action == SUMMON_HAND else int(args.get("count", 2))
-			out = summon_beats(n, bool(args.get("release", false)))
+			var n: int = 1 if action == SUMMON_HAND else clampi(int(args.get("count", 2)), 1, 16)
+			if action == SUMMON_HAND and args.has("role"):
+				out = summon_role_beats(StringName(args["role"]), StringName(str(args.get("side", ""))))
+			else:
+				out = summon_beats(n, bool(args.get("release", false)), StringName(args.get("world", &"")))
 		POINT:
 			out = [b(0.0, &"gaze", {"at": &"world", "world": at, "secs": 2.6}),
 				b(0.0, &"attend", {"kind": &"world", "world": at, "secs": 2.6}),
@@ -95,7 +139,7 @@ static func beats(action: StringName, args: Dictionary) -> Array[Dictionary]:
 			out = grab_beats()
 			out.append(b(out[out.size() - 1]["t"] + 0.1, &"done"))
 		EDIT_FILE:
-			out = edit_beats(not bool(args.get("held", false)), bool(args.get("keep", false)))
+			out = edit_beats(not bool(args.get("held", false)), bool(args.get("keep", false)), bool(args.get("router", false)))
 		DISCARD:
 			out = [b(0.0, &"gaze", {"at": &"file", "secs": 1.4}),
 				b(0.05, &"arm", {"side": &"lead", "g": Gestures.WINDUP, "at": &"file", "secs": 0.3}),
@@ -120,8 +164,9 @@ static func beats(action: StringName, args: Dictionary) -> Array[Dictionary]:
 		RECOVER:
 			out = recover_beats()
 		SATISFIED:
-			out = [b(0.0, &"success", {"mag": 0.5}), b(0.0, &"breath", {"depth": 1.9, "rate": 0.75, "secs": 3.0}),
-				b(0.1, &"pose", {"lift": 0.35, "tilt": 0.1, "raise": -0.15, "secs": 2.6}),
+			var it := clampf(float(args.get("intensity", 0.6)), 0.0, 1.0)
+			out = [b(0.0, &"success", {"mag": 0.5 * it}), b(0.0, &"breath", {"depth": 1.4 + it, "rate": 0.75, "secs": 3.0}),
+				b(0.1, &"pose", {"lift": 0.2 + 0.25 * it, "tilt": 0.1, "raise": -0.15, "secs": 2.6}),
 				b(0.2, &"gaze", {"at": &"world", "world": at, "secs": 2.6}),
 				b(0.3, &"arm", {"side": &"both", "g": Gestures.PALM_UP, "at": &"world", "world": at, "speed": 0.7, "secs": 2.0}),
 				b(2.8, &"done")]
@@ -133,7 +178,7 @@ static func beats(action: StringName, args: Dictionary) -> Array[Dictionary]:
 ## Summoning n hands: anticipation, the call, threads cast from her fingers, the hands form at
 ## the threads' ends, the pull brings them before her, then they follow her conducting hand
 ## (mirror) — proof of control — and the threads relax. They stay (hovering) unless `release`.
-static func summon_beats(n: int, release: bool) -> Array[Dictionary]:
+static func summon_beats(n: int, release: bool, world: StringName = &"") -> Array[Dictionary]:
 	var both := n > 1
 	var out: Array[Dictionary] = [
 		b(0.0, &"gaze", {"at": &"summon", "secs": 1.6}),
@@ -147,21 +192,64 @@ static func summon_beats(n: int, release: bool) -> Array[Dictionary]:
 		b(0.7, &"gaze", {"at": &"hands", "secs": 4.5}),
 		b(1.15, &"pull", {"force": 0.55}),
 		b(1.15, &"send", {"place": &"present"}),
-		b(1.2, &"wait", {"until": &"arrived", "timeout": 4.0}),
+		b(1.2, &"wait", {"until": &"arrived", "timeout": 2.2}),
 		b(1.25, &"arm", {"side": &"lead", "g": Gestures.CONDUCT, "at": &"hands"}),
-		b(1.3, &"mirror", {"gain": 3.2, "secs": 3.4}),
-		b(1.35, &"arm", {"side": &"lead", "g": Gestures.CONDUCT, "at": &"hands", "sway": 0.7, "secs": 3.2}),
-		b(4.7, &"relax", {}),
-		b(4.8, &"arm", {"side": &"lead", "g": &"rest"}),
+		b(1.3, &"mirror", {"gain": 3.2, "secs": 2.4}),
+		b(1.35, &"arm", {"side": &"lead", "g": Gestures.CONDUCT, "at": &"hands", "sway": 0.7, "secs": 2.3}),
+		b(3.7, &"relax", {}),
+		b(3.75, &"send", {"place": &"approach", "world": world} if world != &"" else {"place": &"hover"}),
+		b(3.8, &"arm", {"side": &"lead", "g": &"rest"}),
 	]
 	if both:
 		out.append(b(0.1, &"arm", {"side": &"other", "g": Gestures.WINDUP, "at": &"summon"}))
 		out.append(b(0.6, &"arm", {"side": &"other", "g": Gestures.CALL, "at": &"summon", "speed": 1.1}))
-		out.append(b(4.9, &"arm", {"side": &"other", "g": &"rest"}))
+		out.append(b(3.9, &"arm", {"side": &"other", "g": &"rest"}))
 	if release:
-		out.append(b(5.4, &"release", {}))
-	out.append(b(5.6, &"done"))
+		out.append(b(4.4, &"release", {}))
+	out.append(b(4.4, &"done"))
 	return out
+
+
+## One hand with a role (the configuration plan: SUMMON_HAND(left, hold), SUMMON_HAND(right,
+## edit)): the call, its thread, the hand forms at her side and waits there — no demonstration.
+static func summon_role_beats(role: StringName, side: StringName) -> Array[Dictionary]:
+	var arm: StringName = &"lead" if side == &"" else (&"left" if side == &"left" else &"right")
+	return [
+		b(0.0, &"gaze", {"at": &"summon", "secs": 1.2}),
+		b(0.0, &"arm", {"side": arm, "g": Gestures.WINDUP, "at": &"summon"}),
+		b(0.4, &"arm", {"side": arm, "g": Gestures.CALL, "at": &"summon", "speed": 1.2}),
+		b(0.45, &"wave", {"side": arm, "kind": &"beckon", "secs": 0.9}),
+		b(0.5, &"summon", {"n": 1, "near": &"miku", "role": role, "fresh": true}),
+		b(0.5, &"cast", {"force": 0.0, "only": role, "side": arm}),
+		b(0.6, &"gaze", {"at": &"hands", "secs": 1.6}),
+		b(0.95, &"pull", {"force": 0.5, "only": role}),
+		b(0.95, &"send", {"place": &"ready", "only": role}),
+		b(1.0, &"wait", {"until": &"arrived", "timeout": 3.0, "only": role}),
+		b(1.1, &"arm", {"side": arm, "g": &"rest"}),
+		b(1.2, &"pull", {"force": 0.25, "only": role}),
+		b(1.3, &"done"),
+	]
+
+
+## ACKNOWLEDGE by tone (docs/AGENT.md): warm/curious = a nod and an open palm; brief = a nod;
+## decline = a small turn of the head, no and no; puzzled = the head tilts, a hand to the chin.
+## The mood shapes it further at run time (an angry MIKU keeps her arms: Miku._op_arm).
+static func acknowledge_beats(tone: StringName) -> Array[Dictionary]:
+	match tone:
+		&"brief":
+			return [b(0.0, &"pose", {"nod": 0.15, "secs": 0.35}), b(0.4, &"pose", {"nod": 0.0, "secs": 0.3}),
+				b(0.8, &"done")]
+		&"decline":
+			return [b(0.0, &"gaze", {"at": &"user", "secs": 1.6}), b(0.05, &"pose", {"tilt": -0.07, "nod": 0.04, "secs": 0.35}),
+				b(0.4, &"pose", {"tilt": 0.07, "secs": 0.35}), b(0.75, &"pose", {"tilt": -0.04, "secs": 0.3}),
+				b(0.2, &"arm", {"side": &"free", "g": Gestures.PALM_UP, "at": &"user", "speed": 0.7, "secs": 1.0}),
+				b(0.3, &"breath", {"depth": 1.5, "rate": 0.9, "secs": 1.5}), b(1.5, &"done")]
+		&"puzzled":
+			return [b(0.0, &"gaze", {"at": &"user", "secs": 1.8}), b(0.05, &"pose", {"tilt": 0.17, "lean": -0.03, "secs": 1.6}),
+				b(0.2, &"arm", {"side": &"free", "g": Gestures.CHIN, "speed": 0.8, "secs": 1.4}), b(1.7, &"done")]
+	return [b(0.0, &"pose", {"nod": 0.17, "secs": 0.4}), b(0.45, &"pose", {"nod": -0.03, "lift": 0.08, "secs": 0.5}),
+		b(0.1, &"arm", {"side": &"free", "g": Gestures.PALM_UP, "at": &"user", "secs": 1.2}),
+		b(1.3, &"done")]
 
 
 ## The configuration artifact is called into being over her raised palm; a puppet hand is
@@ -190,7 +278,7 @@ static func grab_beats() -> Array[Dictionary]:
 ## other hand guides it (pinch); the glyphs are rewritten; at the end the change is COMMITTED
 ## (signal file_committed; the interaction system validates and applies it, Miku.apply_config);
 ## the card shows the validation, she reacts to the change in herself, then lets the card go.
-static func edit_beats(grab_first: bool, keep: bool) -> Array[Dictionary]:
+static func edit_beats(grab_first: bool, keep: bool, router := false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var t0 := 0.0
 	if grab_first:
@@ -209,6 +297,13 @@ static func edit_beats(grab_first: bool, keep: bool) -> Array[Dictionary]:
 		b(t0 + 0.65, &"artifact", {"state": &"edit"}),
 		b(t0 + 0.7, &"wait", {"until": &"edited", "timeout": 4.0}),
 		b(t0 + 0.75, &"commit", {}),
+	])
+	if router:
+		# The interaction system applies the change now and goes on with INSPECT(self) etc.
+		out.append_array([b(t0 + 0.8, &"arm", {"side": &"lead", "g": &"rest"}), b(t0 + 0.9, &"pull", {"force": 0.3}),
+			b(t0 + 1.0, &"done")])
+		return out
+	out.append_array([
 		b(t0 + 0.8, &"wait", {"until": &"applied", "timeout": 4.0}),
 		b(t0 + 0.85, &"artifact", {"state": &"valid"}),
 		b(t0 + 0.9, &"arm", {"side": &"lead", "g": &"rest"}),

@@ -2,9 +2,12 @@ class_name LivingLayout
 extends RefCounted
 ## Stage of the living prototype (Loop 5). Owner: animator. Pure data.
 ## MIKU floats at the origin facing +Z (her left hand at +X; the sculpt's frame: head top ~1.75,
-## hem ~-4.1). The work worlds sit around her like a theatre seen from the front: the main one low
-## at her left (screen right), one at her right, one high behind her left shoulder — none between
-## her and the camera, so she and her work always share the frame; all three can be pointed at.
+## hem ~-4.1). The work worlds (ids and names of LivingScript.WORLDS: VESPER left, CALYX centre,
+## ORRIN right, as the default camera sees them) sit around her like a theatre seen from the
+## front: CALYX low before her, at her working height (below her face, so it never hides her),
+## VESPER at her right (screen left), ORRIN at her left (screen right). The layout is the
+## animator's (LivingScript anchors are defaults; the interaction system reads sides from the
+## camera).
 
 const MIKU_POSITION := Vector3.ZERO
 ## Where the user is when nothing better is known (in front of her, at eye height): the camera
@@ -13,11 +16,12 @@ const USER_FALLBACK := Vector3(0.0, 1.4, 12.0)
 
 ## [id, centre, radius, seed]
 const WORLDS: Array = [
-	[&"world_a", Vector3(3.1, -0.55, 1.9), 0.95, 1301],
-	[&"world_b", Vector3(-3.3, 0.55, 1.5), 0.78, 2602],
-	[&"world_c", Vector3(2.6, 2.7, -1.2), 0.72, 3903],
+	[&"world_vesper", Vector3(-4.3, 0.9, 1.3), 0.8, 2602],
+	[&"world_calyx", Vector3(0.9, -1.25, 3.0), 1.0, 1301],
+	[&"world_orrin", Vector3(4.4, 1.1, 1.1), 0.75, 3903],
 ]
-const DEFAULT_WORLD := &"world_a"
+## The world of the scripted work order (LivingScript.WORK_WORLD).
+const DEFAULT_WORLD := &"world_calyx"
 
 ## Where summoned hands materialise around MIKU before they are sent (relative to her, model
 ## space; spread by index): high at her sides, like attendants of light.

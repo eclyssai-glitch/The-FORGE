@@ -7,21 +7,21 @@ extends RefCounted
 ## runs before and after the art lands. Placeholders are cached; callers that animate uniforms
 ## duplicate them.
 ##
-## Uniform contract with the art-director (set by the animator every frame they change):
-##   thread:   tension 0..1, presence 0..1
-##   hand:     presence 0..1 (summoned -> solid), effort 0..1 (pulled by a thread)
-##   world:    build 0..1 (stage progress), crack 0..1 (failure), energy 0..1 (being worked)
-##   artifact: presence 0..1, edit 0..1 (glyphs being rewritten), valid 0..1 (validation)
-##   body:     glow 0..1 (appearance.glow)
-## For placeholders the same values drive albedo alpha / emission (apply_*).
+## Uniform contract with the art-director (docs/VISUAL_DIRECTION.md §12; written when they change):
+##   thread (intent_thread):     tension, presence, release, anger (0..1)
+##   hand (angelic_hand):        presence, drive (thread tension), hand_size
+##   world (work_world):         formation, compression, stress, heal (0..1)
+##   artifact (config_artifact): presence, edit, edit_row, validated
+##   body:                       glow (appearance.glow) when the material declares it
+## For placeholders the same names drive albedo alpha / emission.
 
 const CANDIDATES := {
-	&"hand": [&"living_hand", &"angel_hand", &"puppet_hand"],
-	&"thread": [&"intent_thread", &"living_thread"],
-	&"world": [&"work_world", &"living_world"],
-	&"artifact": [&"config_artifact", &"file_artifact"],
-	&"body": [&"living_body", &"miku_mannequin"],
-	&"halo": [&"living_halo", &"halo_arc"],
+	&"hand": [&"angelic_hand"],
+	&"thread": [&"intent_thread"],
+	&"world": [&"work_world"],
+	&"artifact": [&"config_artifact"],
+	&"body": [],
+	&"halo": [&"living_halo"],
 	&"mote": [&"living_mote"],
 }
 
@@ -47,7 +47,9 @@ static func has_art(kind: StringName) -> bool:
 ## placeholder onto its StandardMaterial3D.
 static func set_param(m: Material, uniform: StringName, value: float) -> void:
 	if m is ShaderMaterial:
-		(m as ShaderMaterial).set_shader_parameter(uniform, value)
+		var sh := (m as ShaderMaterial)
+		if _declares(sh, uniform):
+			sh.set_shader_parameter(uniform, value)
 		return
 	var sm := m as StandardMaterial3D
 	if sm == null:
@@ -58,15 +60,31 @@ static func set_param(m: Material, uniform: StringName, value: float) -> void:
 			sm.emission_energy_multiplier = float(sm.get_meta(&"emission", 1.0)) * clampf(value, 0.0, 1.0) \
 				* (1.0 + float(sm.get_meta(&"tension", 0.0)) * 2.0)
 			sm.set_meta(&"presence", value)
-		&"tension", &"effort", &"energy", &"edit", &"glow":
+		&"tension", &"drive", &"compression", &"edit", &"glow", &"formation":
 			sm.set_meta(&"tension", value)
 			sm.emission_energy_multiplier = float(sm.get_meta(&"emission", 1.0)) \
 				* float(sm.get_meta(&"presence", 1.0)) * (1.0 + value * 2.0)
-		&"crack":
+		&"stress":
 			sm.emission = Palette.PEARL.lerp(Palette.MAGMA, clampf(value, 0.0, 1.0)) \
 				if sm.get_meta(&"crackable", false) else sm.emission
-		&"valid":
+		&"validated":
 			sm.emission = Palette.PEARL.lerp(Palette.GOLD, clampf(value, 0.0, 1.0))
+
+
+static var _uniforms: Dictionary = {}
+
+
+## True when the shader of `m` declares `uniform` (cached per shader).
+static func _declares(m: ShaderMaterial, uniform: StringName) -> bool:
+	if m.shader == null:
+		return false
+	var key := m.shader.get_instance_id()
+	if not _uniforms.has(key):
+		var names := {}
+		for u in m.shader.get_shader_uniform_list():
+			names[StringName(u["name"])] = true
+		_uniforms[key] = names
+	return (_uniforms[key] as Dictionary).has(uniform)
 
 
 static func _from_library(kind: StringName) -> Material:

@@ -45,6 +45,8 @@ var _b_ua := PackedInt32Array([-1, -1])
 var _b_head := -1
 var _b_chest := -1
 var _chest_children := PackedInt32Array()
+var _rig_script: Script
+var _applied_rig := {}
 
 
 func _init() -> void:
@@ -62,6 +64,9 @@ func _init() -> void:
 		skeleton = find_skeleton(rig_root)
 	map = RigBones.new(skeleton)
 	motor = MikuMotor.new(skeleton, map)
+	motor.rig.manage_scale = using_fallback
+	if not using_fallback:
+		_rig_script = load(global_class_path(RIG_CLASS)) as Script
 	_b_ua[0] = map.bone("upper_arm.L")
 	_b_ua[1] = map.bone("upper_arm.R")
 	_b_head = map.bone("head")
@@ -97,7 +102,8 @@ static func build_rig() -> Node3D:
 	if path != "":
 		var script := load(path) as Script
 		if script != null:
-			var n: Variant = script.call(&"build")
+			# MikuRig.build(material): the body material (placeholder until the art lands).
+			var n: Variant = script.call(&"build", LivingMaterials.get_material(&"body"))
 			if n is Node3D:
 				return n
 	return MikuMannequin.build()
@@ -266,6 +272,14 @@ func step(dt: float) -> void:
 
 
 func _apply_appearance() -> void:
+	if halo != null:
+		halo.scale = Vector3.ONE * appearance("halo_radius")
+	var g := appearance("glow")
+	for m in body_materials:
+		LivingMaterials.set_param(m, &"glow", g)
+	if _rig_script != null:
+		_apply_rig_appearance()
+		return
 	var h := appearance("height")
 	scale = Vector3.ONE * h
 	var sw := appearance("shoulder_width")
@@ -275,15 +289,27 @@ func _apply_appearance() -> void:
 	if _b_head >= 0:
 		motor.rig.pos_scale[_b_head] = appearance("neck_length")
 	if _b_chest >= 0:
-		var cv := appearance("chest_volume")
+		var cv := MikuParams.chest_factor(appearance("chest_volume"))
 		motor.rig.bone_scale[_b_chest] = cv
 		for c in _chest_children:
 			motor.rig.bone_scale[c] = 1.0 / maxf(cv, 0.01)
-	if halo != null:
-		halo.scale = Vector3.ONE * appearance("halo_radius")
-	var g := appearance("glow")
-	for m in body_materials:
-		LivingMaterials.set_param(m, &"glow", g)
+
+
+## Real rig: MikuRig.apply_appearance sets the bone rests (only when a value moved), then the
+## motor re-reads them.
+func _apply_rig_appearance() -> void:
+	var v := {"height": appearance("height"), "shoulder_width": appearance("shoulder_width"),
+		"neck_length": appearance("neck_length"),
+		"chest_volume": MikuParams.chest_factor(appearance("chest_volume"))}
+	var moved := _applied_rig.is_empty()
+	for k: String in v:
+		if not moved and absf(float(v[k]) - float(_applied_rig.get(k, -1.0))) > 0.0005:
+			moved = true
+	if not moved:
+		return
+	_applied_rig = v
+	_rig_script.call(&"apply_appearance", rig_root, v)
+	motor.refresh_rest()
 
 
 func _place_halo() -> void:

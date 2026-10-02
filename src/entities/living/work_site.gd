@@ -67,9 +67,10 @@ var _since_draw := 1.0
 var _tilt := SecondOrder.new(0.45, 0.25, 0.0, 0.0)
 var _spin := 0.0
 var _applied := Vector4(-1, -1, -1, -1)
+var _stress_peak := 0.0
 
 
-func _init(world_id: StringName = &"world_a", center := Vector3.ZERO, r := 1.0, seed_value := 1) -> void:
+func _init(world_id: StringName = LivingLayout.DEFAULT_WORLD, center := Vector3.ZERO, r := 1.0, seed_value := 1) -> void:
 	id = world_id
 	radius = r
 	name = "WorkSite_" + String(world_id)
@@ -201,13 +202,22 @@ func _draw(dt: float) -> void:
 	var core_s := radius * CORE_BODY * smoothstep(0.35, 1.0, b.core)
 	core_body.scale = Vector3.ONE * maxf(core_s, 0.001)
 	core_body.visible = core_s > 0.002
-	var params := Vector4(b.progress(), b.crack, b.energy, b.align)
+	# work_world uniforms: formation (laid), compression (pressed now), stress (faults), heal.
+	var stress := maxf(b.crack, maxf(b.imbalance * 0.7, b.collapsed))
+	if stress > _stress_peak:
+		_stress_peak = stress
+	if stress <= 0.001:
+		_stress_peak = 0.0
+	var heal := (_stress_peak - stress) / _stress_peak if _stress_peak > 0.0 else 0.0
+	var press := b.energy if b.stage == WorldBuild.Stage.CORE else b.energy * 0.3
+	var params := Vector4(b.progress(), press, stress, heal)
 	if not params.is_equal_approx(_applied):
 		_applied = params
 		for m in [material, core_material]:
-			LivingMaterials.set_param(m, &"build", params.x)
-			LivingMaterials.set_param(m, &"crack", params.y)
-			LivingMaterials.set_param(m, &"energy", params.z)
+			LivingMaterials.set_param(m, &"formation", params.x)
+			LivingMaterials.set_param(m, &"compression", params.y)
+			LivingMaterials.set_param(m, &"stress", params.z)
+			LivingMaterials.set_param(m, &"heal", params.w)
 
 
 func _generate(seed_value: int) -> void:

@@ -37,6 +37,10 @@ var pos_scale := PackedFloat32Array()
 var acc_scale := PackedFloat32Array()
 ## Extra translation of root bones (model space).
 var root_offset := Vector3.ZERO
+## True when this class writes pose scale/position for appearance (development stand-in). The
+## real rig applies appearance to its own rests (MikuRig.apply_appearance): then only rotations
+## (and the root's offset) are written.
+var manage_scale := true
 
 var _hook_bone := PackedByteArray()
 var _hook: Callable
@@ -59,17 +63,14 @@ func _init(skel: Skeleton3D) -> void:
 	depth.resize(count)
 	for b in count:
 		parent[b] = skel.get_bone_parent(b)
-		var lr := skel.get_bone_rest(b)
-		rest_lrot.append(lr.basis.get_rotation_quaternion())
-		rest_lpos[b] = lr.origin
+		rest_lrot.append(Quaternion.IDENTITY)
+		rest_grot.append(Quaternion.IDENTITY)
 		rel.append(Quaternion.IDENTITY)
 		acc.append(Quaternion.IDENTITY)
 		abs_rot.append(Quaternion.IDENTITY)
 		bone_scale[b] = 1.0
 		pos_scale[b] = 1.0
-		var g := skel.get_bone_global_rest(b)
-		rest_grot.append(g.basis.get_rotation_quaternion())
-		rest_gpos[b] = g.origin
+	_read_rest()
 	for b in count:
 		var d := 0
 		var p := parent[b]
@@ -77,7 +78,6 @@ func _init(skel: Skeleton3D) -> void:
 			d += 1
 			p = parent[p]
 		depth[b] = d
-		offset[b] = rest_gpos[b] - (rest_gpos[parent[b]] if parent[b] >= 0 else Vector3.ZERO)
 	var idx: Array[int] = []
 	for b in count:
 		idx.append(b)
@@ -87,6 +87,23 @@ func _init(skel: Skeleton3D) -> void:
 		order[i] = idx[i]
 	begin()
 	solve()
+
+
+## Re-reads the skeleton's rests (after the rig changed them: MikuRig.apply_appearance).
+func refresh_rest() -> void:
+	_read_rest()
+
+
+func _read_rest() -> void:
+	for b in count:
+		var lr := skeleton.get_bone_rest(b)
+		rest_lrot[b] = lr.basis.get_rotation_quaternion()
+		rest_lpos[b] = lr.origin
+		var g := skeleton.get_bone_global_rest(b)
+		rest_grot[b] = g.basis.get_rotation_quaternion()
+		rest_gpos[b] = g.origin
+	for b in count:
+		offset[b] = rest_gpos[b] - (rest_gpos[parent[b]] if parent[b] >= 0 else Vector3.ZERO)
 
 
 ## Calls `hook.call(bone)` during solve() when `bone` is reached (its position known).
@@ -151,10 +168,11 @@ func write() -> void:
 		skeleton.set_bone_pose_rotation(b, rest_lrot[b] * (g.inverse() * q * g))
 		if parent[b] < 0:
 			skeleton.set_bone_pose_position(b, rest_lpos[b] * pos_scale[b] + root_offset)
-		elif pos_scale[b] != 1.0:
+		elif manage_scale and pos_scale[b] != 1.0:
 			skeleton.set_bone_pose_position(b, rest_lpos[b] * pos_scale[b])
-		var s := bone_scale[b]
-		skeleton.set_bone_pose_scale(b, Vector3(s, s, s))
+		if manage_scale:
+			var s := bone_scale[b]
+			skeleton.set_bone_pose_scale(b, Vector3(s, s, s))
 
 
 ## Model-space direction a rest-space direction of bone `b` points to now.

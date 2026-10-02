@@ -13,21 +13,23 @@ extends RefCounted
 ## appearance: height, shoulder_width, neck_length, chest_volume (bone scales, 1 = sculpted),
 ##             halo_radius (scale of the halo), glow (0..1, inner light of the body).
 
+## Defaults = res://config/miku_default.json (interaction system); the binding sends the real
+## configuration through Miku.apply_config anyway.
 const IDENTITY_DEFAULTS := {
-	"temperament": 0.45, "curiosity": 0.7, "patience": 0.6, "pride": 0.6,
+	"temperament": 0.35, "curiosity": 0.7, "patience": 0.6, "pride": 0.55,
 }
 const BEHAVIOUR_DEFAULTS := {
-	"frustration_threshold": 0.4, "aggression_peak": 0.85, "recovery_speed": 0.5,
+	"frustration_threshold": 0.55, "aggression_peak": 0.7, "recovery_speed": 0.5,
 	"interruption_tolerance": 0.5,
 }
 const APPEARANCE_DEFAULTS := {
-	"height": 1.0, "shoulder_width": 1.0, "neck_length": 1.0, "chest_volume": 1.0,
+	"height": 1.0, "shoulder_width": 1.0, "neck_length": 1.0, "chest_volume": 0.5,
 	"halo_radius": 1.0, "glow": 0.5,
 }
-## Supported range of each appearance value (the rig deforms cleanly inside it).
+## Supported range of each appearance value (ConfigSchema; chest_volume 0.5 = the sculpture).
 const APPEARANCE_RANGES := {
-	"height": Vector2(0.85, 1.15), "shoulder_width": Vector2(0.85, 1.2), "neck_length": Vector2(0.8, 1.3),
-	"chest_volume": Vector2(0.85, 1.2), "halo_radius": Vector2(0.6, 1.6), "glow": Vector2(0.0, 1.0),
+	"height": Vector2(0.9, 1.1), "shoulder_width": Vector2(0.85, 1.15), "neck_length": Vector2(0.9, 1.12),
+	"chest_volume": Vector2(0.35, 0.65), "halo_radius": Vector2(0.8, 1.25), "glow": Vector2(0.0, 1.0),
 }
 const SECTIONS := [&"identity", &"behaviour", &"appearance"]
 
@@ -61,6 +63,12 @@ func value(section: StringName, key: String) -> float:
 func to_dict() -> Dictionary:
 	return {"identity": identity.duplicate(), "behaviour": behaviour.duplicate(),
 		"appearance": appearance.duplicate()}
+
+
+## chest_volume (config, 0.35..0.65, 0.5 = sculpted) -> chest scale factor of the rig
+## (MikuRig.APPEARANCE chest_volume 0.85..1.2, 1 = sculpted).
+static func chest_factor(cv: float) -> float:
+	return 1.0 + (cv - 0.5) * (1.0 if cv < 0.5 else 4.0 / 3.0)
 
 
 static func clamp_value(section: StringName, key: String, v: float) -> float:

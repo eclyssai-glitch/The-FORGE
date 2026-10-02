@@ -3,7 +3,7 @@ extends Node3D
 ## The work worlds of the living prototype (Loop 5): one WorkSite per LivingLayout.WORLDS entry
 ## (three worlds the user can point at). Owner: animator. Only MIKU's hands change them (through
 ## Miku: WorldBuild.work/fault/repair/dismantle); this node steps their visuals. Group GROUP.
-## Each site is an entity (`world_a`, `world_b`, `world_c`): pick body on layer 2 with
+## Each site is an entity (`world_vesper`, `world_calyx`, `world_orrin`): pick body on layer 2 with
 ## meta entity_id, group SessionState.entity_group(id), focus bounds.
 
 const GROUP := &"living_worlds"

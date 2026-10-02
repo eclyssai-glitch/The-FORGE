@@ -234,7 +234,7 @@ func _composure_target() -> float:
 		Mood.FRUSTRATED:
 			return lerpf(0.72, 0.55, temper)
 		Mood.ANGRY:
-			return 1.0 - 0.92 * params.value(&"behaviour", "aggression_peak")
+			return 1.0 - lerpf(0.6, 1.0, params.value(&"behaviour", "aggression_peak"))
 	# RECOVERING: comes back as the frustration drains.
 	return clampf(1.0 - frustration / maxf(anger_level(), 0.01), 0.35, 1.0)
 

@@ -97,8 +97,17 @@ func relax_all() -> void:
 func pull_hand(hand: PuppetHand, force: float) -> void:
 	for t in threads:
 		var c := t["cycle"] as ThreadCycle
-		if t["hand"] == hand and c.is_alive():
+		if t["hand"] == hand and c.is_alive() and c.phase != ThreadCycle.Phase.FADE:
 			c.pull(force)
+
+
+## True when `hand` has a thread that is alive (cast, pulled, relaxing or fading).
+func has_live_thread(hand: PuppetHand) -> bool:
+	for t in threads:
+		var c := t["cycle"] as ThreadCycle
+		if t["hand"] == hand and c.is_alive() and c.phase != ThreadCycle.Phase.FADE:
+			return true
+	return false
 
 
 ## Tension that reaches `hand` (the strongest of its responding threads; 0 if none responds).

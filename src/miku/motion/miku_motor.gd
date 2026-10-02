@@ -162,19 +162,8 @@ func _init(skel: Skeleton3D, bone_map: RigBones = null) -> void:
 		b_eye[s] = map.bone("eye." + side)
 		arms.append(ArmChannel.new(s))
 		fingers.append(FingerSet.new(rig, map, side, "hand." + side, 2, s == 0))
-		if b_ua[s] >= 0 and b_fa[s] >= 0 and b_hand[s] >= 0:
-			var ua := rig.rest_gpos[b_ua[s]]
-			var fa := rig.rest_gpos[b_fa[s]]
-			var hd := rig.rest_gpos[b_hand[s]]
-			_l1[s] = (fa - ua).length()
-			_l2[s] = (hd - fa).length()
-			_rest_ua[s] = (fa - ua).normalized()
-			_rest_fa[s] = (hd - fa).normalized()
-			var bend := _rest_ua[s].cross(_rest_fa[s])
-			if bend.length_squared() < 1e-6:
-				# Straight at rest: the elbow bends backwards, the hinge is horizontal.
-				bend = _rest_ua[s].cross(Vector3.BACK)
-			_rest_bend[s] = bend.normalized()
+		_measure_arm(s)
+		if b_ua[s] >= 0:
 			rig.set_hook(b_ua[s], _solve_arm)
 	for k in 3:
 		var sb := map.bone("skirt.%d" % k)
@@ -185,6 +174,31 @@ func _init(skel: Skeleton3D, bone_map: RigBones = null) -> void:
 	_turn.set_params(TURN.x, TURN.y, TURN.z)
 	_hip.set_params(WEIGHT.x, WEIGHT.y, WEIGHT.z)
 	_posture = [_lean, _lean_side, _chest_lift, _sh_raise, _sh_fwd, _tilt, _nod]
+
+
+## Arm lengths and rest directions of side s (from the skeleton's rests).
+func _measure_arm(s: int) -> void:
+	if b_ua[s] < 0 or b_fa[s] < 0 or b_hand[s] < 0:
+		return
+	var ua := rig.rest_gpos[b_ua[s]]
+	var fa := rig.rest_gpos[b_fa[s]]
+	var hd := rig.rest_gpos[b_hand[s]]
+	_l1[s] = (fa - ua).length()
+	_l2[s] = (hd - fa).length()
+	_rest_ua[s] = (fa - ua).normalized()
+	_rest_fa[s] = (hd - fa).normalized()
+	var bend := _rest_ua[s].cross(_rest_fa[s])
+	if bend.length_squared() < 1e-6:
+		# Straight at rest: the elbow bends backwards, the hinge is horizontal.
+		bend = _rest_ua[s].cross(Vector3.BACK)
+	_rest_bend[s] = bend.normalized()
+
+
+## The rig's rests changed (appearance): re-read them.
+func refresh_rest() -> void:
+	rig.refresh_rest()
+	for s in 2:
+		_measure_arm(s)
 
 
 ## True when the rig has what the body layers need (spine chain and both arms).

@@ -68,6 +68,8 @@ var _cur_curls := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0])
 var _rest_frame := Basis.IDENTITY
 var _anchor_local := Vector3.ZERO
 var _rig_offset := Vector3.ZERO
+## Wrist -> middle fingertip in the rig's own units (`hand_size` of angelic_hand).
+var _hand_size := 1.0
 var _was_moving := false
 var _applied_presence := -1.0
 var _applied_effort := -1.0
@@ -96,6 +98,7 @@ func _init(i := 0, is_left := false) -> void:
 		rig_root.position = -pivot * _scale
 		_anchor_local = (knuckles - fingers.rest_palm * 0.08 * length - pivot) * _scale
 		_rig_offset = rig_root.position
+		_hand_size = length
 	for k in 5:
 		curls.append(SecondOrder.new(FINGER.x * HandPoses.finger_lag(k), FINGER.y, FINGER.z, 0.1))
 	_own_material()
@@ -108,7 +111,8 @@ static func build_rig(is_left: bool) -> Node3D:
 	if path != "":
 		var script := load(path) as Script
 		if script != null:
-			var n: Variant = script.call(&"build", "left" if is_left else "right")
+			# HandRig.build(side: HandRig.Side LEFT=0 / RIGHT=1, material).
+			var n: Variant = script.call(&"build", 0 if is_left else 1, null)
 			if n is Node3D:
 				return n
 	return HandMannequin.build(is_left)
@@ -226,7 +230,7 @@ func _apply_material() -> void:
 		LivingMaterials.set_param(material, &"presence", p)
 	if absf(effort - _applied_effort) > 0.01:
 		_applied_effort = effort
-		LivingMaterials.set_param(material, &"effort", effort)
+		LivingMaterials.set_param(material, &"drive", effort)
 
 
 ## Every mesh of the rig gets this hand's own copy of the hand material (presence/effort are
@@ -236,3 +240,4 @@ func _own_material() -> void:
 	for mi in rig_root.find_children("*", "MeshInstance3D", true, false):
 		(mi as MeshInstance3D).material_override = material
 	LivingMaterials.set_param(material, &"presence", 0.0)
+	LivingMaterials.set_param(material, &"hand_size", _hand_size)
