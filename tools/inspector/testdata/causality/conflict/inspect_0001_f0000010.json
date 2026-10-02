@@ -1,0 +1,4 @@
+{"format": "korium-inspect/1", "frame": 10, "sections": {"Miku": {"clock": 3.0, "causality": [
+  {"request_id": 1, "step": 1, "action": "INSPECT", "channel": "main", "stage": "", "phase": "",
+   "t": {"intent": 1.0, "anticipation": 1.0, "gesture": 1.2}}
+]}}}

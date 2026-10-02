@@ -22,6 +22,10 @@
 #   --inspect-every=<s>  DEVELOPMENT ONLY: dev inspector JSON dumps every <s> s of game time into
 #                        <base>_inspect/ (no PNG: the video has the frames; `motion_time` in each
 #                        dump = video time). docs/BUILD.md, "Inspector de desenvolvimento".
+#   --causality[=require] DEVELOPMENT ONLY, needs --inspect-every: at the end, run the causality gate
+#                        tools/inspector/causality.py on <base>_inspect/ (with --require when
+#                        =require; table in <base>_causality.txt) and fail (exit 1, after the
+#                        video is written) on causality=FAIL. docs/BUILD.md, "Gate de causalidade".
 #   --timeout=<s>        total limit (default LIVING_TIMEOUT or 9000: software rendering takes
 #                        ~1 s or more per 1080p frame; the full take is ~4350 frames)
 # Output: build/review/living_<W>x<H>_hud-<on|off>[_preview].{avi,mp4,log}.
@@ -37,6 +41,7 @@ hud="on"
 quality="high"
 crf="18"
 inspect_every=""
+causality=""
 timeout_s="${LIVING_TIMEOUT:-9000}"
 grace_s="${LIVING_GRACE:-120}"
 for a in "$@"; do
@@ -47,6 +52,8 @@ for a in "$@"; do
     --quality=*) quality="${a#--quality=}" ;;
     --crf=*) crf="${a#--crf=}" ;;
     --inspect-every=*) inspect_every="${a#--inspect-every=}" ;;
+    --causality) causality="order" ;;
+    --causality=require) causality="require" ;;
     --timeout=*) timeout_s="${a#--timeout=}" ;;
     *) echo "record_living: unknown option '$a'." >&2; exit 2 ;;
   esac
@@ -63,6 +70,10 @@ case "$quality" in low|medium|high|ultra) ;; *)
 [[ "$crf" =~ ^[0-9]+$ ]] || { echo "record_living: --crf must be an integer, got '$crf'." >&2; exit 2; }
 if [ -n "$inspect_every" ] && ! [[ "$inspect_every" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   echo "record_living: --inspect-every must be seconds, got '$inspect_every'." >&2; exit 2
+fi
+if [ -n "$causality" ]; then
+  [ -n "$inspect_every" ] || { echo "record_living: --causality needs --inspect-every=<s>." >&2; exit 2; }
+  command -v python3 >/dev/null || { echo "record_living: --causality needs python3." >&2; exit 127; }
 fi
 for tool in ffmpeg ffprobe; do
   command -v "$tool" >/dev/null || { echo "record_living: $tool not found." >&2; exit 127; }
@@ -159,3 +170,15 @@ grep -E "^\[living\] cue " "$log" | sed 's/^/record_living: /' || true
 [ -z "$inspect_every" ] || echo "record_living: inspector $(find "${base}_inspect" -name '*.json' 2>/dev/null | wc -l) dumps in ${base}_inspect/"
 grep -qE "^\[living\] done .*config_restored=true" "$log" \
   || echo "record_living: WARNING - the player's MIKU configuration may not have been restored (see $log)." >&2
+if [ -n "$causality" ]; then
+  caus_args=("${base}_inspect")
+  [ "$causality" = "require" ] && caus_args=(--require "${caus_args[@]}")
+  set +e
+  python3 tools/inspector/causality.py "${caus_args[@]}" > "${base}_causality.txt" 2>&1
+  caus_status=$?
+  set -e
+  grep -E "^causality: " "${base}_causality.txt" | sed 's/^/record_living: /'
+  echo "record_living: causality table in ${base}_causality.txt"
+  tail -n1 "${base}_causality.txt"
+  [ "$caus_status" -eq 0 ] || { echo "record_living: causality gate failed (status $caus_status)." >&2; exit 1; }
+fi
