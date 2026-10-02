@@ -88,7 +88,7 @@ func appear(at: Vector3, face: Vector3) -> void:
 	holder = null
 	_pos.reset(at + Vector3.DOWN * 0.15)
 	presence.reset(0.0)
-	global_transform = Transform3D(Basis.looking_at(-face, Vector3.UP), _pos.y)
+	global_transform = Transform3D(_facing(face), _pos.y)
 
 
 func hold(h: PuppetHand) -> void:
@@ -150,7 +150,7 @@ func step(dt: float) -> void:
 	if look.length_squared() < 1e-6:
 		look = Vector3.BACK
 	var tilt := Basis(Vector3.BACK, sin(_time * 0.7) * 0.03 + (_fall * 0.8 if state == State.REJECT else 0.0))
-	global_transform = Transform3D(Basis.looking_at(-look.normalized(), Vector3.UP) * tilt, _pos.y)
+	global_transform = Transform3D(_facing(look) * tilt, _pos.y)
 	var p := clampf(presence.y, 0.0, 1.0)
 	scale = Vector3.ONE * lerpf(0.7, 1.0, p)
 	LivingMaterials.set_param(material, &"presence", p)
@@ -164,6 +164,14 @@ func step(dt: float) -> void:
 		state = State.HIDDEN
 		visible = false
 		holder = null
+
+
+## Basis whose front (+Z) faces `dir` (never colinear with up).
+static func _facing(dir: Vector3) -> Basis:
+	var d := dir.normalized() if dir.length_squared() > 1e-8 else Vector3.BACK
+	if absf(d.dot(Vector3.UP)) > 0.98:
+		d = (d + Vector3.BACK * 0.3).normalized()
+	return Basis.looking_at(-d, Vector3.UP)
 
 
 ## Glyph rows: each row is rewritten in turn while editing (its width moves from the old line to
