@@ -225,6 +225,17 @@ func test_cancel_vanishes_the_artifact_and_the_task() -> void:
 		"WORK already had its terminal: none more")
 
 
+func test_cancel_all() -> void:
+	miku.perform(&"SUMMON_HANDS", {"count": 2, "request_id": 81, "step": 0})
+	miku.perform(&"THINK", {"request_id": 82, "step": 0})
+	miku.perform(&"ACKNOWLEDGE", {"request_id": 83, "step": 0})
+	_tick(0.5)
+	assert_eq(miku.cancel_all(), 3)
+	for rid in [81, 82, 83]:
+		assert_eq(_terminal_of(rid, 0)[2], Miku.PH_CANCELLED)
+	assert_false(miku.is_busy())
+
+
 func test_discard_cancels_the_edit_it_interrupts() -> void:
 	miku.perform(&"GRAB_FILE", {"file": "f", "request_id": 31, "step": 0})
 	_tick(0.8)

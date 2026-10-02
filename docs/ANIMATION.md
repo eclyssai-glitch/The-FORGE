@@ -508,6 +508,42 @@ Movie Maker com `--fixed-fps`; `MAX_DT` = 0,1 s). Variação vem do estado; o ú
   `work_order`, `work_step` (GATHER, COMPRESS, MANTLE, CRUST, SKY; tentativas; mãos), `work_failed` (1: fissura,
   2: colapso), `work_dismantled`, `work_recovered`, `world_complete`. Ela reage; o evento nunca a posiciona.
 
+### Protocolo de ações correlacionadas (rodada 2, `docs/contracts/loop-05-round2.md`)
+
+- `perform(action, args)` lê `args.request_id` (> 0 = pedido do `InteractionRouter`; 0 = dela: roteiro, agenda,
+  mãos ociosas) e `args.step` (índice no plano).
+- `action_event(request_id, action, phase, info)`, sempre com `info.step`: `accepted` (no `perform`, com
+  `info.estimate`) → `started` (`info.channel` = `main` | `overlay` | `follower`; uma ação na fila só começa quando
+  sai dela) → `progress` (cada etapa causal alcançada: `info.stage`, `info.t` 0..1 dos beats) → **um** terminal:
+  `finished`; `failed` (`info.reason`, ex. `timeout:applied` — um `wait` marcado `critical` esgotou: `edited`,
+  `applied` do EDIT_FILE); `cancelled` (`info.reason`: `cancelled` por `cancel`, `preempted` quando outro overlay
+  a substitui, `discarded` quando DISCARD interrompe GRAB/EDIT). `action_finished(action)` continua (um por
+  `perform` aceito, também em falha/cancelamento); `action_started` sai no `started`. Ação desconhecida: `false`,
+  nenhum evento.
+- `estimate_duration(action, args) -> float`: segundos reais a partir de agora — espera do canal (restante da
+  ação em curso + fila) + beats ÷ `tempo()` atual + esperas típicas (`WAIT_ESTIMATE`: mão chegar 1,45 s,
+  edição 2,5 s, aplicação 0,3 s, ÷ √tempo). Medido (teste `…_living_protocol`): todas as 20 ações do plano
+  de referência dentro de ±25 % (as de humor variam com o tempo que ela própria muda).
+- `cancel(request_id) -> int`: fila, overlay, olhares que se juntaram à reação, ação principal e a TASK que o
+  WORK daquele pedido iniciou terminam com `cancelled`; mãos invocadas pelo pedido (meta `request_id`)
+  dissolvem e seus fios relaxam; o artefato de configuração chamado por ele some. `cancel_all()` para
+  reset/recomposição.
+- Reconhecimento imediato: `LOOK_AT_USER`/`LOOK_AT_WORLD` com `request_id > 0` nunca esperam fila — juntam-se à
+  reação em curso, ou começam como overlay (olhos/cabeça) se o canal principal estiver ocupado, ou cortam a
+  percepção do outro tipo. `started` no mesmo quadro; os olhos giram > 4° em `ACK_LATENCY` = 0,3 s (teste).
+- Linha do tempo causal (`inspect_state().causality`, últimas `TIMELINE_MAX` = 48): uma entrada por execução
+  `{request_id, step, action, channel (main|overlay|follower|task), stage (etapa do mundo nas entradas de task,
+  senão ""), phase ("" em curso, senão o terminal), t: {intent, anticipation, gesture, thread, hand, matter,
+  result}}` em segundos do relógio dela (`inspect_state().clock`). Cada etapa é carimbada na **primeira** vez:
+  `intent` = início da execução; `anticipation` = beat `gaze`/`breath`/`arm WINDUP`; `gesture` = `arm` (outro
+  gesto), `turn`, `pose`, `wave`; `thread` = `cast` ou `pull`; `hand` = primeiro quadro em que uma mão da
+  execução responde ao `pull` dela (tensão > `HandDynamics.SLACK` e movendo-se, ou no lugar); `matter` = mundo
+  mudando pelo trabalho dela (`k > 0,05`) ou artefato segurado/editado; `result` = terminal. A TASK abre uma
+  entrada por etapa do mundo (GATHER, CORE, LAYERS, ADJUST) com o `request_id` do WORK que a iniciou. Regra do
+  checador: as etapas presentes formam um prefixo de `intent → … → matter` em ordem não decrescente, e
+  `result` ≥ todas. Para que valha em todas as ações, `ACKNOWLEDGE` (warm/brief) ganhou o olhar/respiração
+  antes do aceno e `EDIT_FILE` o gesto de chamar antes do fio (testes `…_living_protocol`).
+
 ### Três canais de beats (`Miku`)
 
 **TASK** (o trabalho num mundo, em segundo plano), **MAIN** (ações do vocabulário, uma por vez, fila;

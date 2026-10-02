@@ -320,6 +320,23 @@ func cancel(request_id: int) -> int:
 	return n
 
 
+## Cancels every accepted action that has not ended (reset / recomposition by the interaction
+## system): each request's cancel(), her own included. Returns the number cancelled.
+func cancel_all() -> int:
+	var ids := {}
+	for q: Dictionary in _queue + _overlay_queue:
+		ids[int(q["tag"]["request_id"])] = true
+	for run: Dictionary in [_main, _overlay, _task]:
+		if not run.is_empty():
+			ids[int(run["tag"]["request_id"])] = true
+			for f: Dictionary in run["followers"]:
+				ids[int(f["request_id"])] = true
+	var n := 0
+	for id: int in ids:
+		n += cancel(id)
+	return n
+
+
 ## The user called her (click on MIKU, "Miku, ..."): she reacts according to her state.
 func notice_user() -> Dictionary:
 	_bind()

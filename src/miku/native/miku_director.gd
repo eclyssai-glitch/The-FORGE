@@ -240,14 +240,15 @@ func step(dt: float) -> void:
 	_param(P_BREATH_ADD, _depth.y * lerpf(1.0, 0.35, k))
 	_param(P_BREATH_RATE, maxf(breath_rate, 0.01))
 	for p in _p_tempo:
-		_param(p, tempo)
+		_param(p, tempo, 0.01)
 	tree.advance(dt)
 	_snap = false
 	last_us = Time.get_ticks_usec() - t0
 
 
-func _param(path: StringName, v: float) -> void:
-	if absf(float(_cache.get(path, INF)) - v) < 1e-5:
+## Writes a tree parameter only when it moved by at least `quantum` (no per-frame churn).
+func _param(path: StringName, v: float, quantum := 1e-4) -> void:
+	if absf(float(_cache.get(path, INF)) - v) < quantum:
 		return
 	_cache[path] = v
 	tree.set(path, v)
