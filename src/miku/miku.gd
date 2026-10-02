@@ -109,15 +109,8 @@ const WAIT_ESTIMATE := {&"arrived": 1.45, &"edited": 2.5, &"applied": 0.3}
 const ACK_LATENCY := 0.3
 
 ## Posture of each mood (MikuMind.Mood order): lean, lean_side, chest lift, shoulder raise,
-## shoulders forward, head tilt, nod. Calm = the dancer's carriage; angry = vertical, square,
-## chin down, no tilt.
-const MOOD_POSTURE: Array = [
-	[0.0, 0.015, 0.2, -0.12, -0.18, 0.065, 0.0],
-	[0.08, 0.0, 0.1, 0.0, 0.08, 0.03, 0.07],
-	[0.06, 0.0, -0.05, 0.5, 0.25, 0.0, 0.05],
-	[0.0, 0.0, 0.06, 0.3, 0.0, 0.0, 0.08],
-	[0.02, 0.0, 0.12, -0.2, -0.1, 0.05, 0.08],
-]
+## shoulders forward, head tilt, nod (MikuPoses: both bodies use it).
+const MOOD_POSTURE: Array = MikuPoses.MOOD_POSTURE
 ## Breath of each mood: [rate (Hz), depth].
 const MOOD_BREATH: Array = [
 	[1.0 / Palette.T_BREATH, 1.0], [1.0 / 4.6, 0.7], [1.0 / 3.0, 0.75], [1.0 / 3.8, 0.22],
@@ -1580,6 +1573,7 @@ func _compose_body() -> void:
 	var m: int = mind.mood
 	var stiff := mind.rigidity()
 	body.set_character(stiff, mind.tempo())
+	body.set_mood(m)
 	var micro := agenda.current
 	var mp := agenda.progress()
 	# Posture: mood + beats + micro-behaviour.

@@ -175,6 +175,13 @@ func write() -> void:
 			skeleton.set_bone_pose_scale(b, Vector3(s, s, s))
 
 
+## Relative rotation of `b` in rest model axes for the local pose rotation the skeleton holds now
+## (the inverse of write(): what the AnimationTree posed, in this class's terms).
+func rel_from_skeleton(b: int) -> Quaternion:
+	var g := rest_grot[b]
+	return (g * (rest_lrot[b].inverse() * skeleton.get_bone_pose_rotation(b)) * g.inverse()).normalized()
+
+
 ## Model-space direction a rest-space direction of bone `b` points to now.
 func dir_of(b: int, rest_dir: Vector3) -> Vector3:
 	return acc[b] * rest_dir

@@ -20,6 +20,26 @@ extends Node3D
 
 const ENTITY := &"miku"
 const RIG_CLASS := &"MikuRig"
+## Movement backends (Loop 5 r2, native migration; docs/ANIMATION.md "LIVING — migração nativa").
+## Per layer: `legacy` = the round-1 manual bone code (MikuMotor/PoseRig/LimbIK/ArmChannel/
+## FingerSet, kept until every comparison is done), `native` = Godot's stack. Layers migrate one
+## step at a time; a layer without a native implementation yet always runs legacy.
+##   torso      mood states, composure grade, posture, weight, breath, emotional timing
+##              (AnimationTree, MikuDirector) — STEP 1
+##   gaze       eyes -> head -> chest (LookAtModifier3D) — STEP 2 (not yet: legacy)
+##   arms       TwoBoneIK3D / Aim / twist — STEP 3 (not yet: legacy)
+##   secondary  SpringBoneSimulator3D (skirt, fingers) — STEP 4 (not yet: legacy)
+## Selection: command line (user args, after `--`) `--body=legacy|native` (every layer that has a
+## native implementation) and `--body-<layer>=legacy|native`; tests set `override_backend`.
+const LAYERS: Array[StringName] = [&"torso", &"gaze", &"arms", &"secondary"]
+const NATIVE_LAYERS: Array[StringName] = [&"torso"]
+const LEGACY := &"legacy"
+const NATIVE := &"native"
+## Backend when nothing is asked (the result of the STEP 1 comparison, docs/ANIMATION.md).
+const DEFAULT_BACKEND := &"legacy"
+
+## Tests / tools: when not empty, the backend of every layer (before any command-line choice).
+static var override_backend: StringName = &""
 ## Appearance easing [f, zeta]: a little overshoot, the body "settles" into its new shape.
 const APPEARANCE_SPRING := Vector2(0.5, 0.55)
 ## Halo: radius (units) and where it sits relative to the head bone (rest model offset).
@@ -34,7 +54,14 @@ var rig_root: Node3D
 var skeleton: Skeleton3D
 var map: RigBones
 var motor: MikuMotor
+## Native torso (layer `torso` = native), else null.
+var director: MikuDirector
+## Backend per layer (LAYERS -> LEGACY | NATIVE).
+var layers: Dictionary = {}
 var using_fallback := false
+## CPU of the last step (µs): AnimationTree (director) and the manual motor.
+var tree_us := 0
+var motor_us := 0
 var halo: MeshInstance3D
 var pick_body: StaticBody3D
 var body_materials: Array[Material] = []
@@ -65,6 +92,10 @@ func _init() -> void:
 	map = RigBones.new(skeleton)
 	motor = MikuMotor.new(skeleton, map)
 	motor.rig.manage_scale = using_fallback
+	layers = choose_layers(OS.get_cmdline_user_args())
+	if layers[&"torso"] == NATIVE:
+		director = MikuDirector.new(skeleton, map)
+		motor.torso_native = true
 	if not using_fallback:
 		_rig_script = load(global_class_path(RIG_CLASS)) as Script
 	_b_ua[0] = map.bone("upper_arm.L")
@@ -109,6 +140,35 @@ static func build_rig() -> Node3D:
 	return MikuMannequin.build()
 
 
+## Backend of each layer from the command-line user args (and override_backend).
+static func choose_layers(args: PackedStringArray) -> Dictionary:
+	var all: StringName = override_backend if override_backend != &"" else DEFAULT_BACKEND
+	var per := {}
+	for a in args:
+		if a.begins_with("--body="):
+			all = StringName(a.get_slice("=", 1))
+		elif a.begins_with("--body-"):
+			per[StringName(a.trim_prefix("--body-").get_slice("=", 0))] = StringName(a.get_slice("=", 1))
+	var out := {}
+	for l in LAYERS:
+		var b: StringName = per.get(l, all)
+		if b != NATIVE and b != LEGACY:
+			push_warning("MikuBody: unknown backend '%s' for layer %s (legacy)" % [b, l])
+			b = LEGACY
+		out[l] = b if NATIVE_LAYERS.has(l) else LEGACY
+	return out
+
+
+## LEGACY when every layer runs the round-1 code, NATIVE when every migrated layer is native,
+## else "mixed".
+func backend() -> StringName:
+	var n := 0
+	for l in NATIVE_LAYERS:
+		if layers[l] == NATIVE:
+			n += 1
+	return LEGACY if n == 0 else (NATIVE if n == NATIVE_LAYERS.size() else &"mixed")
+
+
 static func find_skeleton(n: Node) -> Skeleton3D:
 	if n is Skeleton3D:
 		return n
@@ -143,23 +203,46 @@ func set_posture(lean: float, lean_side: float, chest_lift: float, raise: float,
 	motor.shoulder_fwd = fwd
 	motor.head_tilt = tilt
 	motor.head_nod = nod
+	if director != null:
+		var p := director.posture
+		p[0] = lean
+		p[1] = lean_side
+		p[2] = chest_lift
+		p[3] = raise
+		p[4] = fwd
+		p[5] = tilt
+		p[6] = nod
 
 
 ## Weight on one side (-1 right .. 1 left).
 func set_weight(side: float) -> void:
 	motor.weight_side = side
+	if director != null:
+		director.weight_side = side
 
 
 ## Breath rate (cycles/s) and depth (1 = normal).
 func set_breath(rate: float, depth: float) -> void:
 	motor.breath_rate = rate
 	motor.breath_depth = depth
+	if director != null:
+		director.breath_rate = rate
+		director.breath_depth = depth
 
 
 ## Composure of the motion (0 fluid .. 1 rigid) and its speed.
 func set_character(stiff: float, tempo: float) -> void:
 	motor.stiff = stiff
 	motor.tempo = tempo
+	if director != null:
+		director.stiff = stiff
+		director.tempo = tempo
+
+
+## Her mood (MikuMind.Mood): the native torso's state machine (legacy: the posture carries it).
+func set_mood(mood: int) -> void:
+	if director != null:
+		director.mood = mood
 
 
 ## Arm goal of side s (0 left, 1 right): hand position, palm normal, finger direction, elbow
@@ -179,12 +262,20 @@ func set_finger_wave(s: int, wave: PackedFloat32Array) -> void:
 
 ## State for the dev inspector (Miku.inspect_state().body).
 func inspect_state() -> Dictionary:
-	return {"backend": "legacy"}
+	var ls := {}
+	for l: StringName in layers:
+		ls[String(l)] = String(layers[l])
+	var d := {"backend": String(backend()), "layers": ls, "tree_us": tree_us, "motor_us": motor_us}
+	if director != null:
+		d["tree"] = director.inspect_state()
+	return d
 
 
 ## Places every channel on its goal (composition / reset).
 func snap() -> void:
 	motor.snap_next()
+	if director != null:
+		director.snap()
 
 
 # ---------------------------------------------------------------- Body queries (world space)
@@ -272,7 +363,12 @@ func step(dt: float) -> void:
 	for k: String in _app:
 		(_app[k] as SecondOrder).step(float(_app_goal[k]), dt)
 	_apply_appearance()
+	if director != null:
+		director.step(dt)
+		tree_us = director.last_us
+	var t0 := Time.get_ticks_usec()
 	motor.step(dt)
+	motor_us = Time.get_ticks_usec() - t0
 	_place_halo()
 
 
