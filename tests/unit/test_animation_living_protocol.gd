@@ -225,6 +225,78 @@ func test_cancel_vanishes_the_artifact_and_the_task() -> void:
 		"WORK already had its terminal: none more")
 
 
+## The configuration plans of docs/AGENT.md, driven like the InteractionRouter does: the next
+## step is performed SYNCHRONOUSLY from the previous step's terminal (re-entrancy), each step's
+## estimate taken just before it is performed.
+const CONFIG_APPLIED: Array = [
+	[&"LOOK_AT_USER", {}], [&"ACKNOWLEDGE", {"tone": "brief"}], [&"SUMMON_HAND", {"side": "left", "role": "hold"}],
+	[&"GRAB_FILE", {"file": "miku"}], [&"SUMMON_HAND", {"side": "right", "role": "edit"}],
+	[&"EDIT_FILE", {"file": "miku", "path": "appearance.height", "value": 1.05, "old_value": 1.0}],
+	[&"INSPECT", {"target": "self", "path": "appearance.height"}], [&"SATISFIED", {"intensity": 0.6}],
+	[&"DISCARD", {"applied": true}], [&"WORK", {"resume": true}],
+]
+const CONFIG_UNCHANGED: Array = [
+	[&"LOOK_AT_USER", {}], [&"ACKNOWLEDGE", {"tone": "brief"}], [&"SUMMON_HAND", {"side": "left", "role": "hold"}],
+	[&"GRAB_FILE", {"file": "miku"}], [&"INSPECT", {"target": "file", "path": "appearance.height"}],
+	[&"ACKNOWLEDGE", {"tone": "decline"}], [&"DISCARD", {"applied": false}], [&"WORK", {"resume": true}],
+]
+
+
+func _router_plan(plan: Array, rid: int) -> Array:
+	var state := {"step": 0, "t0": 0.0, "est": [], "real": []}
+	var run_step := func(i: int) -> void:
+		var args: Dictionary = (plan[i][1] as Dictionary).duplicate()
+		args["request_id"] = rid
+		args["step"] = i
+		state["est"].append(miku.estimate_duration(plan[i][0], args))
+		state["t0"] = _t
+		assert_true(miku.perform(plan[i][0], args))
+	var on_event := func(r: int, a: StringName, ph: StringName, info: Dictionary) -> void:
+		if r != rid or int(info["step"]) != int(state["step"]) or not ph in Miku.TERMINAL:
+			return
+		assert_eq(a, plan[int(state["step"])][0])
+		state["real"].append(_t - float(state["t0"]))
+		state["step"] = int(state["step"]) + 1
+		if int(state["step"]) < plan.size():
+			run_step.call(int(state["step"]))
+	miku.action_event.connect(on_event)
+	run_step.call(0)
+	var t := 0.0
+	while int(state["step"]) < plan.size() and t < 90.0:
+		_tick(DT)
+		t += DT
+	miku.action_event.disconnect(on_event)
+	assert_eq(int(state["step"]), plan.size(), "the whole plan ran (re-entrant performs)")
+	return [state["est"], state["real"]]
+
+
+func test_router_plans_reentrant_and_estimated() -> void:
+	var rid := 90
+	for plan: Array in [CONFIG_APPLIED, CONFIG_UNCHANGED]:
+		var r := _router_plan(plan, rid)
+		var est: Array = r[0]
+		var real: Array = r[1]
+		var se := 0.0
+		var sr := 0.0
+		var lines := []
+		for i in real.size():
+			se += float(est[i])
+			sr += float(real[i])
+			lines.append("%s %.2f/%.2f" % [plan[i][0], est[i], real[i]])
+			assert_lt(float(real[i]), float(est[i]) * 2.0 + 3.0, "%s inside the router's timeout" % plan[i][0])
+			assert_lt(float(real[i]), float(est[i]) * 1.35 + 0.5, "%s: real %.2f vs estimate %.2f" % [plan[i][0], real[i], est[i]])
+		gut.p("plan est %.1f s real %.1f s: %s" % [se, sr, ", ".join(lines)])
+		assert_between(sr, se * 0.8, se * 1.2, "the plan's total is estimated honestly")
+		for i in plan.size():
+			var n := 0
+			for e: Array in _of(rid, i):
+				if e[2] in Miku.TERMINAL:
+					n += 1
+			assert_eq(n, 1, "%s: one terminal" % plan[i][0])
+		rid += 1
+		_tick(8.0)
+
+
 func test_cancel_all() -> void:
 	miku.perform(&"SUMMON_HANDS", {"count": 2, "request_id": 81, "step": 0})
 	miku.perform(&"THINK", {"request_id": 82, "step": 0})

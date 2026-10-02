@@ -234,8 +234,7 @@ func perform(action: StringName, args := {}) -> bool:
 		return true
 	if action == ActionScript.DISCARD and not _main.is_empty() \
 			and _main["action"] in [ActionScript.EDIT_FILE, ActionScript.GRAB_FILE]:
-		_finish_run(_main, SRC_MAIN, PH_CANCELLED, "discarded")
-		_main = {}
+		_end(SRC_MAIN, PH_CANCELLED, "discarded")
 	if _main.is_empty():
 		_start_main(tag, a)
 	else:
@@ -304,18 +303,15 @@ func cancel(request_id: int) -> int:
 				_terminal(f, PH_CANCELLED, "cancelled")
 				n += 1
 		if int(_overlay["tag"]["request_id"]) == request_id and _overlay["action"] in ActionScript.VOCABULARY:
-			_finish_run(_overlay, SRC_OVERLAY, PH_CANCELLED, "cancelled")
-			_overlay = {}
+			_end(SRC_OVERLAY, PH_CANCELLED, "cancelled")
 			n += 1
 			_next_overlay()
 	if not _main.is_empty() and int(_main["tag"]["request_id"]) == request_id:
-		_finish_run(_main, SRC_MAIN, PH_CANCELLED, "cancelled")
-		_main = {}
+		_end(SRC_MAIN, PH_CANCELLED, "cancelled")
 		n += 1
 		_next_main()
 	if not _task.is_empty() and int(_task["tag"]["request_id"]) == request_id:
-		_finish_run(_task, SRC_TASK, PH_CANCELLED, "cancelled")
-		_task = {}
+		_end(SRC_TASK, PH_CANCELLED, "cancelled")
 	_release_request(request_id)
 	return n
 
@@ -483,15 +479,12 @@ func tick(dt: float) -> void:
 	_step_run(_overlay, dt, SRC_OVERLAY)
 	_emit_mood()
 	if not _main.is_empty() and _main["done"]:
-		_finish_run(_main, SRC_MAIN)
-		_main = {}
+		_end(SRC_MAIN)
 		_next_main()
 	if not _task.is_empty() and _task["done"]:
-		_finish_run(_task, SRC_TASK)
-		_task = {}
+		_end(SRC_TASK)
 	if not _overlay.is_empty() and _overlay["done"]:
-		_finish_run(_overlay, SRC_OVERLAY)
-		_overlay = {}
+		_end(SRC_OVERLAY)
 		_next_overlay()
 	_idle_hands(dt)
 	agenda.step(dt, mind, _agenda_context())
@@ -709,12 +702,31 @@ func _start_overlay(tag: Dictionary, args: Dictionary) -> void:
 
 
 func _start_overlay_beats(tag: Dictionary, args: Dictionary, beats: Array[Dictionary]) -> void:
-	if not _overlay.is_empty():
-		_finish_run(_overlay, SRC_OVERLAY, PH_CANCELLED, "preempted")
+	# (A terminal may make the interaction system perform synchronously — and start another
+	# overlay: that one is preempted too, with its own terminal.)
+	while not _overlay.is_empty():
+		_end(SRC_OVERLAY, PH_CANCELLED, "preempted")
 	_overlay = _new_run(tag, args, beats, &"overlay")
 	_gaze_beat[SRC_OVERLAY] = {}
 	_turn_beat[SRC_OVERLAY] = {}
 	_begin_tag(tag, &"overlay")
+
+
+## Ends the run on channel `src`: the channel is emptied FIRST and its body channels cleared, THEN
+## the terminal is emitted — the interaction system may call perform() synchronously from it (the
+## new action finds the channel free, or queues normally). The caller moves the queue on.
+func _end(src: int, phase := PH_FINISHED, reason := "") -> void:
+	var run: Dictionary = _task if src == SRC_TASK else (_main if src == SRC_MAIN else _overlay)
+	if run.is_empty():
+		return
+	match src:
+		SRC_TASK:
+			_task = {}
+		SRC_MAIN:
+			_main = {}
+		_:
+			_overlay = {}
+	_finish_run(run, src, phase, reason)
 
 
 ## Ends a run: its channels are cleared and its owner (and the looks that joined it) get their
