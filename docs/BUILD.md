@@ -55,6 +55,7 @@ ou outros templates mudam o binário.
 | Vídeo do jogo real GENESIS com áudio (MP4 H.264 + AAC) | `tools/record_genesis.sh [--hud=off] [--resolution=WxH]` |
 | Cenário LIVING (Loop 5): roteiro + pedidos reais + config mutada e revertida | `tools/smoke_test.sh --scenario=living`, `tools/capture_evidence.sh <dir> --scenario=living` |
 | Vídeo do protótipo LIVING com interações reais e áudio | `tools/record_living.sh [--hud=off] [--resolution=WxH] [--until=<s>]` |
+| Gate de causalidade de MIKU (dev) | `tools/record_living.sh --inspect-every=1 --causality=require`, `tools/inspector/causality.py <dumps>` (seção "Gate de causalidade"); o smoke LIVING relata `causality=PASS\|FAIL n/m` |
 
 O smoke reprova se: `RESULT=FAIL`, falta a linha `RESULT`, há `SCRIPT ERROR`/`Parse Error` no log,
 a linha `modules=N/M` tem N ≠ M (script de entidade, fx, áudio ou câmera do cenário ativo ausente/quebrado;
@@ -248,7 +249,8 @@ pedido SEMANTIC sem provider (T+130). Cada cue imprime `[living] cue ... real in
 clicável/linha focada, `fallback` (o pedido entra pela `Session` e o log diz). A tomada sempre começa do MIKU
 versionado (configuração do jogador zerada e restaurada: `config_restored=true` na linha `[living] done`).
 Opções: `--hud=on|off`, `--resolution=WxH`, `--until=<s>` (prévia), `--quality=`, `--crf=`,
-`--timeout=`/`LIVING_TIMEOUT` (9000 s), `LIVING_GRACE` (120 s). Saída:
+`--timeout=`/`LIVING_TIMEOUT` (9000 s), `LIVING_GRACE` (120 s), `--inspect-every=<s>` (dumps do inspector),
+`--causality[=require]` (gate de causalidade nos dumps; seção "Gate de causalidade"). Saída:
 `build/review/living_<W>x<H>_hud-<on|off>[_preview].{avi,mp4,log}`.
 
 ## Inspector de desenvolvimento (Loop 5, Fase 3)
@@ -330,3 +332,65 @@ os rótulos da árvore (lista nós adicionados/removidos); `--all` inclui tudo.
 - Reprodutível: os dois checkouts limpos e um terceiro export num deles após apagar `.godot/exported` geraram o
   mesmo `.exe` (`6a04e64efce857e0ebfb366c28bf6725361a533751a5820f7ac0250e25a319f2`) e o mesmo zip
   (`4a211f7dffc2a7125ad4ef8f066d35b9279be0bd9053a982abe8b8833a6a0352`).
+
+## Gate de causalidade (Loop 5 R2, `tools/inspector/causality.py`)
+
+Contrato: `docs/contracts/loop-05-round2.md` ("Gate de causalidade"); formato dos carimbos: `docs/ANIMATION.md`
+("Linha do tempo causal"). Cada dump do inspector traz em `sections.Miku` (`inspect_state()` de MIKU) o `clock` e
+`causality`: as últimas 48 execuções `{request_id, step, action, channel, stage, phase, t: {intent, anticipation,
+gesture, thread, hand, matter, result}}`. **Somente desenvolvimento** (stdlib Python; `tools/` fora do export).
+
+```bash
+tools/inspector/causality.py build/review/living_640x360_hud-on_inspect            # tabela + resumo
+tools/inspector/causality.py <dir_ou_dumps...> --require                          # + cadeia completa nas grandes
+tools/inspector/causality.py <dir> --failures-only                                # só as reprovadas
+```
+
+- **União**: dumps lidos em ordem de `frame`; uma execução = (sessão, `request_id`, `step`, `action`, `channel`,
+  `stage`, `t.intent`) — o carimbo `intent` separa as repetições das ações dela (`request_id` 0); a sessão muda
+  quando o relógio dela volta (reset/recomposição). Fica a cópia mais completa (mais carimbos, depois terminal).
+  Uma cópia posterior que **muda** um carimbo, perde um, ou volta de terminal para "em curso" reprova.
+- **Regras** (toda entrada): `intent` presente; as etapas presentes formam um prefixo de
+  intent → anticipation → gesture → thread → hand → matter (`thread without gesture`); tempos não decrescentes
+  (`gesture 12.4 before anticipation 12.5`); `result` existe exatamente quando `phase` é terminal e é ≥ todas
+  (`result 5.0 before matter 6.0`); canal/fase/etapa conhecidos.
+- **`--require`** (lista `REQUIRED` no script): uma execução **finished** de ação grande precisa da cadeia inteira
+  até a etapa exigida — WORK no canal `task` com etapa de mundo (GATHER/CORE/LAYERS/ADJUST, inclui a história de
+  falha: fissura, colapso e reconstrução furiosa são etapas da mesma obra) → `matter`; SUMMON_HANDS → `hand`;
+  EDIT_FILE → `matter`; DISCARD → `gesture`; FRUSTRATED/ANGRY/RECOVER → `gesture`. Canceladas, falhas e em curso
+  são verificadas só na ordem (uma ação interrompida pode parar cedo).
+- Janela cheia sem nenhuma execução em comum com o dump anterior: `WARNING possible gap` (não reprova; aumente a
+  frequência dos dumps).
+- Saída: tabela por execução (PASS/FAIL + motivo, cadeia com `intent` absoluto e o resto relativo), resumo e a
+  última linha `causality=PASS|FAIL <aprovadas>/<execuções>`. Exit 0 = tudo PASS, 1 = alguma FAIL, 2 = erro/sem dados.
+
+**Integração**
+
+| Comando | O que faz |
+|---|---|
+| `tools/record_living.sh --inspect-every=1 --causality[=require]` | no fim, checa `<base>_inspect/`; tabela em `<base>_causality.txt`; exit 1 em FAIL (depois de gravar o vídeo) |
+| `tools/capture_evidence.sh <dir> --scenario=living --inspect --causality[=require]` | checa os `<shot>.json` desta execução (capturas espaçadas: lacunas são esperadas; a prova densa é a gravação) |
+| `tools/smoke_test.sh --scenario=living` | o jogo grava a linha do tempo de MIKU a cada 0,5 s (`--causality-dir=<tmp>`, `causality_<n>_f<quadro>.json`, do início do roteiro ao fim dos pedidos + uma amostra final antes do reset; código do jogo, funciona com `--pack`) e relata `causality_samples=N`; o script roda `causality.py --require --failures-only` e imprime `causality=PASS|FAIL n/m`. FAIL = `WARN` (não reprova) até a violação conhecida abaixo ser corrigida; `SMOKE_CAUSALITY_STRICT=1` reprova; `SMOKE_CAUSALITY=0` desliga; sem `python3` = `causality=SKIPPED` |
+
+**Testes**: `python3 tools/inspector/test_causality.py` (13 testes; fixtures em `tools/inspector/testdata/causality/`:
+execução que evolui entre dumps, ordem invertida, etapa pulada, resultado antes da matéria, `--require` incompleto,
+carimbo alterado, reset de sessão, lacuna, sem dados). `tests/integration/test_causality_gate.gd` roda esses testes
+por `OS.execute("python3", …)` e passa dumps **reais** do inspector (nó com `inspect_state()` no formato do contrato)
+pelo checador — PASS, depois FAIL com o motivo ao inverter uma ordem (pendente sem `python3`).
+
+**Prova real (Loop 5 R2, código de `1e42982` + este gate; llvmpipe, Xvfb)**
+
+- Gravação completa `tools/record_living.sh --resolution=640x360 --inspect-every=1` (4343 quadros, 144 dumps,
+  T+0…T+144) → `causality.py --require`: **`causality=FAIL 34/36`**, `--require 13/13`, nenhuma lacuna. As 2
+  reprovações são etapas da obra no canal `task`: `WORK task CORE` (intent 39,500) e `WORK task LAYERS` (intent
+  58,033): `matter 39.500 before hand 40.467` — a matéria é carimbada no **mesmo quadro** em que a etapa abre,
+  antes da mão dela. Causa (`src/miku/miku.gd`, `_drive_work`): `data["work"]` da etapa anterior continua ativo e as
+  mãos da etapa anterior ainda estão tensas no lugar, então `k > 0,05` carimba `matter` da entrada nova. Correção
+  pertence ao animator (dono de `src/miku`).
+- Smoke `tools/smoke_test.sh --scenario=living` (8×, 248 amostras, 68 execuções): `RESULT=PASS`,
+  **`causality=FAIL 65/68`** (WARN): três etapas `task` (LAYERS, ADJUST, GATHER) terminaram **sem** `matter`
+  (ordem correta; só o `--require` reprova) — a 8× com ~2 fps o roteiro avança a etapa antes de a matéria responder
+  às mãos dela.
+- Prévia `tools/record_living.sh --until=30 --resolution=320x180 --inspect-every=1 --causality=require`:
+  `causality=PASS 3/3`; `tools/capture_evidence.sh … --scenario=living --inspect --causality=require
+  --capture-only=l02`: `causality=PASS 1/1`.
