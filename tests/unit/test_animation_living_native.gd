@@ -197,6 +197,57 @@ func test_parity_with_round_one() -> void:
 			assert_lt(deg, 6.0, "%s %s within 6 deg of round 1 (%.2f)" % [mood, key, deg])
 
 
+## Angle (deg) of torso bone `key` away from its rest.
+func _off_rest(m: Miku, key: String) -> float:
+	var b := m.body.map.bone(key)
+	var rest := m.body.skeleton.get_bone_rest(b).basis.get_rotation_quaternion()
+	return rad_to_deg((rest.inverse() * m.body.skeleton.get_bone_pose_rotation(b)).angle_to(Quaternion.IDENTITY))
+
+
+## Shoulder raise (deg): model-axis roll of clavicle.L (positive = up), as the tree posed it.
+func _raise(m: Miku) -> float:
+	return rad_to_deg(m.body.motor.rig.rel_from_skeleton(m.body.map.bone("clavicle.L")).get_euler(EULER_ORDER_YXZ).z)
+
+
+func test_every_layer_moves_the_bones() -> void:
+	# Each additive branch really reaches the skeleton (an Add2 left at its default amount 0 is
+	# silent — the first OLD vs NEW take caught it).
+	var m := _miku(MikuBody.NATIVE)
+	var d := m.body.director
+	for p in MikuDirector.FULL_ADDS:
+		assert_eq(float(d.tree.get(p)), 1.0, "%s open" % p)
+	var rolls := []
+	for side in [1.0, -1.0]:
+		d.weight_side = side
+		for i in 120:
+			d.step(DT)
+		rolls.append(_off_rest(m, "hips"))
+	assert_almost_eq(float(rolls[0]), rad_to_deg(MikuPoses.HIP_ROLL), 0.3, "weight on her left rolls the hips")
+	assert_almost_eq(float(rolls[1]), rad_to_deg(MikuPoses.HIP_ROLL), 0.3, "and on her right")
+	d.weight_side = 0.0
+	var clav := []
+	for k in [0.0, 1.0]:
+		d.stiff = k
+		d.breath_depth = 0.0
+		for i in 60:
+			d.step(DT)
+		clav.append(_raise(m))
+	assert_gt(float(clav[1]) - float(clav[0]), 1.0, "the composure grade raises the shoulders")
+	d.stiff = 0.0
+	for i in 60:
+		d.step(DT)
+	var before := _raise(m)
+	d.fire(&"flinch")
+	var peak := 0.0
+	for i in 12:
+		d.step(DT)
+		peak = maxf(peak, _raise(m) - before)
+	assert_gt(peak, 2.0, "the flinch recoils the shoulders")
+	for i in 40:
+		d.step(DT)
+	assert_almost_eq(_raise(m), before, 0.6, "and settles back")
+
+
 func test_breath_moves_the_chest() -> void:
 	var m := _miku(MikuBody.NATIVE)
 	var lo := INF

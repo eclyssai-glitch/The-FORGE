@@ -31,6 +31,9 @@ var frame := 0
 var seconds := 42.0
 var view := "torso"
 var bench := false
+## --trace=<csv>: per frame, the torso's model-axis angles (deg) after the whole body solved.
+var trace: FileAccess
+const TRACE_BONES: Array[String] = ["hips", "spine", "chest", "neck", "head", "clavicle.L"]
 var _cue := 0
 var _body_us: Array[int] = []
 var _tree_us: Array[int] = []
@@ -53,6 +56,8 @@ func _ready() -> void:
 			every = a.get_slice("=", 1)
 		elif a == "--hud=off":
 			hud_on = false
+		elif a.begins_with("--trace="):
+			trace = FileAccess.open(a.get_slice("=", 1), FileAccess.WRITE)
 		elif a == "--bench":
 			bench = true
 	var env := WorldEnvironment.new()
@@ -134,6 +139,8 @@ func _process(_delta: float) -> void:
 				td["tension"]]
 		hud.text = "%s   t %5.2f s   mood %s   composure %.2f%s" % [String(bd["backend"]).to_upper(), t, m,
 			s["composure"], tr]
+	if trace != null:
+		_trace_row()
 	t += DT
 	frame += 1
 	if t >= seconds:
@@ -141,7 +148,26 @@ func _process(_delta: float) -> void:
 		get_tree().quit()
 
 
+func _trace_row() -> void:
+	if frame == 0:
+		var h := PackedStringArray(["t", "mood", "composure"])
+		for b in TRACE_BONES:
+			h.append_array([b + ".x", b + ".y", b + ".z", b + ".qx", b + ".qy", b + ".qz", b + ".qw"])
+		trace.store_line(",".join(h))
+	var row := PackedStringArray(["%.4f" % t, String(miku.mood()), "%.3f" % miku.mind.composure])
+	var rig := miku.body.motor.rig
+	for key in TRACE_BONES:
+		var b := miku.body.map.bone(key)
+		var q := rig.rel_from_skeleton(b)
+		var e := q.get_euler(EULER_ORDER_YXZ)
+		row.append_array(["%.4f" % rad_to_deg(e.x), "%.4f" % rad_to_deg(e.y), "%.4f" % rad_to_deg(e.z),
+			"%.5f,%.5f,%.5f,%.5f" % [q.x, q.y, q.z, q.w]])
+	trace.store_line(",".join(row))
+
+
 func _report() -> void:
+	if trace != null:
+		trace.close()
 	print("[r2] moods ", " ".join(_moods))
 	print("[r2] cpu body=%s tick_us mean %.1f p95 %d | body(tree+motor)_us mean %.1f p95 %d | tree_us mean %.1f | hands %d" % [
 		miku.body.backend(), _mean(_tick_us), _p95(_tick_us), _mean(_body_us), _p95(_body_us), _mean(_tree_us),

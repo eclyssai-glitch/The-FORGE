@@ -77,6 +77,9 @@ const P_TENSION := &"parameters/tension/blend_position"
 const P_WEIGHT := &"parameters/weight/blend_position"
 const P_BREATH_RATE := &"parameters/breath_rate/scale"
 const P_BREATH_ADD := &"parameters/breath_add/add_amount"
+## Additive branches always at full weight (their content carries the amount).
+const FULL_ADDS: Array[StringName] = [&"parameters/composure/add_amount", &"parameters/weight_add/add_amount",
+	&"parameters/flinch_add/add_amount", &"parameters/exhale_add/add_amount"]
 const P_FLINCH := &"parameters/flinch/request"
 const P_EXHALE := &"parameters/exhale/request"
 
@@ -97,6 +100,10 @@ func _init(skeleton: Skeleton3D, map: RigBones) -> void:
 	skeleton.get_parent().add_child(tree)
 	tree.root_node = NodePath("..")
 	tree.active = true
+	# Add2.add_amount defaults to 0: the full-weight additive branches must be opened explicitly
+	# (found in the first OLD vs NEW take: composure, weight and the one-shots were silent).
+	for p in FULL_ADDS:
+		tree.set(p, 1.0)
 	tree.advance(0.0)
 	playback = tree.get(&"parameters/mood/playback")
 
@@ -271,7 +278,9 @@ func _change_mood(from: int, to: int) -> void:
 	playback.travel(STATES[to])
 	travels += 1
 	var tense := func(m: int) -> bool: return m == MikuMind.Mood.FRUSTRATED or m == MikuMind.Mood.ANGRY
-	if tense.call(to) and not (from == MikuMind.Mood.ANGRY and to == MikuMind.Mood.FRUSTRATED):
+	# The flinch is the moment composure breaks (from a composed mood). Frustration hardening into
+	# anger is the opposite — she goes still (the state's own 0.25 s fade, no recoil).
+	if tense.call(to) and not tense.call(from):
 		fire(&"flinch")
 	elif to == MikuMind.Mood.RECOVERING:
 		fire(&"exhale")
