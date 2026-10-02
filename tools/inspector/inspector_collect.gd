@@ -237,7 +237,7 @@ static func skeleton(sk: Skeleton3D, root: Node, final: Dictionary) -> Dictionar
 		"bone_count": count,
 		"bones_truncated": count > MAX_BONES,
 		"final_frame": final.get("frame", -1) if has_final else -1,
-		"final_note": "" if has_final else "final pose not tracked (modifiers not applied in pose/pose_global)",
+		"final_note": "" if has_final else "no skeleton_updated since the inspector started: pose/pose_global are the input pose (no modifier applied)",
 		"global": xform(sk.global_transform),
 		"motion_scale": value(sk.motion_scale),
 		"show_rest_only": sk.show_rest_only,

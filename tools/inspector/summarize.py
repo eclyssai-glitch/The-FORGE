@@ -34,7 +34,7 @@ def fmt(v, digits: int = 3) -> str:
     if isinstance(v, (int, float)):
         return f"{v:.{digits}f}".rstrip("0").rstrip(".") if isinstance(v, float) else str(v)
     if isinstance(v, list):
-        if len(v) <= 4 and all(isinstance(x, (int, float)) for x in v):
+        if v and len(v) <= 4 and all(isinstance(x, (int, float)) for x in v):
             return "(" + ", ".join(fmt(x, digits) for x in v) + ")"
         return "[" + ", ".join(fmt(x, digits) for x in v[:8]) + (", ..." if len(v) > 8 else "") + "]"
     if isinstance(v, dict):

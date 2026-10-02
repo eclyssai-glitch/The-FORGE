@@ -184,6 +184,50 @@ func test_dump_of_synthetic_scene_has_every_section() -> void:
 	assert_true((d["camera"] as Dictionary).has("target"))
 
 
+## The real MIKU rig (procedural-modeler) + one angelic hand, with a LookAtModifier3D on the head:
+## every contract bone is dumped and the file stays small. INSPECTOR_SAMPLE_DIR=<dir> keeps a copy
+## of the dump (sample for docs/BUILD.md).
+func test_dump_of_the_miku_rig() -> void:
+	scene = Node3D.new()
+	scene.name = "RigProbe"
+	add_child(scene)
+	var miku := MikuRig.build()
+	scene.add_child(miku)
+	var hand := HandRig.build(HandRig.Side.RIGHT)
+	scene.add_child(hand)
+	hand.position = Vector3(1.5, 1.0, 0.5)
+	var target := Marker3D.new()
+	target.name = "User"
+	scene.add_child(target)
+	target.position = Vector3(1.0, 1.6, 3.0)
+	skeleton = MikuRig.get_skeleton(miku)
+	look = LookAtModifier3D.new()
+	look.name = "GazeHead"
+	skeleton.add_child(look)
+	look.bone_name = "head"
+	look.forward_axis = SkeletonModifier3D.BONE_AXIS_PLUS_Z
+	look.target_node = look.get_path_to(target)
+	inspector = AutomationScript.load_inspector({"inspect": TMP_DIR, "inspect-png": "off"})
+	add_child(inspector)
+	await wait_process_frames(4)
+	var path: String = inspector.call(&"dump", ProjectSettings.globalize_path(TMP_DIR).path_join("miku_rig"),
+		{"probe": "miku_rig"})
+	var text := FileAccess.get_file_as_string(path)
+	assert_lt(text.length(), 600_000, "bounded dump size (%d bytes)" % text.length())
+	var d: Dictionary = JSON.parse_string(text)
+	var sk: Dictionary = d["skeletons"][_path(skeleton)]
+	for b in MikuRig.CONTRACT_BONES:
+		assert_true((sk["bones"] as Dictionary).has(b), "bone %s" % b)
+	assert_eq(sk["modifiers"][0]["class"], "LookAtModifier3D")
+	assert_ne(sk["bones"]["head"]["final"]["quat"], sk["bones"]["head"]["pose"]["quat"], "gaze applied in final")
+	assert_eq(sk["bones"]["hand.L"]["parent"], "forearm.L")
+	assert_eq((d["skeletons"] as Dictionary).size(), 2, "MIKU + hand")
+	var sample := OS.get_environment("INSPECTOR_SAMPLE_DIR")
+	if sample != "":
+		DirAccess.make_dir_recursive_absolute(sample)
+		DirAccess.copy_absolute(path, sample.path_join("miku_rig_probe.json"))
+
+
 func test_json_is_key_sorted_and_stable() -> void:
 	_build_scene()
 	inspector = AutomationScript.load_inspector({"inspect": TMP_DIR, "inspect-png": "off"})
