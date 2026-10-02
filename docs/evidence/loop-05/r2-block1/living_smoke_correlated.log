@@ -1,0 +1,122 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+Vulkan 1.4.318 - Forward+ - Using Device #0: Unknown - llvmpipe (LLVM 20.1.2, 256 bits)
+
+smoke_deadline_seconds=614
+smoke_budget_seconds=283
+proc: timeout 240s -> 644s (derived budget)
+[living] #1 started ATTENTION LOCAL/attention plan=LOOK_AT_USER,ACKNOWLEDGE,WORK est=9.6s
+[living] #1 ATTENTION LOCAL/attention miku plan=LOOK_AT_USER,ACKNOWLEDGE,WORK
+[living] #1 steps=3 real=6.08s est=5.79s failures=[]
+[living] #2 started WORLD_TARGET LOCAL/world_target plan=LOOK_AT_WORLD,POINT,SUMMON_HANDS,WORK est=9.8s
+[living] #2 WORLD_TARGET LOCAL/world_target world_vesper plan=LOOK_AT_WORLD,POINT,SUMMON_HANDS,WORK
+[living] #2 steps=4 real=10.57s est=9.35s failures=[]
+[living] #3 started ATTENTION LOCAL/attention plan=LOOK_AT_USER,ACKNOWLEDGE,WORK est=4.3s
+[living] #3 ATTENTION LOCAL/attention "Miku!" plan=LOOK_AT_USER,ACKNOWLEDGE,WORK
+[living] #3 steps=3 real=3.28s est=3.00s failures=[]
+[living] #4 started WORLD_TARGET LOCAL/world_target plan=LOOK_AT_WORLD,POINT,SUMMON_HANDS,WORK est=9.2s
+[living] #4 WORLD_TARGET LOCAL/world_target "Miku, trabalhe no planeta da direita" plan=LOOK_AT_WORLD,POINT,SUMMON_HANDS,WORK
+[living] #4 steps=4 real=10.92s est=9.20s failures=[]
+[living] #5 started CONFIG_PATCH LOCAL/applied plan=LOOK_AT_USER,ACKNOWLEDGE,SUMMON_HAND,GRAB_FILE,SUMMON_HAND,EDIT_FILE,INSPECT,SATISFIED,DISCARD,WORK est=26.4s
+[living] #5 CONFIG_PATCH LOCAL/applied "Miku, aumente sua altura" plan=LOOK_AT_USER,ACKNOWLEDGE,SUMMON_HAND,GRAB_FILE,SUMMON_HAND,EDIT_FILE,INSPECT,SATISFIED,DISCARD,WORK appearance.height 1.0->1.03
+[living] #5 steps=10 real=27.50s est=23.03s failures=[]
+[living] #6 started CONFIG_PATCH LOCAL/applied plan=LOOK_AT_USER,ACKNOWLEDGE,SUMMON_HAND,GRAB_FILE,SUMMON_HAND,EDIT_FILE,INSPECT,SATISFIED,DISCARD,WORK est=26.4s
+[living] #6 CONFIG_PATCH LOCAL/applied "appearance.height 1.04" plan=LOOK_AT_USER,ACKNOWLEDGE,SUMMON_HAND,GRAB_FILE,SUMMON_HAND,EDIT_FILE,INSPECT,SATISFIED,DISCARD,WORK appearance.height 1.03->1.04
+[living] #6 steps=10 real=26.06s est=23.03s failures=[]
+[living] #7 started CONFIG_PATCH LOCAL/applied plan=LOOK_AT_USER,ACKNOWLEDGE,SUMMON_HAND,GRAB_FILE,SUMMON_HAND,EDIT_FILE,INSPECT,SATISFIED,DISCARD,WORK est=26.4s
+[living] #7 CONFIG_PATCH LOCAL/applied "Miku, ombros um pouco mais largos" plan=LOOK_AT_USER,ACKNOWLEDGE,SUMMON_HAND,GRAB_FILE,SUMMON_HAND,EDIT_FILE,INSPECT,SATISFIED,DISCARD,WORK appearance.shoulder_width 1.0->1.02
+[living] #7 steps=10 real=26.53s est=23.03s failures=[]
+[living] #8 started CONFIG_PATCH LOCAL/requires_asset plan=LOOK_AT_USER,THINK,INSPECT,ACKNOWLEDGE,WORK est=7.5s
+[living] #8 CONFIG_PATCH LOCAL/requires_asset "Miku, me dê asas" plan=LOOK_AT_USER,THINK,INSPECT,ACKNOWLEDGE,WORK appearance.wings <null>-><null>
+[living] #8 steps=5 real=8.18s est=7.49s failures=[]
+[living] #9 started SEMANTIC PROVIDER/provider_unavailable plan=LOOK_AT_USER,THINK,ACKNOWLEDGE,WORK est=5.3s
+[living] #9 SEMANTIC PROVIDER/provider_unavailable "Miku, fique mais curiosa, mas menos impulsiva" plan=LOOK_AT_USER,THINK,ACKNOWLEDGE,WORK
+[living] #9 steps=4 real=5.94s est=5.29s failures=[]
+WARNING: Simulation: living does not support seek (real-time character, ADR-015); use reset().
+     at: push_warning (core/variant/variant_utility.cpp:1033)
+     GDScript backtrace (most recent call first):
+         [0] seek (res://src/core/simulation.gd:147)
+         [1] _run_smoke_living (res://src/core/automation.gd:548)
+[smoke]
+scenario=living
+renderer=forward_plus adapter=llvmpipe (LLVM 20.1.2, 256 bits)
+quality=AUTO · LOW
+modules=9/9
+audio=present anchors=hands,miku
+events_received=25 expected=25
+phase=COMPLETE steps=5/5 failures=2 recovered=true whole=true
+frames=133 wall_seconds=53.08 avg_fps=2.5
+mission_objectives=9/9
+interaction executor=miku provider=unavailable
+interaction protocol=correlated
+request #1 click "miku" -> ATTENTION/LOCAL attention steps=3/3 real=6.08s est=5.79s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0
+  step 0 LOOK_AT_USER finished real=3.80s est=3.77s timeout=10.5s
+  step 1 ACKNOWLEDGE finished real=1.34s est=1.33s timeout=5.7s
+  step 2 WORK finished real=0.94s est=0.69s timeout=4.4s
+request #2 click "world_vesper" -> WORLD_TARGET/LOCAL world_target steps=4/4 real=10.57s est=9.35s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0
+  step 0 LOOK_AT_WORLD finished real=1.65s est=1.45s timeout=5.9s
+  step 1 POINT finished real=2.46s est=2.24s timeout=7.5s
+  step 2 SUMMON_HANDS finished real=5.50s est=5.07s timeout=13.1s
+  step 3 WORK finished real=0.97s est=0.59s timeout=4.2s
+request #3 say "Miku!" -> ATTENTION/LOCAL attention steps=3/3 real=3.28s est=3.00s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0
+  step 0 LOOK_AT_USER finished real=1.30s est=1.27s timeout=5.5s
+  step 1 ACKNOWLEDGE finished real=1.17s est=1.14s timeout=5.3s
+  step 2 WORK finished real=0.81s est=0.59s timeout=4.2s
+request #4 say "Miku, trabalhe no planeta da direita" -> WORLD_TARGET/LOCAL world_target steps=4/4 real=10.92s est=9.20s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0
+  step 0 LOOK_AT_WORLD finished real=1.65s est=1.35s timeout=5.7s
+  step 1 POINT finished real=2.49s est=2.20s timeout=7.4s
+  step 2 SUMMON_HANDS finished real=5.84s est=5.06s timeout=13.1s
+  step 3 WORK finished real=0.94s est=0.59s timeout=4.2s
+request #5 say "Miku, aumente sua altura" -> CONFIG_PATCH/LOCAL applied steps=10/10 real=27.50s est=23.03s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0 appearance.height 1.0->1.03
+  step 0 LOOK_AT_USER finished real=2.42s est=2.12s timeout=7.2s
+  step 1 ACKNOWLEDGE finished real=0.91s est=0.72s timeout=4.4s
+  step 2 SUMMON_HAND finished real=3.29s est=2.43s timeout=7.9s
+  step 3 GRAB_FILE finished real=4.69s est=3.28s timeout=9.6s
+  step 4 SUMMON_HAND finished real=3.45s est=2.43s timeout=7.9s
+  step 5 EDIT_FILE finished real=4.48s est=4.52s timeout=12.0s
+  step 6 INSPECT finished real=3.50s est=3.21s timeout=9.4s
+  step 7 SATISFIED finished real=2.49s est=2.37s timeout=7.7s
+  step 8 DISCARD finished real=1.50s est=1.35s timeout=5.7s
+  step 9 WORK finished real=0.78s est=0.59s timeout=4.2s
+request #6 say "appearance.height 1.04" -> CONFIG_PATCH/LOCAL applied steps=10/10 real=26.06s est=23.03s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0 appearance.height 1.03->1.04
+  step 0 LOOK_AT_USER finished real=2.18s est=2.12s timeout=7.2s
+  step 1 ACKNOWLEDGE finished real=0.98s est=0.72s timeout=4.4s
+  step 2 SUMMON_HAND finished real=2.58s est=2.43s timeout=7.9s
+  step 3 GRAB_FILE finished real=3.62s est=3.28s timeout=9.6s
+  step 4 SUMMON_HAND finished real=3.49s est=2.43s timeout=7.9s
+  step 5 EDIT_FILE finished real=5.38s est=4.52s timeout=12.0s
+  step 6 INSPECT finished real=3.23s est=3.21s timeout=9.4s
+  step 7 SATISFIED finished real=2.38s est=2.37s timeout=7.7s
+  step 8 DISCARD finished real=1.57s est=1.35s timeout=5.7s
+  step 9 WORK finished real=0.66s est=0.59s timeout=4.2s
+request #7 say "Miku, ombros um pouco mais largos" -> CONFIG_PATCH/LOCAL applied steps=10/10 real=26.53s est=23.03s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0 appearance.shoulder_width 1.0->1.02
+  step 0 LOOK_AT_USER finished real=2.23s est=2.12s timeout=7.2s
+  step 1 ACKNOWLEDGE finished real=0.80s est=0.72s timeout=4.4s
+  step 2 SUMMON_HAND finished real=3.17s est=2.43s timeout=7.9s
+  step 3 GRAB_FILE finished real=3.63s est=3.28s timeout=9.6s
+  step 4 SUMMON_HAND finished real=3.29s est=2.43s timeout=7.9s
+  step 5 EDIT_FILE finished real=5.52s est=4.52s timeout=12.0s
+  step 6 INSPECT finished real=3.23s est=3.21s timeout=9.4s
+  step 7 SATISFIED finished real=2.45s est=2.37s timeout=7.7s
+  step 8 DISCARD finished real=1.51s est=1.35s timeout=5.7s
+  step 9 WORK finished real=0.69s est=0.59s timeout=4.2s
+request #8 say "Miku, me dê asas" -> CONFIG_PATCH/LOCAL requires_asset steps=5/5 real=8.18s est=7.49s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0 appearance.wings <null>-><null>
+  step 0 LOOK_AT_USER finished real=2.38s est=2.12s timeout=7.2s
+  step 1 THINK finished real=1.44s est=1.31s timeout=5.6s
+  step 2 INSPECT finished real=2.36s est=2.20s timeout=7.4s
+  step 3 ACKNOWLEDGE finished real=1.38s est=1.27s timeout=5.5s
+  step 4 WORK finished real=0.61s est=0.59s timeout=4.2s
+request #9 say "Miku, fique mais curiosa, mas menos impulsiva" -> SEMANTIC/PROVIDER provider_unavailable steps=4/4 real=5.94s est=5.29s ack=0.00s first_step=0.00s failures=0 timeouts=0 cancelled=0
+  step 0 LOOK_AT_USER finished real=2.28s est=2.12s timeout=7.2s
+  step 1 THINK finished real=1.53s est=1.31s timeout=5.6s
+  step 2 ACKNOWLEDGE finished real=1.45s est=1.27s timeout=5.5s
+  step 3 WORK finished real=0.68s est=0.59s timeout=4.2s
+step_failures=0 timeouts=0 cancellations=0 ignored_events=21
+requests=9/9
+config_mutated=true (appearance.height 1.000 -> 1.040, shoulder_width 1.020)
+config_reverted=true
+pause_holds=true seek_refused=true reset_ok=true recomposed=true
+ui=present
+ui_transport start=true pause=true reset=true
+ui_demo_badge=3/3 (UNIVERSE,FORGE,OBSERVATORY)
+living_budget used=189.6s budget=315.9s (roteiro 53.1 [nominal 17.5] + plans 137.2 + margin 125.6) deadline=610.5s
+RESULT=PASS

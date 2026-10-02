@@ -141,3 +141,17 @@ Dono: coordenador. Formato: ADR curto (contexto → decisão → consequência).
   compara dumps. `build/*` excluído do export; smoke de pack roda em diretório vazio.
 - Consequência: export sem contaminação (PCK listado por `tools/pck_list.py`) e reproduzível; módulos de jogo expõem
   estado só por um método de leitura.
+
+## ADR-018 — Ações correlacionadas e migração nativa por camadas
+- Contexto: Loop 5 rodada 2. O smoke LIVING estourava porque o roteador consumia `action_finished` de ações que
+  não pediu e um bug de reentrância apagava a ação seguinte; a migração para a pilha nativa precisa de comparação
+  OLD vs NEW sem perder o baseline.
+- Decisão: protocolo `request_id`/`step` + `Miku.action_event(request_id, action, phase, info)` (um terminal por
+  perform), `estimate_duration`, `cancel`; roteador aceita só eventos do request/step ativos, timeout por passo
+  derivado da estimativa, fila FIFO com interrupção por atenção; `Session.interaction_started` no início do plano.
+  Corpo da MIKU com backend por camada (`torso`, `gaze`, `arms`, `secondary`; `--body=legacy|native`,
+  `--body-<camada>=…`); cada camada só passa a nativa por padrão após OLD vs NEW gravado e NEW ≥ OLD. Torso: AnimationTree
+  manual (state machine de humor + camadas aditivas), diretor escreve só parâmetros; camada contínua de compostura
+  porque `travel()` não interrompe um crossfade.
+- Consequência: smoke LIVING sem timeout com o corpo real (9/9, ack 0,00 s, 21 eventos próprios da MIKU ignorados);
+  o código manual só sai após as 5 comparações.
