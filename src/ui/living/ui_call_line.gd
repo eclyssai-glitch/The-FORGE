@@ -7,27 +7,40 @@ extends Control
 ## the line retracts; Esc (or an empty Enter) lets it go. Above the line a short whisper answers with
 ## what was understood ("→ altura", "não posso agora"), then dissolves. Pearl ink only, sine fades.
 ##
-## Contract with the interaction system (game-engineer; the logic is theirs, this node only shows):
-##   group   "living_call_line"        (GROUP; exactly one while the LIVING HUD exists)
-##   signal  submitted(text: String)   stripped, non-empty, <= MAX_CHARS
-##   signal  opened / closed           the user started / stopped calling (MIKU may notice)
+## THE call line of the LIVING scenario. It follows the Session contract (game-engineer, docs/AGENT.md):
+##   open    Enter -> Shortcuts (`call_line`, LIVING only) -> Session.open_call_line()
+##           -> Session.call_line_changed(true) -> this line draws out and takes the keyboard.
+##           A click on the hairline asks the same (open() = Session.open_call_line()).
+##   send    Enter in the field / submit(text) -> Session.submit_call(text) (<= Session.CALL_MAX_CHARS;
+##           Session closes the line and emits call_submitted -> InteractionRouter).
+##   close   Esc / empty Enter / on_hidden() -> Session.close_call_line(); the line retracts on
+##           Session.call_line_changed(false), whoever closed it.
+##   answer  Session.interaction_reported(report) of a typed request (source "text") -> the whisper
+##           (feedback_for(report) maps the report status to a kind and a short pt-BR text).
+## Groups: GROUP "living_call_line" (UI automation) and UI_GROUP "living_call_line_ui"
+## (LivingInteraction.CALL_LINE_UI_GROUP: its presence keeps the world placeholder from being built).
+## Kept for automation and tests:
+##   signal  submitted(text: String)   stripped, non-empty, <= MAX_CHARS (emitted with the Session send)
+##   signal  opened / closed           the line drew out / retracted (follows Session)
 ##   method  show_feedback(kind: StringName, text: String)   kinds: FEEDBACK_KINDS (unknown -> &"heard")
 ##           &"recognized" intent understood -> "→ <text>" in soft ink
 ##           &"applied"    a change took effect -> "<text>" in full ink
 ##           &"refused"    cannot / will not now (no provider, needs an asset) -> "<text>" in faint ink
 ##           &"heard"      heard, nothing to do (or still thinking) -> "<text>" in faint ink
-##   method  submit(text) — sends `text` exactly as if typed (automation / recordings); open(), close(),
-##           is_open(), feedback_text().
+##   method  submit(text) — sends `text` exactly as if typed; open(), close(), is_open(), feedback_text().
 ## Keyboard: only while open does the field hold the keyboard focus (so Shortcuts and the camera keys
-## stay quiet while typing); closed, nothing here takes focus. Enter opens only while the HUD is
-## visible (H hides the line with the rest).
+## stay quiet while typing); closed, nothing here takes focus and Enter is not read here at all.
+## If Session opens the line while this HUD is hidden (H) and no other call line is visible, the
+## request is let go (closed on the next idle frame) so Session never stays open with nothing to type in.
 
 signal submitted(text: String)
 signal opened
 signal closed
 
 const GROUP := &"living_call_line"
-const MAX_CHARS := 120
+## Same name as LivingInteraction.CALL_LINE_UI_GROUP (the UI does not reference world classes).
+const UI_GROUP := &"living_call_line_ui"
+const MAX_CHARS := SessionState.CALL_MAX_CHARS
 const PLACEHOLDER := "miku, …"
 const FEEDBACK_KINDS: Array[StringName] = [&"recognized", &"applied", &"refused", &"heard"]
 const RECOGNIZED_PREFIX := "→ "
@@ -57,6 +70,7 @@ func _init() -> void:
 	name = "CallLine"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_to_group(GROUP)
+	add_to_group(UI_GROUP)
 
 	echo = UiKit.label("", &"CallEcho")
 	echo.name = "Echo"
@@ -106,51 +120,52 @@ func _ready() -> void:
 	_layout()
 
 
+func _enter_tree() -> void:
+	for pair: Array in _session_links():
+		if not (pair[0] as Signal).is_connected(pair[1]):
+			(pair[0] as Signal).connect(pair[1])
+	if Session.call_line_open and not _open:
+		_on_call_line_changed(true)
+
+
+func _exit_tree() -> void:
+	for pair: Array in _session_links():
+		if (pair[0] as Signal).is_connected(pair[1]):
+			(pair[0] as Signal).disconnect(pair[1])
+
+
+func _session_links() -> Array:
+	return [[Session.call_line_changed, _on_call_line_changed],
+		[Session.interaction_reported, _on_interaction_reported]]
+
+
 ## True while the line is open (taking words).
 func is_open() -> bool:
 	return _open
 
 
-## Draws the line out and gives it the keyboard. No-op if already open.
+## Asks Session to open the line (the line draws out on Session.call_line_changed(true)).
 func open() -> void:
-	if _open:
-		return
-	_open = true
-	field.text = ""
-	field.placeholder_text = PLACEHOLDER
-	field.visible = true
-	hint.visible = false
-	if field.is_inside_tree():
-		field.grab_focus()
-	_animate_open(true)
-	opened.emit()
+	Session.open_call_line()
 
 
-## Lets the line go (text discarded) and releases the keyboard. No-op if closed.
+## Asks Session to let the line go (text discarded; it retracts on call_line_changed(false)).
 func close() -> void:
-	if not _open:
-		return
-	_open = false
-	if field.has_focus():
-		field.release_focus()
-	field.text = ""
-	# The retracting line shows nothing (no placeholder ghost under the rising words).
-	field.placeholder_text = ""
-	hint.visible = true
-	_animate_open(false)
-	closed.emit()
+	Session.close_call_line()
 
 
-## Sends `text` as if typed: emits `submitted` with the stripped text (empty text only closes) and
-## lets the words rise from the line. Works open or closed.
+## Sends `text` as if typed: Session.submit_call (which closes the line and routes the words) and
+## `submitted` with the stripped text; the words rise from the line. Empty text only closes.
+## Works open or closed.
 func submit(text: String) -> void:
 	var t := text.strip_edges().left(MAX_CHARS)
+	if t != "":
+		_rise(t)
+	Session.submit_call(t)
 	if _open:
-		close()
-	if t == "":
-		return
-	_rise(t)
-	submitted.emit(t)
+		_draw_out(false)  # Session was already closed elsewhere: retract anyway.
+	if t != "":
+		submitted.emit(t)
 
 
 ## Whispers what MIKU understood above the line (see the header for the kinds).
@@ -201,6 +216,57 @@ static func feedback_ink(kind: StringName) -> Color:
 	return Palette.UI_INK_FAINT
 
 
+## Whisper for an InteractionRouter report: [kind: StringName, text: String], or [] when the
+## line stays silent (gestures — clicks speak through MIKU, not through the line — and cancelled
+## requests). Text is short pt-BR, lower case; the "→ " of &"recognized" is added by show_feedback.
+static func feedback_for(report: Dictionary) -> Array:
+	var source := String(report.get("source", "text"))
+	if source != "text" and source != "":
+		return []
+	var what := _subject(report)
+	match String(report.get("status", "")):
+		"applied":
+			return [&"applied", (what + " · aplicado") if what != "" else "aplicado"]
+		"unchanged":
+			return [&"recognized", (what + " · já está assim") if what != "" else "já está assim"]
+		"attention":
+			return [&"recognized", "atenção"]
+		"world_target":
+			return [&"recognized", what if what != "" else "mundo"]
+		"requires_asset":
+			return [&"refused", "precisa de um novo modelo"]
+		"provider_unavailable", "provider_invalid":
+			return [&"refused", "não posso agora"]
+		"rejected":
+			return [&"refused", "assim não posso"]
+		"commit_failed":
+			return [&"refused", "não consegui aplicar"]
+		"unknown":
+			return [&"heard", "não entendi"]
+		"cancelled":
+			return []
+	return [&"heard", "ouvi"]
+
+
+## Short pt-BR name of what a report is about: the property ("altura"), the world ("vesper"), or "".
+static func _subject(report: Dictionary) -> String:
+	var path := String(report.get("path", ""))
+	if path != "":
+		var parts := path.split(".")
+		var key := parts[parts.size() - 1]
+		var section := StringName(parts[0]) if parts.size() > 1 else &""
+		var props: Dictionary = ConfigSchema.PROPERTIES.get(section, {})
+		if props.has(key):
+			return String((props[key] as Dictionary).get("pt", key))
+		if ConfigSchema.ASSET_REQUESTS.has(key):
+			return String((ConfigSchema.ASSET_REQUESTS[key] as Dictionary).get("pt", key))
+		return key.replace("_", " ")
+	var target := String(report.get("target", ""))
+	if String(report.get("status", "")) == "world_target" and target != "":
+		return target.trim_prefix("world_").replace("_", " ").to_lower()
+	return ""
+
+
 ## Called when the LIVING HUD hides (H, scenario change): the line lets go, the whispers dissolve.
 func on_hidden() -> void:
 	close()
@@ -221,13 +287,32 @@ func line_y() -> float:
 
 # ------------------------------------------------------------------ input
 
-func _unhandled_key_input(event: InputEvent) -> void:
-	var k := event as InputEventKey
-	if k == null or not k.pressed or k.echo or _open or not is_visible_in_tree():
+## Session opened / closed the line (Shortcuts, the hairline, automation, a submit, a scenario change).
+func _on_call_line_changed(open_now: bool) -> void:
+	if not open_now:
+		_draw_out(false)
 		return
-	if k.keycode == KEY_ENTER or k.keycode == KEY_KP_ENTER:
-		open()
-		get_viewport().set_input_as_handled()
+	if is_visible_in_tree():
+		_draw_out(true)
+	elif not _another_line_visible():
+		# HUD hidden (H): nothing to type in — let the request go instead of leaving Session open.
+		Session.close_call_line.call_deferred()
+
+
+func _another_line_visible() -> bool:
+	if not is_inside_tree():
+		return false
+	for n in get_tree().get_nodes_in_group(UI_GROUP):
+		if n != self and n is CanvasItem and (n as CanvasItem).is_visible_in_tree():
+			return true
+	return false
+
+
+func _on_interaction_reported(report: Dictionary) -> void:
+	var fb := feedback_for(report)
+	if fb.is_empty():
+		return
+	show_feedback(fb[0], fb[1])
 
 
 func _on_field_input(event: InputEvent) -> void:
@@ -245,6 +330,31 @@ func _on_hint_input(event: InputEvent) -> void:
 
 
 # ------------------------------------------------------------------ motion and drawing
+
+## Draws the line out (keyboard to the field) or lets it retract. No-op when already there.
+func _draw_out(on: bool) -> void:
+	if on == _open:
+		return
+	_open = on
+	if on:
+		field.text = ""
+		field.placeholder_text = PLACEHOLDER
+		field.visible = true
+		hint.visible = false
+		if field.is_inside_tree():
+			field.grab_focus()
+		_animate_open(true)
+		opened.emit()
+		return
+	if field.has_focus():
+		field.release_focus()
+	field.text = ""
+	# The retracting line shows nothing (no placeholder ghost under the rising words).
+	field.placeholder_text = ""
+	hint.visible = true
+	_animate_open(false)
+	closed.emit()
+
 
 func _animate_open(on: bool) -> void:
 	if _open_tween and _open_tween.is_valid():
