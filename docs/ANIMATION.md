@@ -590,3 +590,17 @@ beats, normalização dos argumentos do roteador), `…_living_runtime.gd` (um `
 `perform`, fila, chamado + plano, apontar sem plano, eventos do roteiro dirigem o trabalho até a raiva,
 mudança de configuração chega ao corpo, pool reutiliza e não tem limite, vida sem input e zero partícula sem
 causa, `inspect_state`).
+
+### Integração e pendências (rodada 1)
+
+- Construído contra os contratos do branch principal sem merge; verificado numa cópia descartável
+  (este branch + rig/materiais/shaders do principal): `MikuRig` (49 ossos, dedos `index.0.L`…), `HandRig`
+  (`build(side, material)`), `angelic_hand`/`intent_thread` (tira `IntentThreadStrip`)/`config_artifact`/
+  `work_world` rodam sem erro. A classe GENESIS foi renomeada para `GenesisMiku` (libera `Miku`); o principal
+  ainda tem `class_name Miku` no GENESIS — a integração mantém o rename.
+- Smoke `--scenario=living` (principal + estas áreas, llvmpipe ~2 fps): módulos 9/9, roteiro 25/25, falha e
+  recuperação, mutação/reversão de configuração OK, sem erro de script; FAIL em `requests=5/9` (pedidos
+  enfileirados não reportam em 45 s: as ações têm duração real e o roteador as executa em série) — ajuste de
+  orçamento/fila do smoke (game-engineer) ou versões curtas das ações sob smoke (animator), a decidir.
+- Código manual de ossos a migrar para a pilha nativa: `src/miku/motion/{miku_motor,pose_rig,limb_ik,finger_set,arm_channel}.gd`,
+  `src/miku/body/{rig_bones,miku_mannequin}.gd`, o FK/dedos de `PuppetHand` e `HandMannequin`.
