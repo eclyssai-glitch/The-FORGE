@@ -17,6 +17,11 @@ extends ActionExecutor
 ## uncorrelated action_finished(action) is turned into &"finished" for the pending request when the
 ## names match — the old behaviour, kept only so an older body still runs; cancel() then just
 ## forgets the pending action. Without estimate_duration the vocabulary's nominal durations are used.
+## REENTRANCY: terminal events of the node (and the legacy action_finished) are handed to the router
+## DEFERRED (end of the current frame, `defer_terminal`): the router's next perform never runs inside
+## the node's own signal emission — MIKU's tick clears a channel right after emitting its end, so a
+## perform started synchronously from that emission would be wiped (seen in the R2 smoke: ACKNOWLEDGE
+## lost after LOOK_AT_USER). accepted/started/progress are forwarded at once (latency).
 ## A missing method degrades to the null behaviour (perform finishes at once) with one warning per
 ## method. Holds the node weakly: once the node is freed (scenario recomposed) the executor behaves
 ## as the null executor.
@@ -24,6 +29,8 @@ extends ActionExecutor
 var _node: WeakRef
 var _warned := {}
 var _correlated := false
+## Forward terminal events deferred (see REENTRANCY). Tests driving a fake node synchronously set false.
+var defer_terminal := true
 
 
 func _init(node: Object) -> void:
@@ -120,6 +127,13 @@ func config_changed(path: String, old_value: Variant, new_value: Variant) -> voi
 
 
 func _on_node_action_event(request_id: int, action: StringName, phase: StringName, info: Dictionary) -> void:
+	if defer_terminal and phase in TERMINAL:
+		_forward.call_deferred(request_id, action, phase, info)
+	else:
+		_forward(request_id, action, phase, info)
+
+
+func _forward(request_id: int, action: StringName, phase: StringName, info: Dictionary) -> void:
 	if request_id > 0 and pending != &"" and request_id == pending_request and phase in TERMINAL \
 			and action == pending and int(info.get("step", pending_step)) == pending_step:
 		pending = &""
@@ -132,7 +146,16 @@ func _on_node_action_event(request_id: int, action: StringName, phase: StringNam
 
 ## LEGACY body: an uncorrelated action_finished ends the pending action when the names match.
 func _on_node_action_finished(action: StringName) -> void:
-	if pending != &"" and action == pending:
+	if pending == &"" or action != pending:
+		return
+	if defer_terminal:
+		_finish_legacy.call_deferred(pending_request, pending_step, action)
+	else:
+		finish()
+
+
+func _finish_legacy(request_id: int, step: int, action: StringName) -> void:
+	if pending == action and pending_request == request_id and pending_step == step:
 		finish()
 
 

@@ -315,6 +315,7 @@ func test_node_executor_forwards_and_degrades() -> void:
 	var body := _FakeMiku.new()
 	add_child_autofree(body)
 	var e := MikuNodeExecutor.new(body)
+	e.defer_terminal = false  # synchronous fake body
 	assert_true(e.is_bound())
 	router.set_executor(e)
 	e.apply_config(config.values())
@@ -471,6 +472,7 @@ func test_miku_own_performs_are_never_consumed() -> void:
 	var body := _FakeMikuCorrelated.new()
 	add_child_autofree(body)
 	var e := MikuNodeExecutor.new(body)
+	e.defer_terminal = false  # synchronous fake body
 	assert_true(e.is_correlated())
 	router.set_executor(e)
 	router.submit_text("Miku, trabalhe no planeta da direita")
@@ -494,6 +496,7 @@ func test_node_executor_correlated_estimate_cancel_and_refusal() -> void:
 	var body := _FakeMikuCorrelated.new()
 	add_child_autofree(body)
 	var e := MikuNodeExecutor.new(body)
+	e.defer_terminal = false  # synchronous fake body
 	router.set_executor(e)
 	assert_eq(e.estimate_duration(V.SUMMON_HANDS, {}), 2.0, "the body's estimate")
 	router.indicate_world(&"world_vesper")
@@ -750,3 +753,23 @@ func test_cancel_on_reset_ignores_late_events_and_executor_swap() -> void:
 	while router.busy():
 		fresh.finish()
 	assert_eq(reports.back()["failures"][0]["reason"], "failed: executor replaced")
+
+
+func test_node_terminal_events_are_deferred_out_of_the_body_emission() -> void:
+	var body := _FakeMikuCorrelated.new()
+	add_child_autofree(body)
+	var e := MikuNodeExecutor.new(body)
+	assert_true(e.defer_terminal, "default for the real node")
+	router.set_executor(e)
+	router.submit_text("Miku!")
+	body.finish_current()  # LOOK_AT_USER ends inside the body's emission
+	assert_eq(router.current_step()["action"], V.LOOK_AT_USER, "the next perform is not started inside it")
+	assert_eq(body.calls_log.filter(func(c: Array) -> bool: return c[0] == &"perform").size(), 1)
+	await wait_process_frames(1)
+	assert_eq(router.current_step()["action"], V.ACKNOWLEDGE, "end of frame: next step")
+	body.finish_current()
+	await wait_process_frames(1)
+	body.finish_current()
+	await wait_process_frames(1)
+	assert_false(router.busy())
+	assert_eq((reports[0]["failures"] as Array).size(), 0)

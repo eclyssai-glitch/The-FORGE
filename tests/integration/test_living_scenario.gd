@@ -324,3 +324,8 @@ func test_smoke_living_budget_is_derived() -> void:
 		sum += float(r["estimate"])
 		assert_gt((r["plan"] as Array).size(), 0)
 	assert_almost_eq(sum, float(b["plans"]), 1e-6)
+	# After the roteiro played: its measured wall time (never below nominal).
+	var slow := AutomationScript.living_budget(world, 66.0)
+	assert_almost_eq(float(slow["roteiro"]), 66.0, 1e-6)
+	assert_almost_eq(float(slow["roteiro_nominal"]), float(b["roteiro"]), 1e-6)
+	assert_almost_eq(float(AutomationScript.living_budget(world, 1.0)["roteiro"]), float(b["roteiro"]), 1e-6)

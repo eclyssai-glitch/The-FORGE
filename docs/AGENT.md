@@ -192,6 +192,10 @@ jogador exatamente (smoke, capturas e tour usam isso). Nada de configuração va
 - `cancel()` (reset/recomposição: `LivingInteraction._exit_tree`) cancela o plano em curso no corpo e descarta a
   fila (`cancelled`); eventos atrasados são ignorados. Trocar de executor no meio de um passo = falha
   ("executor replaced") e o plano segue no novo. Nada espera evento externo sem timeout; `perform` nunca bloqueia.
+- Reentrância: o `MikuNodeExecutor` entrega ao roteador os eventos **terminais** do nó (e o `action_finished`
+  legado) adiados para o fim do quadro (`defer_terminal`), então o próximo `perform` nunca roda dentro da emissão
+  do próprio corpo (o `tick` de MIKU limpa o canal logo depois de emitir o fim; um `perform` síncrono ali era
+  apagado — o ACKNOWLEDGE perdido do smoke). `accepted`/`started`/`progress` seguem na hora.
 - Compatibilidade (**legado**): se o nó `Miku` não tiver `action_event`, o `MikuNodeExecutor` emite
   `accepted`/`started` ele mesmo e converte o `action_finished(action)` não correlacionado em `finished` do passo
   pendente quando o nome casa (o comportamento antigo, sujeito a consumir ações da própria MIKU) — só para um

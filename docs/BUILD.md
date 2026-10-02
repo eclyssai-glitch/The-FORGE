@@ -219,7 +219,9 @@ KIND/ROUTE status`, `requests=9/9`), a configuração precisa mudar de verdade (
 *Orçamento derivado (Loop 5 R2, sem timeout fixo).* Antes de jogar, `Automation.living_budget()` pré-visualiza os
 planos dos nove pedidos (`InteractionRouter.preview_plan`, sem efeitos) e soma as estimativas do corpo
 (`estimate_plan` → `Miku.estimate_duration`; sem ela, `ActionVocabulary.NOMINAL_SECONDS`):
-`orçamento = roteiro (140 s / 8) + Σ estimativas + margem`, `margem = 30 s + 0,5 × Σ estimativas + 3 s por pedido`.
+`orçamento = roteiro + Σ estimativas + margem`, `margem = 30 s + 0,5 × Σ estimativas + 3 s por pedido`; o roteiro
+vale o tempo real **medido** dele (nunca menos que o nominal 140 s / 8 = 17,5 s — no llvmpipe, a ~2 fps, o teto de
+delta por quadro faz o roteiro levar ~66 s).
 Usar mais que o orçamento reprova (`FAIL living_budget used=… budget=…`). Cada pedido é esperado **pelo seu id**:
 `Session.interaction_started` (reconhecimento em ≤ 2 s, senão FAIL) → `Session.interaction_reported` com o mesmo
 `id`, até o pior caso do plano (`started.deadline` = Σ timeouts dos passos) + 3 s — o roteador sempre termina um

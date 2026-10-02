@@ -90,7 +90,9 @@ const SMOKE_LIVING_REQUESTS: Array = [
 	["say", "Miku, fique mais curiosa, mas menos impulsiva", InteractionRouter.ST_PROVIDER_UNAVAILABLE],
 ]
 ## LIVING smoke budget (real seconds, derived — no fixed global timeout; docs/BUILD.md):
-##   budget   = roteiro (LivingScript.DURATION / SMOKE_SPEED) + sum of the estimates of the test
+##   budget   = roteiro (its MEASURED wall time — on a software renderer the frame-delta cap makes 140 s at
+##              8x take longer than the nominal LivingScript.DURATION / SMOKE_SPEED; never less than
+##              nominal) + sum of the estimates of the test
 ##              plans (router.estimate_plan: Miku.estimate_duration) + margin, where
 ##              margin = SMOKE_FIXED_MARGIN + SMOKE_PLAN_SLACK x estimates + SMOKE_REQUEST_MARGIN per request.
 ##              Using more than the budget FAILS the smoke.
@@ -507,6 +509,7 @@ func _run_smoke_living() -> void:
 			ok = false
 			break
 	var elapsed := (Time.get_ticks_msec() - started) / 1000.0
+	budget = living_budget(_world(), elapsed)
 	var expected := Scenario.build_events(Simulation.scenario).size()
 	lines.append("scenario=%s" % Simulation.scenario)
 	lines.append("renderer=%s adapter=%s" % [RenderingServer.get_current_rendering_method(), RenderingServer.get_video_adapter_name()])
@@ -558,19 +561,20 @@ func _run_smoke_living() -> void:
 	var used := (Time.get_ticks_msec() - smoke_start) / 1000.0
 	var within := used <= float(budget["total"])
 	ok = ok and within
-	lines.append("%sliving_budget used=%.1fs budget=%.1fs (roteiro %.1f + plans %.1f + margin %.1f) deadline=%.1fs" % [
-		"" if within else "FAIL ", used, float(budget["total"]), float(budget["roteiro"]), float(budget["plans"]),
-		float(budget["margin"]), float(budget["deadline"])])
+	lines.append("%sliving_budget used=%.1fs budget=%.1fs (roteiro %.1f [nominal %.1f] + plans %.1f + margin %.1f) deadline=%.1fs" % [
+		"" if within else "FAIL ", used, float(budget["total"]), float(budget["roteiro"]), float(budget["roteiro_nominal"]),
+		float(budget["plans"]), float(budget["margin"]), float(budget["deadline"])])
 	lines.append("RESULT=%s" % ("PASS" if ok else "FAIL"))
 	_write_report(lines)
 	_quit(0 if ok else 1)
 
 
-## Derived budget of the LIVING smoke (see SMOKE_FIXED_MARGIN): {"roteiro", "plans", "margin",
-## "total", "deadline", "requests": [{"plan": Array[StringName], "estimate", "deadline"}]}. Plans are
+## Derived budget of the LIVING smoke (see SMOKE_FIXED_MARGIN): {"roteiro", "roteiro_nominal", "plans",
+## "margin", "total", "deadline", "requests": [{"plan": Array[StringName], "estimate", "deadline"}]}.
+## `roteiro_seconds` = measured wall time of the roteiro (< 0 before it played: nominal). Plans are
 ## previewed with the module's router on the executor bound to MIKU (her estimates); without the
 ## module, the null executor's.
-static func living_budget(world: Node) -> Dictionary:
+static func living_budget(world: Node, roteiro_seconds: float = -1.0) -> Dictionary:
 	var li: LivingInteraction = null
 	if world != null and world.get(&"modules") is Dictionary:
 		li = (world.get(&"modules") as Dictionary).get("LivingInteraction") as LivingInteraction
@@ -595,9 +599,10 @@ static func living_budget(world: Node) -> Dictionary:
 		deadlines += dl
 		per.append({"plan": ActionVocabulary.names(plan), "estimate": est, "deadline": dl})
 	var n := SMOKE_LIVING_REQUESTS.size()
-	var roteiro := LivingScript.DURATION / SMOKE_SPEED
+	var nominal := LivingScript.DURATION / SMOKE_SPEED
+	var roteiro := maxf(nominal, roteiro_seconds)
 	var margin := SMOKE_FIXED_MARGIN + SMOKE_PLAN_SLACK * plans + SMOKE_REQUEST_MARGIN * n
-	return {"roteiro": roteiro, "plans": plans, "margin": margin, "total": roteiro + plans + margin,
+	return {"roteiro": roteiro, "roteiro_nominal": nominal, "plans": plans, "margin": margin, "total": roteiro + plans + margin,
 		"deadline": SMOKE_ROTEIRO_GUARD + deadlines + SMOKE_REQUEST_MARGIN * n + SMOKE_FIXED_MARGIN,
 		"requests": per}
 
