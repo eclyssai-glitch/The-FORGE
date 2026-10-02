@@ -177,6 +177,11 @@ func set_finger_wave(s: int, wave: PackedFloat32Array) -> void:
 		w[i] = wave[i]
 
 
+## State for the dev inspector (Miku.inspect_state().body).
+func inspect_state() -> Dictionary:
+	return {"backend": "legacy"}
+
+
 ## Places every channel on its goal (composition / reset).
 func snap() -> void:
 	motor.snap_next()
