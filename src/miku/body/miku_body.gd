@@ -1,6 +1,11 @@
 class_name MikuBody
 extends Node3D
 ## Thin adapter between MIKU's runtime and her rig (Loop 5). Owner: animator.
+## PROTOTYPE BOUNDARY (Owner decision, Loop 5 r1): the runtime (Miku: mind, actions, hands,
+## threads, world) talks to the body ONLY through the "Body goals" and "Body queries" sections
+## below, in WORLD space. Everything behind them — MikuMotor, PoseRig, LimbIK, FingerSet, ArmChannel
+## (manual bone math) — is a spike to be replaced by Godot's native stack (AnimationTree,
+## LookAtModifier3D, TwoBoneIK3D, SpringBoneSimulator3D...) without touching the runtime.
 ## Builds the rig — the procedural-modeler's `MikuRig.build()` when that class exists in the
 ## project, else the development stand-in MikuMannequin (docs/ANIMATION.md, "Living —
 ## integration") — finds its Skeleton3D, resolves the bones (RigBones) and owns the MikuMotor
@@ -106,6 +111,115 @@ static func find_skeleton(n: Node) -> Skeleton3D:
 		if s != null:
 			return s
 	return null
+
+
+# ---------------------------------------------------------------- Body goals (world space)
+
+
+## Where she looks (the eyes lead, the head, neck and chest follow with delays).
+func set_gaze(world_point: Vector3) -> void:
+	motor.gaze_point = to_model(world_point)
+
+
+## Yaw (rad, towards her left) the whole floating figure turns to.
+func set_turn(angle: float) -> void:
+	motor.body_turn = angle
+
+
+## Posture layer: lean forward (rad), side lean, chest lift, shoulder raise (0..1), shoulders
+## forward (0..1, negative = back), head tilt (roll, rad) and nod (rad, positive = down).
+func set_posture(lean: float, lean_side: float, chest_lift: float, raise: float, fwd: float, tilt: float,
+		nod: float) -> void:
+	motor.lean = lean
+	motor.lean_side = lean_side
+	motor.chest_lift = chest_lift
+	motor.shoulder_raise = raise
+	motor.shoulder_fwd = fwd
+	motor.head_tilt = tilt
+	motor.head_nod = nod
+
+
+## Weight on one side (-1 right .. 1 left).
+func set_weight(side: float) -> void:
+	motor.weight_side = side
+
+
+## Breath rate (cycles/s) and depth (1 = normal).
+func set_breath(rate: float, depth: float) -> void:
+	motor.breath_rate = rate
+	motor.breath_depth = depth
+
+
+## Composure of the motion (0 fluid .. 1 rigid) and its speed.
+func set_character(stiff: float, tempo: float) -> void:
+	motor.stiff = stiff
+	motor.tempo = tempo
+
+
+## Arm goal of side s (0 left, 1 right): hand position, palm normal, finger direction, elbow
+## hint (directions in world space), finger pose (HandPoses) and speed.
+func set_arm(s: int, pos: Vector3, palm: Vector3, point: Vector3, pole: Vector3, pose: StringName,
+		speed := 1.0) -> void:
+	var b := skeleton.global_transform.basis.inverse()
+	motor.arms[s].set_goal(to_model(pos), b * palm, b * point, b * pole, pose, speed)
+
+
+## Extra curl per finger on top of the pose (tapping, beckoning ripples).
+func set_finger_wave(s: int, wave: PackedFloat32Array) -> void:
+	var w := motor.arms[s].finger_wave
+	for i in mini(wave.size(), w.size()):
+		w[i] = wave[i]
+
+
+## Places every channel on its goal (composition / reset).
+func snap() -> void:
+	motor.snap_next()
+
+
+# ---------------------------------------------------------------- Body queries (world space)
+
+
+func fingertip(s: int, finger := 1) -> Vector3:
+	return to_world(motor.fingertip(s, finger))
+
+
+func hand_position(s: int) -> Vector3:
+	return to_world(motor.hand_pos(s))
+
+
+func shoulder(s: int) -> Vector3:
+	var b := motor.b_ua[s]
+	return to_world(motor.rig.pos[b]) if b >= 0 else to_world(motor.shoulder_rest(s))
+
+
+## Length of the arm in world units.
+func arm_reach(s: int) -> float:
+	return motor.arm_length(s) * skeleton.global_transform.basis.get_scale().x
+
+
+func eye_position() -> Vector3:
+	return to_world(motor.eye_pos)
+
+
+func head_position() -> Vector3:
+	return to_world(motor.head_pos())
+
+
+func chest_position() -> Vector3:
+	return to_world(motor.chest_pos())
+
+
+## Current turn of the figure (rad).
+func turn() -> float:
+	return motor.turn()
+
+
+## World basis of her body now: x = her left, y = up, z = forward (turn included).
+func body_basis() -> Basis:
+	return (skeleton.global_transform.basis * Basis(Vector3.UP, motor.turn())).orthonormalized()
+
+
+# ---------------------------------------------------------------- spaces
 
 
 ## World -> rig model space (the space of every motor goal).

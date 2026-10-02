@@ -121,29 +121,36 @@ func repair(amount: float) -> bool:
 
 
 ## Tears the world back into the cloud by `amount`: the outer layer first, then the inner ones,
-## then the core. Faults go with the matter that carried them. Returns true when only the
-## gathered cloud is left.
-func dismantle(amount: float) -> bool:
+## then the core — but never below layer `down_to` (0..LAYER_COUNT-1 keeps the layers under it
+## and the core; LAYER_COUNT = everything, core included). Faults go with the matter that carried
+## them. Returns true when everything above the floor is gone.
+func dismantle(amount: float, down_to := LAYER_COUNT) -> bool:
 	var a := maxf(amount, 0.0)
 	energy = minf(energy + a * 2.0, 1.0)
-	for i in range(LAYER_COUNT - 1, -1, -1):
+	var floor_layer := clampi(down_to, 0, LAYER_COUNT)
+	if floor_layer >= LAYER_COUNT:
+		floor_layer = 0
+	for i in range(LAYER_COUNT - 1, floor_layer - 1, -1):
 		if a <= 0.0:
 			break
 		var take := minf(layers[i], a)
 		layers[i] -= take
 		a -= take
-	if a > 0.0:
+	var whole := down_to >= LAYER_COUNT
+	if a > 0.0 and whole:
 		core = maxf(core - a, 0.0)
 	var outer := layers[LAYER_COUNT - 1]
 	collapsed = minf(collapsed, outer)
-	crack = minf(crack, maxf(outer, layers[1]))
-	imbalance = minf(imbalance, core)
+	crack = minf(crack, outer)
+	imbalance = minf(imbalance, outer)
 	align = 0.0
-	var done := core <= 0.0
+	var done := core <= 0.0 if whole else layers[floor_layer] <= 0.0
 	if done:
 		collapsed = 0.0
 		crack = 0.0
 		imbalance = 0.0
+		if stage == Stage.STABLE or stage == Stage.ADJUST:
+			stage = Stage.LAYERS
 	return done
 
 

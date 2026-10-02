@@ -159,6 +159,21 @@ func user_call() -> Dictionary:
 	return out
 
 
+## Puts her in a mood on request (actions FRUSTRATED / ANGRY / RECOVER of the vocabulary): the
+## frustration is raised to that mood's level so the mind stays coherent afterwards.
+func force_mood(id: StringName) -> void:
+	match id:
+		&"frustrated":
+			frustration = maxf(frustration, params.value(&"behaviour", "frustration_threshold") + 0.05)
+			_evaluate()
+		&"angry":
+			frustration = maxf(frustration, anger_level() + 0.05)
+			_evaluate()
+		&"recover", &"recovering":
+			if mood == Mood.FRUSTRATED or mood == Mood.ANGRY:
+				_set_mood(Mood.RECOVERING)
+
+
 ## The user pointed at a world: it becomes her next work target.
 func user_points(world: StringName) -> void:
 	user_target = world

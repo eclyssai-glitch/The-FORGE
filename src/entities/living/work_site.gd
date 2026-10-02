@@ -20,8 +20,8 @@ const CORE_RADIUS := 0.38
 const CORE_BODY := 0.34
 const PLATE_THICKNESS := 0.085
 ## Cloud: radius range (x r), flattening, and contraction when gathered.
-const CLOUD := Vector2(1.45, 2.35)
-const CLOUD_FLAT := 0.55
+const CLOUD := Vector2(1.25, 1.95)
+const CLOUD_FLAT := 0.45
 const GATHERED := 0.6
 const STAGGER := 0.7
 ## Crack wedge: direction (local; towards MIKU and the camera) and half angle (rad).
@@ -194,7 +194,9 @@ func _draw(dt: float) -> void:
 		var tumble := Basis(_spin_axis[i], _time * _spin_rate[i] + float(i))
 		var seat := MikuMannequin._basis_y(nrm)
 		var basis := tumble.slerp(seat, q) if q > 0.0 else tumble
-		mm.set_instance_transform(i, Transform3D(basis.scaled_local(_size[i] * lerpf(0.75, 1.0, q)), pos))
+		# Raw matter is grit; it becomes a plate as it is laid.
+		var grow := lerpf(0.32, 1.0, q) if g > 0 else lerpf(0.6, 1.0, q)
+		mm.set_instance_transform(i, Transform3D(basis.scaled_local(_size[i] * grow), pos))
 		mm.set_instance_custom_data(i, Color(q, heat, b.energy, float(g) / 3.0))
 	var core_s := radius * CORE_BODY * smoothstep(0.35, 1.0, b.core)
 	core_body.scale = Vector3.ONE * maxf(core_s, 0.001)

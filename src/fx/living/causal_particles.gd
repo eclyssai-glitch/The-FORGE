@@ -44,12 +44,16 @@ var _dirty := false
 func _init() -> void:
 	name = "CausalParticles"
 	_rng.seed = 7707
-	for arr in [_kind, _thread]:
-		(arr as PackedInt32Array).resize(POOL)
-	for arr in [_pos, _vel, _target]:
-		(arr as PackedVector3Array).resize(POOL)
-	for arr in [_age, _life, _size, _s]:
-		(arr as PackedFloat32Array).resize(POOL)
+	# Packed arrays are values: each one is resized by name.
+	_kind.resize(POOL)
+	_thread.resize(POOL)
+	_pos.resize(POOL)
+	_vel.resize(POOL)
+	_target.resize(POOL)
+	_age.resize(POOL)
+	_life.resize(POOL)
+	_size.resize(POOL)
+	_s.resize(POOL)
 	for i in POOL:
 		_life[i] = 0.0
 	var m := MultiMesh.new()
