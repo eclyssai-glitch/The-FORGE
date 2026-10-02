@@ -306,7 +306,7 @@ func _living() -> bool:
 
 func _process_living() -> void:
 	var now := _now()
-	var dt := clampf(now - _living_last, 0.0, 0.1) if _living_last >= 0.0 else 0.0
+	var dt := clampf(now - _living_last, 0.0, 0.5) if _living_last >= 0.0 else 0.0
 	_living_last = now
 	if _user:
 		if now < _user_until:

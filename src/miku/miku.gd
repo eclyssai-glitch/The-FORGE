@@ -63,8 +63,9 @@ const WORK_DIST := 0.7
 const HAND_IDLE_RELEASE := 7.0
 ## Seconds target_world waits for a plan before she starts the work herself.
 const PLAN_GRACE := 1.2
-## Longest frame step (s): a hitch never becomes a jump.
-const MAX_DT := 0.1
+## Longest frame step (s). Large on purpose: on a slow (software) renderer a frame can take
+## 0.3–0.5 s and the character must still keep real time (the springs sub-step: no jump).
+const MAX_DT := 0.5
 ## Rhythm of the working gestures (s per cycle at tempo 1).
 const RHYTHM_PERIOD := 1.9
 ## Hands mirror her hand's displacement by this gain while working (and `mirror` beats).
