@@ -162,6 +162,96 @@ func test_feedback_from_interaction_reports() -> void:
 	assert_eq(line.feedback_kind(), before, "a click report does not whisper on the line")
 
 
+## Emits Session.interaction_started when this Session has it; otherwise hands the report to the
+## line directly (the line's entry point is the same either way).
+func _started(line: UiCallLine, report: Dictionary) -> void:
+	if Session.has_signal(UiCallLine.STARTED_SIGNAL):
+		Session.emit_signal(UiCallLine.STARTED_SIGNAL, report)
+	else:
+		line.on_interaction_started(report)
+
+
+func test_recognition_for_started_requests() -> void:
+	var cases := [
+		[{"kind": "CONFIG_PATCH", "route": "LOCAL", "path": "appearance.height", "source": &"text"}, "altura"],
+		[{"kind": "ATTENTION", "route": "LOCAL", "target": &"miku", "source": &"text"}, "atenção"],
+		[{"kind": "WORLD_TARGET", "route": "LOCAL", "target": &"world_vesper", "source": &"text"}, "vesper"],
+		[{"kind": "SEMANTIC", "route": "PROVIDER", "source": &"text"}, "pensando…"],
+		[{"kind": "SEMANTIC", "route": "LOCAL"}, "pensando…"],
+	]
+	for c: Array in cases:
+		var rep: Dictionary = c[0]
+		rep["status"] = &"started"
+		assert_eq(UiCallLine.recognition_for(rep), [&"recognized", c[1]], str(rep))
+	assert_eq(UiCallLine.recognition_for({"kind": "WORLD_TARGET", "target": &"world_vesper", "source": &"click"}), [],
+		"gestures stay silent")
+	assert_eq(UiCallLine.recognition_for({"kind": "UNKNOWN", "source": &"text"}), [], "nothing recognised: the result speaks")
+	assert_eq(UiCallLine.request_id_of({"id": 3, "request_id": 7}), 7)
+	assert_eq(UiCallLine.request_id_of({"id": 3}), 3)
+	assert_true(UiCallLine.same_request(4, 4.0))
+	assert_false(UiCallLine.same_request(4, "4"))
+
+
+func test_started_then_reported_same_id() -> void:
+	var line := _line()
+	await wait_process_frames(1)
+	_started(line, {"id": 41, "request_id": 41, "kind": "CONFIG_PATCH", "route": "LOCAL", "status": &"started",
+		"target": &"", "path": "appearance.height", "plan": [], "source": &"text"})
+	assert_eq(line.feedback_kind(), &"recognized", "the acknowledgement is immediate")
+	assert_eq(line.feedback_text(), "→ altura")
+	assert_eq(line.pending_request(), 41)
+	await wait_seconds(Palette.T_CALL_ECHO_IN + Palette.T_CALL_ECHO_HOLD + Palette.T_CALL_ECHO_OUT + 0.3)
+	assert_eq(line.feedback_text(), "→ altura", "it rests until its result")
+	Session.report_interaction({"id": 41, "kind": "CONFIG_PATCH", "route": "LOCAL", "status": "applied",
+		"path": "appearance.height", "source": &"text"})
+	assert_eq(line.feedback_kind(), &"applied")
+	assert_null(line.pending_request())
+	await wait_seconds(Palette.T_WHISPER_HANDOFF * 0.5)
+	assert_eq(line.feedback_text(), "→ altura", "handed off: the old whisper dissolves first, never two at once")
+	await wait_seconds(Palette.T_WHISPER_HANDOFF * 0.5 + Palette.T_CALL_ECHO_IN + 0.1)
+	assert_eq(line.feedback_text(), "altura · aplicado")
+	await wait_seconds(Palette.T_CALL_ECHO_HOLD + Palette.T_CALL_ECHO_OUT + 0.3)
+	assert_eq(line.feedback_text(), "", "the result dissolves on the normal hold")
+
+
+func test_reported_of_another_id_does_not_replace() -> void:
+	var line := _line()
+	await wait_process_frames(1)
+	_started(line, {"id": 8, "request_id": 8, "kind": "WORLD_TARGET", "route": "LOCAL", "status": &"started",
+		"target": &"world_vesper", "path": "", "plan": [], "source": &"text"})
+	await wait_seconds(Palette.T_CALL_ECHO_IN + 0.1)
+	Session.report_interaction({"id": 7, "status": "unknown", "source": &"text"})
+	assert_eq(line.feedback_kind(), &"recognized")
+	assert_eq(line.feedback_text(), "→ vesper", "another request's result does not replace it")
+	assert_eq(line.pending_request(), 8)
+	Session.report_interaction({"id": 8, "status": "world_target", "target": &"world_vesper", "source": &"text"})
+	assert_null(line.pending_request(), "its own result answers")
+	await wait_seconds(Palette.T_WHISPER_HANDOFF + Palette.T_CALL_ECHO_IN + 0.1)
+	assert_eq(line.feedback_text(), "→ vesper")
+	_started(line, {"id": 9, "request_id": 9, "kind": "SEMANTIC", "route": "LOCAL", "status": &"started",
+		"source": &"text"})
+	await wait_seconds(Palette.T_WHISPER_HANDOFF + Palette.T_CALL_ECHO_IN + 0.1)
+	assert_eq(line.feedback_text(), "→ pensando…")
+	Session.report_interaction({"id": 9, "status": "cancelled", "source": &"text"})
+	assert_null(line.pending_request(), "a cancelled request lets its whisper go")
+	await wait_seconds(Palette.T_CALL_ECHO_OUT + 0.2)
+	assert_eq(line.feedback_text(), "")
+
+
+func test_missing_started_signal_does_not_break() -> void:
+	var line := _line()
+	await wait_process_frames(1)
+	var bare := Object.new()
+	assert_false(line.link_started(bare), "a source without interaction_started is skipped quietly")
+	bare.free()
+	assert_false(line.link_started(null))
+	assert_eq(line.link_started(Session), Session.has_signal(UiCallLine.STARTED_SIGNAL))
+	# Without a started whisper, results still answer as before.
+	Session.report_interaction({"id": 5, "status": "attention", "target": &"miku", "source": &"text"})
+	await wait_seconds(Palette.T_CALL_ECHO_IN + 0.1)
+	assert_eq(line.feedback_text(), "→ atenção")
+
+
 func test_open_type_submit() -> void:
 	var line := _line()
 	await wait_process_frames(2)
