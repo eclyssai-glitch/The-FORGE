@@ -12,6 +12,10 @@ extends Node
 ##                           to <dir>, then exit
 ##   --allow-missing-ui      with --smoke-test: a HUD without the "ui_transport"/"demo_badge"
 ##                           groups is reported as `ui=absent` instead of failing
+##   --inspect[=<dir>]       DEVELOPMENT ONLY: load the dev inspector (tools/inspector, never in the
+##   --inspect-every=<s>     export) — JSON state dumps next to each capture, every <s> game seconds
+##   --inspect-png=on|off    and on F9 (docs/BUILD.md, "Inspector de desenvolvimento"); ignored with
+##                           a warning when the inspector is not there (exported build)
 ## Global keyboard shortcuts live in the "Shortcuts" child (src/core/shortcuts.gd).
 
 @onready var world: Node3D = $World
@@ -31,7 +35,8 @@ func _ready() -> void:
 		var idx := QualityProfiles.LEVEL_NAMES.find(String(args["quality"]).to_upper())
 		if idx >= 0:
 			Quality.override_for_session(idx as QualityProfiles.Level)
-	if args.has("smoke-test") or args.has("capture") or args.has("style-frames"):
+	if args.has("smoke-test") or args.has("capture") or args.has("style-frames") \
+			or args.has("inspect") or args.has("inspect-every"):
 		var automation := preload("res://src/core/automation.gd").new()
 		automation.name = "Automation"
 		automation.options = args

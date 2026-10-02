@@ -121,7 +121,9 @@ func dump_for_image(png_path: String, context: Dictionary = {}) -> String:
 func _dump_periodic(context: Dictionary) -> void:
 	_busy = true
 	_count += 1
-	await RenderingServer.frame_post_draw
+	if with_png:
+		# The image of this frame exists only after it was drawn (headless never draws: no PNG).
+		await RenderingServer.frame_post_draw
 	var base := out_dir.path_join("inspect_%04d_f%07d" % [_count, Engine.get_process_frames()])
 	if with_png:
 		var img := get_viewport().get_texture().get_image()

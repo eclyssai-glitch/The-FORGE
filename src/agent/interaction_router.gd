@@ -166,6 +166,28 @@ func current_step() -> Dictionary:
 	return _plan[_index] if _waiting and _index >= 0 and _index < _plan.size() else {}
 
 
+## Read-only view of the pipeline (LivingInteraction.inspect_state, dev inspector): the vocabulary
+## action in flight and its arguments, the plan, the queue, the active and the last request.
+## Copies only: changing the result changes nothing here.
+func snapshot() -> Dictionary:
+	var step := current_step()
+	return {
+		"action": String(step.get("action", &"")),
+		"action_args": (step.get("args", {}) as Dictionary).duplicate(true),
+		"step_index": _index,
+		"plan": ActionVocabulary.names(_plan),
+		"waiting": _waiting,
+		"step_elapsed": _elapsed,
+		"queue": _queue.size(),
+		"active_request": (_active["report"] as Dictionary).duplicate(true) if not _active.is_empty() else {},
+		"last_report": history.back().duplicate(true) if not history.is_empty() else {},
+		"requests_finished": history.size(),
+		"executor_bound": executor.is_bound(),
+		"executor_pending": String(executor.pending),
+		"provider_available": port.is_available(),
+	}
+
+
 ## Drops the running plan and every waiting request (scenario reset/recomposition). Nothing that
 ## was not committed is applied.
 func cancel() -> void:

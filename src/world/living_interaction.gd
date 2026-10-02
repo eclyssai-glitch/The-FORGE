@@ -33,6 +33,10 @@ const GROUP := &"living_interaction"
 const CALL_LINE_UI_GROUP := &"living_call_line_ui"
 const MIKU_NODE := "Miku"
 const MIKU_GROUP := &"living_miku"
+## Dev inspector contract (docs/ARCHITECTURE.md, "Contrato inspect_state()"): members expose a
+## read-only `inspect_state() -> Dictionary`. Nothing calls it in the game; the development-only
+## inspector (tools/inspector, never exported) does when it is loaded.
+const DEV_INSPECT_GROUP := &"dev_inspect"
 
 var config: MikuConfig
 var router: InteractionRouter
@@ -46,6 +50,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	add_to_group(GROUP)
+	add_to_group(DEV_INSPECT_GROUP)
 	config = MikuConfig.new()
 	config.reload()
 	router = InteractionRouter.new(config)
@@ -104,6 +109,20 @@ func find_miku() -> Node:
 
 func is_bound() -> bool:
 	return router != null and router.executor.is_bound()
+
+
+## Dev inspector section "interaction": the vocabulary action in flight (InteractionRouter.snapshot)
+## plus the binding, the call line and the configuration values. Read-only, no side effects.
+func inspect_state() -> Dictionary:
+	var s := router.snapshot() if router else {}
+	s["bound_to"] = String(find_miku().name) if find_miku() else ""
+	s["call_line_open"] = Session.call_line_open
+	s["config"] = config.values() if config else {}
+	return s
+
+
+func inspect_section() -> String:
+	return "interaction"
 
 
 # ------------------------------------------------------------------ requests

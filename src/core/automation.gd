@@ -102,17 +102,63 @@ const UI_BUTTONS: Array[String] = ["Start", "Pause", "Reset"]
 ## Real seconds the badge may take to become visible after a mode change (UI transitions).
 const UI_BADGE_WAIT := 1.5
 
+## DEVELOPMENT-ONLY runtime inspector (docs/BUILD.md, "Inspector de desenvolvimento"): lives in
+## tools/inspector (excluded from the export) and is loaded BY PATH — never preloaded — only when
+## one of INSPECT_FLAGS is passed. Missing file (exported build) -> warning, flag ignored.
+const INSPECTOR_PATH := "res://tools/inspector/dev_inspector.gd"
+const INSPECT_FLAGS: Array[String] = ["inspect", "inspect-every"]
+
 var options: Dictionary = {}
+## The dev inspector node (child of this one) or null — always null without an --inspect* flag.
+var inspector: Node = null
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	inspector = load_inspector(options)
+	if inspector:
+		add_child(inspector)
 	if options.has("style-frames"):
 		_run_style_frames.call_deferred(String(options["style-frames"]))
 	elif options.has("capture"):
 		_run_capture.call_deferred(String(options["capture"]))
 	elif options.has("smoke-test"):
 		_run_smoke.call_deferred()
+
+
+## True when the command line asks for the dev inspector.
+static func inspector_requested(opts: Dictionary) -> bool:
+	for f in INSPECT_FLAGS:
+		if opts.has(f):
+			return true
+	return false
+
+
+## The dev inspector configured with `opts`, or null: without an --inspect* flag nothing is
+## loaded; when `path` does not exist (the export leaves tools/ out) the flag is ignored with a
+## warning.
+static func load_inspector(opts: Dictionary, path: String = INSPECTOR_PATH) -> Node:
+	if not inspector_requested(opts):
+		return null
+	if not ResourceLoader.exists(path):
+		push_warning("automation: dev inspector %s not found (exported build?) - --inspect ignored." % path)
+		return null
+	var script := load(path) as Script
+	if script == null or not script.can_instantiate():
+		push_warning("automation: dev inspector %s did not load - --inspect ignored." % path)
+		return null
+	var node := script.new() as Node
+	if node == null:
+		return null
+	node.call(&"configure", opts)
+	return node
+
+
+## Writes the inspector's JSON twin of a capture (same frame as the PNG just saved); no-op
+## without the inspector.
+func _inspect_capture(png_path: String, context: Dictionary) -> void:
+	if inspector:
+		inspector.call(&"dump_for_image", png_path, context)
 
 
 ## Capture list of a scenario.
@@ -346,6 +392,7 @@ func _run_capture(dir: String) -> void:
 		var img := get_viewport().get_texture().get_image()
 		var path := abs_dir.path_join("%s.png" % c[0])
 		img.save_png(path)
+		_inspect_capture(path, {"capture": c[0], "capture_time": c[1]})
 		print("[capture] %s (t=%.1f, %s, selected=%s, hud=%s, %dx%d, quality=%s)" % [path, c[1], Session.mode_name(),
 			Session.selected, Session.hud_visible, img.get_width(), img.get_height(), Quality.level_name()])
 	Session.set_hud_visible(true)
@@ -394,6 +441,7 @@ func _run_style_frames(dir: String) -> void:
 		var img := get_viewport().get_texture().get_image()
 		var file := "%s.png" % pose["name"]
 		img.save_png(abs_dir.path_join(file))
+		_inspect_capture(abs_dir.path_join(file), {"style_frame": pose["name"], "capture_time": float(pose["time"])})
 		names.append(file)
 		print("[style-frame] %s (t=%.1f, %s, %dx%d, quality=%s)" % [abs_dir.path_join(file), float(pose["time"]),
 			Session.mode_name(), img.get_width(), img.get_height(), Quality.level_name()])
@@ -576,6 +624,7 @@ func _run_capture_living(abs_dir: String) -> void:
 		var img := get_viewport().get_texture().get_image()
 		var path := abs_dir.path_join("%s.png" % c[0])
 		img.save_png(path)
+		_inspect_capture(path, {"capture": c[0], "capture_time": t})
 		print("[capture] %s (t=%.1f, %s, hud=%s, %dx%d, quality=%s)" % [path, Simulation.time, Session.mode_name(),
 			Session.hud_visible, img.get_width(), img.get_height(), Quality.level_name()])
 	Session.set_hud_visible(true)
@@ -648,6 +697,8 @@ func _settle(seconds: float) -> void:
 func _write_report(lines: PackedStringArray) -> void:
 	var text := "\n".join(lines)
 	print("[smoke]\n" + text)
+	if inspector:
+		inspector.call(&"dump", String(inspector.get(&"out_dir")).path_join("smoke_end"), {"trigger": "smoke_end"})
 	var f := FileAccess.open("user://" + REPORT_NAME, FileAccess.WRITE)
 	if f:
 		f.store_string(text + "\n")
