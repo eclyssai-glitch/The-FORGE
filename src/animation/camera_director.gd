@@ -35,6 +35,11 @@ extends Node3D
 ## changes (mode, focus, reset) over GenesisShots.T_USER; every GENESIS entity can be focused from
 ## any mode. A scenario change snaps to the new scenario's shot. `style_frame_poses()` gives the
 ## GENESIS style frames to the automation (StyleFrames).
+##
+## LIVING (Loop 5; a living MIKU — group Miku.GROUP — is in the tree): the story camera follows
+## MIKU's focus (Miku.story_focus()) through LivingShots (heavy springs, no cuts). User input
+## (orbit, zoom, focus) holds the camera for USER_HOLD s, then the story glides back from where
+## the user left it. Modes do not change the living framing.
 
 const GROUP := &"camera_director"
 ## Seconds of user control before cinematic cues take the camera back.
@@ -66,6 +71,11 @@ var _focusing := false
 var _focus_id: StringName = &""
 ## Exposure trim last asked of the world (GENESIS cinematic path; 1 = the mode's exposure).
 var _trim := 1.0
+## LIVING: the narrative camera, its goal scratch, the MIKU it follows and its clock.
+var _living_cam := LivingShots.new()
+var _living_goal := CameraShots.Shot.new()
+var _miku: Node
+var _living_last := -1.0
 
 
 func _ready() -> void:
@@ -88,6 +98,12 @@ func _ready() -> void:
 ## Jumps (no tween) to the goal of the current state: the cinematic cue in FORGE when
 ## Session.cinematic, otherwise the mode shot. Clears user control.
 func snap_to_mode_shot() -> void:
+	if is_inside_tree() and _living():
+		_user = false
+		var f: Dictionary = _miku.call(&"story_focus")
+		_living_cam.snap(f.get("kind", &"miku"), f.get("points", PackedVector3Array()), _aspect(), _rig)
+		_apply()
+		return
 	_stop_blend()
 	_user = false
 	_end_focus()
@@ -111,6 +127,9 @@ func reset_to_mode_shot() -> void:
 ## is in its group or the target is out of the mode's reach.
 func focus_on(id: StringName) -> bool:
 	if not is_inside_tree() or id == &"":
+		return false
+	if _living():
+		# The story camera follows MIKU's attention (a pointed world becomes her focus).
 		return false
 	var nodes := get_tree().get_nodes_in_group(SessionState.entity_group(id))
 	var found := false
@@ -185,6 +204,9 @@ func rig() -> CameraShots.Shot:
 
 
 func _process(delta: float) -> void:
+	if _living():
+		_process_living()
+		return
 	_fly(delta)
 	_advance_blend()
 	var id := _evaluate_goal()
@@ -245,6 +267,9 @@ func _zoom(factor: float) -> void:
 func _fly(delta: float) -> void:
 	if Session.mode != SessionState.Mode.UNIVERSE:
 		return
+	# Typing on the living call line (Session.call_line_open, interaction system): no flight.
+	if Session.get(&"call_line_open") == true:
+		return
 	var v := Input.get_vector("camera_left", "camera_right", "camera_forward", "camera_back")
 	if v == Vector2.ZERO:
 		return
@@ -271,6 +296,30 @@ func _evaluate_goal() -> StringName:
 	return CameraShots.desired(Session.mode, Session.cinematic, Simulation.world, Simulation.time, _goal)
 
 
+## LIVING: true while a living MIKU is in the tree (the prototype scene).
+func _living() -> bool:
+	if _miku != null and is_instance_valid(_miku) and _miku.is_inside_tree():
+		return true
+	_miku = get_tree().get_first_node_in_group(&"living_miku") if is_inside_tree() else null
+	return _miku != null
+
+
+func _process_living() -> void:
+	var now := _now()
+	var dt := clampf(now - _living_last, 0.0, 0.5) if _living_last >= 0.0 else 0.0
+	_living_last = now
+	if _user:
+		if now < _user_until:
+			_apply()
+			return
+		_user = false
+		_end_focus()
+		_living_cam.take_from(_rig)
+	var f: Dictionary = _miku.call(&"story_focus")
+	_living_cam.step(dt, f.get("kind", &"miku"), f.get("points", PackedVector3Array()), _aspect(), _living_goal, _rig)
+	_apply()
+
+
 ## True while the GENESIS scenario is playing (its own shots, cues and limits).
 static func _genesis() -> bool:
 	return Simulation.scenario == Scenario.GENESIS
@@ -278,7 +327,9 @@ static func _genesis() -> bool:
 
 ## Mode limits of the active scenario.
 func _clamp_shot(s: CameraShots.Shot) -> void:
-	if _genesis():
+	if _miku != null and is_instance_valid(_miku):
+		LivingShots.clamp_rig(s)
+	elif _genesis():
 		GenesisShots.clamp_shot(s, Session.mode)
 	else:
 		CameraShots.clamp_shot(s, Session.mode)
@@ -330,7 +381,9 @@ func _stop_blend() -> void:
 ## Writes the rig to the camera. The rig is clamped here, after the blend of the frame
 ## (CameraShots.clamp_rig: never below the floor + clearance, also mid-transition).
 func _apply() -> void:
-	if _genesis():
+	if _miku != null and is_instance_valid(_miku):
+		LivingShots.clamp_rig(_rig)
+	elif _genesis():
 		GenesisShots.clamp_rig(_rig)
 	else:
 		CameraShots.clamp_rig(_rig)

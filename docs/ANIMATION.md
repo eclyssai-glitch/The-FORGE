@@ -4,8 +4,10 @@ Dono: `animator`. Responsabilidade: câmeras, animação dirigida por eventos e 
 Código: `src/animation/`, `src/entities/`, `src/fx/` · Testes: `tests/unit/test_animation_*.gd`.
 Tempos de eventos: `src/events/origin_chamber_script.gd` (nunca duplicados aqui nem no código de
 animação: tudo é ancorado nos timestamps `*_at` de `Simulation.world`).
-Dois cenários: **ORIGIN CHAMBER** (seções abaixo, v1) e **GENESIS** (seção "GENESIS" no fim;
-tempos em `src/events/genesis_script.gd`, estado em `Simulation.genesis`).
+Três cenários: **ORIGIN CHAMBER** (seções abaixo, v1), **GENESIS** (seção "GENESIS";
+tempos em `src/events/genesis_script.gd`, estado em `Simulation.genesis`) e **LIVING** (seção "LIVING" no
+fim; personagem viva em tempo real — ADR-015 — código em `src/miku/`, `src/entities/living/`,
+`src/fx/living/`).
 
 ## Princípio
 
@@ -468,3 +470,137 @@ seguem seek e reset, revelação gradual (`reveal` ou fade), pulso no cabelo e n
 ambiente e respeita a névoa, a câmera usa `GenesisShots` e foca todas as entidades, destaque de seleção,
 partículas por qualidade). Smoke: `tools/smoke_test.sh --scenario=genesis`. Style frames:
 `tools/style_frames.sh <dir>`; capturas: `tools/capture_evidence.sh <dir> --scenario=genesis`.
+
+## LIVING (Loop 5 — MIKU LIVING CHARACTER V1)
+
+Contrato: `docs/contracts/loop-05.md`; ADR-015 (personagem viva = estado em tempo real, sem seek; reset =
+recompor) e ADR-016 (Character ≠ Provider ≠ Worker). Aqui o visual **não** é função de `Simulation.time`:
+mente, molas e agenda têm estado, avançados por `Miku.tick(dt)` com `dt` do `MotionClock` (determinístico no
+Movie Maker com `--fixed-fps`; `MAX_DT` = 0,1 s). Variação vem do estado; o único ruído é de semente fixa
+(`MicroAgenda` 5051, sacadas 8128, partículas 7707, mundos por id).
+
+### Módulos (caminhos fixos; `LIVING_MODULES` do `world.gd`)
+
+| Nó | Script | Papel |
+|---|---|---|
+| `LivingLightRig` | `src/entities/living/living_light_rig.gd` | key quente (única sombra), rim frio, fill, luz de trabalho = calor do mundo trabalhado; esfria e endurece com a perda de compostura |
+| `Miku` | `src/miku/miku.gd` | runtime da personagem (API abaixo); grupo `living_miku` e `dev_inspect` |
+| `HandPool` | `src/entities/living/hand_pool.gd` | mãos-marionete, pool sem limite |
+| `IntentThreads` | `src/entities/living/intent_threads.gd` | fios de intenção |
+| `WorkWorld` | `src/entities/living/work_world.gd` | mundos-obra `world_vesper`, `world_calyx`, `world_orrin` (`LivingLayout`) |
+| `CausalParticles` | `src/fx/living/causal_particles.gd` | partículas só com causa |
+
+`Miku` acha os irmãos pelos grupos; o que faltar ela cria como filho (roda sozinha em testes e cenas de dev).
+
+### API (sistema de interação, `docs/AGENT.md`)
+
+- `perform(action: StringName, args := {}) -> bool` — as 16 ações (`ActionScript.VOCABULARY`), argumentos do
+  `ActionVocabulary` do game-engineer (normalizados por `ActionScript.normalize`). **Um** `action_finished(action)`
+  por `perform` aceito. `WORK` termina quando ela está engajada (o trabalho segue no canal TASK).
+- `notice_user()` → reação pelo humor: CALM curiosa (vira, inclina a cabeça, palma aberta), FOCUSED olhar breve
+  e volta, FRUSTRATED seca, ANGRY só os olhos. `target_world(id)` → olha e assente na hora; se nenhum plano
+  chegar em `PLAN_GRACE` (1,2 s), aponta e começa a trabalhar nele sozinha.
+- `apply_config(values)` (ligação, silencioso), `on_config_changed(path, old, new)` (mudança validada: o
+  artefato valida, corpo/mente assumem o valor; a reação a si mesma é o `INSPECT(self)` do plano).
+- Sinais: `action_started`, `action_finished`, `mood_changed(state)`, `attention_changed(kind, id)`,
+  `file_committed(args)`. `inspect_state()` para o inspetor de dev. `story_focus()` para a câmera.
+- Eventos do roteiro (`Simulation.event_emitted`, `living.*` do `LivingScript`): `hands` (PUPPET),
+  `work_order`, `work_step` (GATHER, COMPRESS, MANTLE, CRUST, SKY; tentativas; mãos), `work_failed` (1: fissura,
+  2: colapso), `work_dismantled`, `work_recovered`, `world_complete`. Ela reage; o evento nunca a posiciona.
+
+### Três canais de beats (`Miku`)
+
+**TASK** (o trabalho num mundo, em segundo plano), **MAIN** (ações do vocabulário, uma por vez, fila;
+suspende a TASK: as mãos seguram, a matéria espera) e **OVERLAY** (olhos, cabeça e um braço livre por cima:
+LOOK_AT_USER, ACKNOWLEDGE, percepção do chamado/apontar, FRUSTRATED/ANGRY/RECOVER durante o trabalho).
+Prioridade no corpo: OVERLAY > MAIN > TASK. Cada ação é uma lista de beats `{t, op, …}` (`ActionScript`,
+`WorkPlan`) tocada no tempo da mente (`MikuMind.tempo()`); `wait` segura os beats seguintes até a condição
+(mãos chegaram, etapa pronta, reparo, desmonte, edição, aplicação) ou o timeout. A ordem dos beats é a
+cadeia causal: intenção → antecipação (`windup`) → gesto → fio (`cast`) → tensão (`pull`) → mão (`send`)
+→ matéria (`work`) → resultado; a percepção de uma falha vem um beat depois da causa (overlap).
+
+### Mente (`src/miku/mind/`)
+
+- `MikuMind`: CALM → FOCUSED (tarefa) → FRUSTRATED (`frustration ≥ frustration_threshold`) → ANGRY
+  (`≥ anger_level()`, que cai com `temperament`) → RECOVERING (sucesso depois da frustração; drena por
+  `recovery_speed`, mínimo `RECOVER_MIN` = 3,5 s visível) → CALM/FOCUSED. Frustração só vem de falhas do
+  trabalho (× `patience`, `pride`). `composure` cai rápido e volta devagar; ANGRY = `1 − lerp(0,6, 1, aggression_peak)`.
+  `rigidity()` (0 humana … 1 não-humana) e `tempo()` (graciosa … eficiência extrema) regem o corpo.
+  Atenção: base da tarefa + sobreposição temporária (`attend`).
+- `MicroAgenda`: respirar fundo, transferir peso, seguir objeto com os olhos, olhar o trabalho, corrigir
+  postura, dedos, observar a mão, verificar outro mundo, hesitar (sempre resolvida por `continue`), ajustar,
+  continuar e `hold` (a imobilidade travada da raiva). Peso por humor × contexto (trabalhando, mãos fora,
+  mundo quebrado) × identidade (curiosidade, paciência, orgulho) × recência; nunca repete em seguida;
+  hesitar reduz o trabalho das mãos a 20 % (ligado ao trabalho).
+- `MikuParams`: `identity`/`behaviour`/`appearance` (faixas do `ConfigSchema`; `chest_volume` 0,5 = esculpido
+  → fator do rig por `chest_factor`).
+
+### Corpo (PROTÓTIPO — migra para a pilha nativa do Godot)
+
+Decisão do Owner (rodada 1): a execução de movimento migra para AnimationTree/LookAtModifier3D/TwoBoneIK3D/
+SpringBoneSimulator3D. A fronteira é `MikuBody` (`src/miku/body/miku_body.gd`): o runtime só usa as seções
+"Body goals" (`set_gaze`, `set_turn`, `set_posture`, `set_weight`, `set_breath`, `set_character`, `set_arm`,
+`set_finger_wave`) e "Body queries" (`fingertip`, `hand_position`, `shoulder`, `arm_reach`, `eye_position`,
+`head_position`, `chest_position`, `body_basis`), em espaço de mundo. Atrás dela, o spike manual:
+`MikuMotor` (camadas: respiração, peso, cadeia de olhar olhos→cabeça→pescoço→peito com atrasos, postura,
+saia pendular, IK de dois ossos, dedos), `PoseRig` (FK próprio em eixos de modelo — independente dos eixos
+dos ossos), `LimbIK`, `FingerSet`, `ArmChannel`, `RigBones`, e o manequim de desenvolvimento
+`MikuMannequin` (usado só quando `MikuRig` não existe). `Gestures` (alvos de mão por gesto) e `HandPoses`
+(poses de dedos) sobrevivem à migração (dizem *onde* e *qual pose*, não *como*).
+Rig real (`MikuRig.build(material)`): o animator escreve só rotações; aparência por
+`MikuRig.apply_appearance` (rests) + `PoseRig.refresh_rest`; halo (torus) e brilho (`glow`) são daqui.
+
+### Mãos, fios, mundo, partículas
+
+- `PuppetHand` (`HandRig.build(side, material)` ou `HandMannequin` de dev), reescalada para `HAND_LENGTH`
+  (1,45) e orientada pelos eixos de repouso do próprio rig. Peso (`HandDynamics`): só se move com tensão do
+  fio (`pull`); mola `BASE_F/√massa`, aceleração ≤ `FORCE·força/massa`; fio frouxo = desliza e para (nunca
+  vai sozinha ao alvo). Dedos por mola com atraso (indicador lidera, mínimo atrasa). Material
+  `angelic_hand` duplicado por mão: `presence`, `drive` (= tensão), `hand_size`.
+- `IntentThreads` + `ThreadCycle`: APPEAR (lançado do dedo dela até a mão, frouxo) → PULL (tensão → força do
+  gesto; a mão só responde acima de `RESPOND_AT`) → RELAX (cede, enverga) → FADE → GONE. Curva com
+  envergadura ∝ (1 − tensão)^1,5, tremor quando tenso e sem compostura; vários fios por mão quando irritada.
+  Uniforms `tension`, `presence` (placeholder: cilindros em MultiMesh; o `intent_thread()` do art-director
+  pede a tira de `IntentThreadStrip` — pendência de integração).
+- `WorkWorld`/`WorkSite`/`WorldBuild`: nuvem de matéria → GATHER → CORE (compressão) → LAYERS (3 cascas:
+  MANTLE, CRUST, SKY) → ADJUST → STABLE. Só `work()` constrói (mãos no lugar e puxadas); cada fragmento voa
+  da nuvem ao encaixe passando pela palma da mão que trabalha (`via`). Falhas deliberadas: fissura (cunha
+  voltada para MIKU e câmera), desequilíbrio (inclina e oscila), colapso (placas caem em entulho);
+  `repair` fecha fissuras; colapso só sai com `dismantle` (com piso: só o céu). Material `work_world`:
+  `formation`, `compression`, `stress`, `heal`.
+- `CausalParticles`: `compress` (matéria apertada), `fragments` (fissura/colapso/desmonte), `energy` (ao
+  longo de um fio tenso, MIKU → mão), `form` (etapa assentou). Nenhum emissor ambiente; contagem ×
+  `Quality.profile.particles`; pool fixo de 900.
+
+### Câmera narrativa (`LivingShots` + `CameraDirector`)
+
+Com um MIKU vivo na árvore, o `CameraDirector` segue `Miku.story_focus()`: `miku` (LIFE, corpo inteiro),
+`puppet` (MIKU + mãos), `work` (MIKU + mundo, de baixo), `wide` (≥ 3 mãos), `emotion` (aproximação no rosto
+ao perder/recuperar a compostura), `user` (frontal, ela olha a lente), `file` (MIKU + artefato). Sem cortes:
+alvo, yaw, pitch, distância e fov são molas pesadas (0,13–0,2 Hz; ×1,6 na emoção); foco mínimo de 2,2 s
+(sem câmera inquieta). Input do usuário segura `USER_HOLD` e a história volta de onde ele deixou. WASD
+ignorado com `Session.call_line_open`.
+
+### Testes
+
+`tests/unit/test_animation_living_mind.gd` (humores, compostura, reações ao usuário, parâmetros, agenda
+determinística/sem loop/ligada ao trabalho), `…_living_motion.gd` (molas, peso das mãos, ciclo do fio,
+poses, IK), `…_living_world.gd` (etapas só por trabalho, falha, reparo, desmonte com piso, ordem causal dos
+beats, normalização dos argumentos do roteador), `…_living_runtime.gd` (um `action_finished` por
+`perform`, fila, chamado + plano, apontar sem plano, eventos do roteiro dirigem o trabalho até a raiva,
+mudança de configuração chega ao corpo, pool reutiliza e não tem limite, vida sem input e zero partícula sem
+causa, `inspect_state`).
+
+### Integração e pendências (rodada 1)
+
+- Construído contra os contratos do branch principal sem merge; verificado numa cópia descartável
+  (este branch + rig/materiais/shaders do principal): `MikuRig` (49 ossos, dedos `index.0.L`…), `HandRig`
+  (`build(side, material)`), `angelic_hand`/`intent_thread` (tira `IntentThreadStrip`)/`config_artifact`/
+  `work_world` rodam sem erro. A classe GENESIS foi renomeada para `GenesisMiku` (libera `Miku`); o principal
+  ainda tem `class_name Miku` no GENESIS — a integração mantém o rename.
+- Smoke `--scenario=living` (principal + estas áreas, llvmpipe ~2 fps): módulos 9/9, roteiro 25/25, falha e
+  recuperação, mutação/reversão de configuração OK, sem erro de script; FAIL em `requests=5/9` (pedidos
+  enfileirados não reportam em 45 s: as ações têm duração real e o roteador as executa em série) — ajuste de
+  orçamento/fila do smoke (game-engineer) ou versões curtas das ações sob smoke (animator), a decidir.
+- Código manual de ossos a migrar para a pilha nativa: `src/miku/motion/{miku_motor,pose_rig,limb_ik,finger_set,arm_channel}.gd`,
+  `src/miku/body/{rig_bones,miku_mannequin}.gd`, o FK/dedos de `PuppetHand` e `HandMannequin`.

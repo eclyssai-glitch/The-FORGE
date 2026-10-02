@@ -12,7 +12,7 @@ extends Node3D
 ## — a pair of soft motes riding the arc (ambient, MotionClock: the woven graph keeps breathing
 ## after the session completes). Colour at the target: GOLD for the forming world, ICE for moons,
 ## pale gold for the ring, lilac-rose for the belt, dusk rose for distant worlds.
-## MIKU's threads continue her hair: each leaves from the tip of its link strand (Miku.hair_link_curves,
+## MIKU's threads continue her hair: each leaves from the tip of its link strand (GenesisMiku.hair_link_curves,
 ## following the figure's float and head lift) along the strand's own direction (tangent_arc), so
 ## hair and thread read as one fibre. The material's own `woven` front and `pulse` are held off
 ## (woven = 1, pulse < 0): the weave grows by geometry and the pulses are motes.
@@ -249,7 +249,7 @@ static func width_of(i: int) -> float:
 static func body_point(i: int, id: StringName, m: float, lift := 0.0) -> Vector3:
 	match id:
 		&"miku":
-			return Miku.figure_pose(m, lift) * hair_point(i)
+			return GenesisMiku.figure_pose(m, lift) * hair_point(i)
 		&"planet_forming":
 			return GenesisLayout.PLANET_CENTER
 		&"moon_0":
@@ -272,9 +272,9 @@ static func body_point(i: int, id: StringName, m: float, lift := 0.0) -> Vector3
 ## Object-space point (sculpture of MIKU) where link `i` leaves her hair: on its link strand,
 ## HAIR_OVERLAP before the strand's tip.
 static func hair_point(i: int) -> Vector3:
-	var root := GenesisLayout.anchor("miku_body", "hair_root", Miku.HAIR_ROOT_FALLBACK)
+	var root := GenesisLayout.anchor("miku_body", "hair_root", GenesisMiku.HAIR_ROOT_FALLBACK)
 	var k := MIKU_LINKS.find(i)
-	var curves := Miku.hair_link_curves()
+	var curves := GenesisMiku.hair_link_curves()
 	if k < 0 or k >= curves.size():
 		return root + Vector3(0.0, 2.5, -1.5)
 	return root + HairRibbons.curve_point(curves[k], 1.0 - HAIR_OVERLAP)
@@ -283,7 +283,7 @@ static func hair_point(i: int) -> Vector3:
 ## Object-space direction of the hair strand of link `i` where its thread leaves it.
 static func hair_tangent(i: int) -> Vector3:
 	var k := MIKU_LINKS.find(i)
-	var curves := Miku.hair_link_curves()
+	var curves := GenesisMiku.hair_link_curves()
 	if k < 0 or k >= curves.size():
 		return Vector3.UP
 	var c := curves[k]
@@ -354,7 +354,7 @@ func _set_arc(i: int, m: float, lift: float) -> void:
 	var a := _ends_a[i]
 	var b := _ends_b[i]
 	if GenesisScript.LINKS[i][0] == &"miku":
-		var tw := Miku.figure_pose(m, lift).basis * hair_tangent(i)
+		var tw := GenesisMiku.figure_pose(m, lift).basis * hair_tangent(i)
 		var arc := tangent_arc(a, b, tw)
 		_heights[i] = arc[0]
 		_ups[i] = arc[1]

@@ -149,7 +149,7 @@ func test_hands_rise_and_work() -> void:
 
 
 func test_miku_wakes() -> void:
-	var miku: Miku = _n["Miku"]
+	var miku: GenesisMiku = _n["Miku"]
 	await _seek(1.0)
 	assert_false(miku.halo.visible, "no halo asleep")
 	assert_false(miku.body.visible, "asleep the porcelain is in the dark (no silhouette)")
@@ -164,7 +164,7 @@ func test_miku_wakes() -> void:
 	var rv: Variant = (miku.body.material_override as ShaderMaterial).get_shader_parameter("reveal")
 	var revealing := (rv is float and float(rv) < 0.95) or miku.body.transparency > 0.05
 	assert_true(revealing, "revealed by the seed's light, not popped in")
-	assert_gt(miku.seed_light.omni_range, Miku.SEED_LIGHT_RANGE + 1.0, "the seed's light blooms out")
+	assert_gt(miku.seed_light.omni_range, GenesisMiku.SEED_LIGHT_RANGE + 1.0, "the seed's light blooms out")
 	await _seek(GenesisScript.T_AWAKEN + 12.0)
 	assert_true(miku.halo.visible)
 	assert_eq(miku.body.transparency, 0.0, "opaque once revealed")
@@ -194,7 +194,7 @@ func test_the_stable_wave_lights_the_threads() -> void:
 	await _seek(GenesisScript.T_STABLE - 0.2)
 	var base := float(rt.threads[0].material_override.get_shader_parameter("intensity"))
 	await _seek(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HAIR * 0.5)
-	var hair_pulse: Variant = (_n["Miku"] as Miku).hair_links.material_override.get_shader_parameter("link_pulse")
+	var hair_pulse: Variant = (_n["Miku"] as GenesisMiku).hair_links.material_override.get_shader_parameter("link_pulse")
 	assert_true(hair_pulse is float and float(hair_pulse) > 0.0 and float(hair_pulse) < 1.0,
 		"the climax pulse first runs out along the link strands of her hair")
 	await _seek(GenesisScript.T_STABLE + GenesisChoreography.WAVE_DELAY + GenesisChoreography.WAVE_HAIR
@@ -278,7 +278,7 @@ func test_camera_uses_genesis_shots_and_focuses_every_body() -> void:
 
 func test_selection_highlights() -> void:
 	await _seek(GenesisScript.DURATION)
-	var miku: Miku = _n["Miku"]
+	var miku: GenesisMiku = _n["Miku"]
 	Session.select(&"miku")
 	await wait_process_frames(30)
 	assert_gt(float(miku.body.material_override.get_shader_parameter("select")), 0.1)
