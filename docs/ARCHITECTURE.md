@@ -153,10 +153,13 @@ Entrada diegética, só por autoloads (`Session`):
 | `entity_clicked(id)` / `click(id)` | o `Picker` chama `click(id)` em todo clique numa entidade (emite sempre, depois `select(id)`); clique no vazio continua `select(&"")` |
 | `call_line_open`, `call_line_changed(open)`, `open_call_line()`, `close_call_line()` | linha de chamada; `Shortcuts` abre com Enter (ação `call_line`) só no `living` |
 | `call_submitted(text)`, `submit_call(text)` | texto da linha (fecha a linha antes; vazio só fecha; máx. `CALL_MAX_CHARS`) |
-| `interaction_reported(report)`, `report_interaction(report)` | resultado de cada pedido para retorno diegético da UI |
+| `interaction_started(report)`, `report_interaction_started(report)` | reconhecimento imediato: o plano do pedido começou (`status: &"started"`, antes de qualquer ação terminar; `id`/`request_id`/`source` iguais aos do resultado) |
+| `interaction_reported(report)`, `report_interaction(report)` | resultado de cada pedido (fim do plano) para retorno diegético da UI |
 
 O `LivingInteraction` escuta `entity_clicked` (MIKU = chamar atenção; mundo = indicar) e `call_submitted`
-(texto → roteador). A linha de chamada final é da UI (grupo `living_call_line_ui`); sem ela aparece o placeholder
+(texto → roteador). O roteador fala com o corpo pelo **protocolo de ações correlacionadas** (Loop 5 R2:
+`request_id`/`step` em cada `perform`, `Miku.action_event`, `estimate_duration`, `cancel`; timeout por passo
+derivado da estimativa, no relógio `MotionClock`; fila FIFO com 1 plano ativo) — detalhes em `docs/AGENT.md`. A linha de chamada final é da UI (grupo `living_call_line_ui`); sem ela aparece o placeholder
 mínimo `LivingCallLine` (CanvasLayer + LineEdit, cores da `Palette`). Não há painel nem menu de configuração.
 
 ## Contrato `inspect_state()` (inspector de desenvolvimento, Loop 5)

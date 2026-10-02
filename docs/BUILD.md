@@ -77,7 +77,11 @@ Encerramento robusto (Xvfb + lavapipe às vezes não encerra o Godot após o úl
 - Os dois scripts rodam o jogo numa sessão própria (`setsid`, `tools/_proc.sh`) e, ao final — normal,
   por tempo, por Ctrl-C/TERM —, matam a sessão inteira (godot, xvfb-run, Xvfb): nenhum processo órfão.
 - Smoke: `TIMEOUT` (padrão 240 s) total; após a linha `RESULT=` o motor tem `SMOKE_GRACE` s
-  (padrão 15) para sair, senão é encerrado ("forced exit after result") e o veredito vem do log.
+  (padrão 15) para sair, senão é encerrado ("forced exit after result") e o veredito vem do log. No
+  LIVING o jogo anuncia `smoke_deadline_seconds=N` (pior caso de uma execução correta, derivado dos planos) e o
+  script passa a usar `N + SMOKE_BOOT_SLACK` (30 s) como guarda contra travamento, se maior que `TIMEOUT`
+  (`PROC_TIMEOUT_FN` em `tools/_proc.sh`). Não é um timeout global maior: quem reprova por tempo é o próprio
+  jogo, pelo orçamento derivado (abaixo).
 - Capturas: `--timeout=<s>` ou `CAPTURE_TIMEOUT` (padrão 900 s). A lista de PNG esperados vem de
   `CAPTURES` em `src/core/automation.gd` (ou `CAPTURES_GENESIS` com `--scenario=genesis`, que também é
   repassado ao jogo; filtrada por `--capture-only`); só contam PNG gravados
@@ -210,7 +214,20 @@ fique mais curiosa, mas menos impulsiva"); cada um precisa terminar com o status
 KIND/ROUTE status`, `requests=9/9`), a configuração precisa mudar de verdade (`config_mutated=true`, altura
 1,000 → 1,040) e voltar exatamente ao estado do jogador (`config_reverted=true`, snapshot do arquivo de
 `user://miku`). Depois: pausa segura, `seek_refused=true`, `reset_ok=true recomposed=true` e a UI. Linha
-`interaction executor=miku|null provider=unavailable`. Enquanto os módulos do animator não existem,
+`interaction executor=miku|null provider=unavailable` e `interaction protocol=correlated|legacy`.
+
+*Orçamento derivado (Loop 5 R2, sem timeout fixo).* Antes de jogar, `Automation.living_budget()` pré-visualiza os
+planos dos nove pedidos (`InteractionRouter.preview_plan`, sem efeitos) e soma as estimativas do corpo
+(`estimate_plan` → `Miku.estimate_duration`; sem ela, `ActionVocabulary.NOMINAL_SECONDS`):
+`orçamento = roteiro (140 s / 8) + Σ estimativas + margem`, `margem = 30 s + 0,5 × Σ estimativas + 3 s por pedido`.
+Usar mais que o orçamento reprova (`FAIL living_budget used=… budget=…`). Cada pedido é esperado **pelo seu id**:
+`Session.interaction_started` (reconhecimento em ≤ 2 s, senão FAIL) → `Session.interaction_reported` com o mesmo
+`id`, até o pior caso do plano (`started.deadline` = Σ timeouts dos passos) + 3 s — o roteador sempre termina um
+plano até lá. Relatório por pedido: `request #<request_id> … steps=n/n real=…s est=…s ack=…s first_step=…s
+failures= timeouts= cancelled=` e uma linha por passo (`step i AÇÃO finished|failed|timeout|cancelled real= est=
+timeout=`); no fim `step_failures= timeouts= cancellations= ignored_events=`. Com corpo correlacionado, um passo
+por timeout reprova o pedido; no caminho legado (corpo sem `action_event`) vira `WARN`. Primeiro passo iniciado
+depois de 0,3 s do envio: `WARN`. Enquanto os módulos do animator não existem,
 `SMOKE_ALLOW_MISSING_MODULES=1` (passa `--allow-missing-modules`) transforma a falta em `WARN` — nunca usar para
 validar a entrega integrada.
 

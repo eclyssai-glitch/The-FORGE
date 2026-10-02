@@ -26,8 +26,9 @@ USER ─ clique em MIKU ─────────────┐
              StructuredPatch ─► ConfigValidator ─► (EDIT_FILE terminou) ─► MikuConfig.apply (atômico, user://)
                    │                                                          │
                    ▼                                                          ▼
-             plano de ações ─► ActionExecutor ─► Miku.perform(action, args)   GAME STATE ─► Miku.on_config_changed
-                                                 Miku.action_finished ─► próximo passo
+             plano de ações ─► ActionExecutor ─► Miku.perform(action, args + request_id + step)   GAME STATE ─► Miku.on_config_changed
+                                                 Miku.action_event(request_id, action, phase, info) ─► próximo passo
+                                                 (só eventos do request/step em curso; timeout = estimativa × 2 + 3 s)
 ```
 
 ## Arquivos (`src/agent/`, lógica pura `RefCounted`, testável)
@@ -42,9 +43,9 @@ USER ─ clique em MIKU ─────────────┐
 | `ConfigSchema` | seções, propriedades (tipo, faixa, passo, ligação real), pedidos sem suporte (`ASSET_REQUESTS`) |
 | `ConfigValidator` | `validate(patch, values) -> Result` (OK, CLAMPED, UNCHANGED, REJECTED, REQUIRES_ASSET + notas) |
 | `MikuConfig` | store: padrão versionado `res://config/miku_default.json` + estado do usuário `user://miku/miku.config.json` |
-| `ActionExecutor` | executor **nulo** (sem corpo; ações terminam na hora ou por `finish()`); registra `calls` |
-| `MikuNodeExecutor` | executor ligado ao nó `Miku` do animator (referência fraca) |
-| `InteractionRouter` | o pipeline; planos; fila; timeout de passo; commit da mutação |
+| `ActionExecutor` | executor **nulo** (sem corpo): emite `accepted`/`started`/`finished` na hora, após `simulated_duration`/`durations[ação]` s de `advance(dt)`, ou por `finish()`/`fail()`; registra `calls` e `events` |
+| `MikuNodeExecutor` | executor ligado ao nó `Miku` do animator (referência fraca); repassa `action_event`; caminho legado se o nó não tiver `action_event` |
+| `InteractionRouter` | o pipeline; planos; `request_id`; correlação; fila/interrupção; timeout por passo; commit da mutação |
 
 Nós (fora de `src/agent`): `src/world/living_interaction.gd` (`LivingInteraction`, módulo do cenário),
 `src/world/living_call_line.gd` (`LivingCallLine`, placeholder da linha de chamada),
@@ -150,13 +151,52 @@ jogador exatamente (smoke, capturas e tour usam isso). Nada de configuração va
 - A mudança acontece **quando a mão termina de editar**: o patch é validado de novo contra a configuração
   daquele instante e aplicado; se já não há o que mudar (ou a escrita falha), o resto do plano vira
   ACKNOWLEDGE(decline), DISCARD(not applied), WORK(resume) — sem SATISFIED.
-- Planos rodam um passo por vez; o próximo só sai quando o executor emite `action_finished(action)`. Passo sem
-  resposta em `STEP_TIMEOUT` (15 s, `tick(delta)`) é pulado com aviso. Pedidos novos entram numa fila (máx. 4
-  esperando; os mais antigos são cancelados). `cancel()` (recomposição) descarta tudo o que não foi aplicado.
-- Relatório de cada pedido (`request_finished` / `Session.interaction_reported`): `id, kind, route, text, rule,
-  target, status, plan, path, old_value, new_value, notes, reason, source`. Status: `attention`, `world_target`,
-  `applied`, `unchanged`, `rejected`, `requires_asset`, `provider_unavailable`, `provider_invalid`,
+- Relatório de cada pedido (`request_finished` / `Session.interaction_reported`, no **fim** do plano): `id,
+  request_id, kind, route, text, rule, target, status, plan, path, old_value, new_value, notes, reason, source,
+  steps, failures, estimate, duration, interrupted, request_ids`. `steps[i]` = `{step, action, estimate, timeout,
+  elapsed, latency, result (finished|failed|timeout|cancelled|interrupted), reason}`. Status: `attention`,
+  `world_target`, `applied`, `unchanged`, `rejected`, `requires_asset`, `provider_unavailable`, `provider_invalid`,
   `provider_actions`, `unknown`, `commit_failed`, `cancelled`.
+- Início (`request_started` / `Session.interaction_started`), emitido **antes** do primeiro passo (portanto antes
+  de qualquer ação terminar): `{id, request_id, kind, route, status: &"started", target, path, plan, text, source,
+  expected_status, estimate, deadline, restart}`. `id`, `request_id` e `source` são os mesmos do relatório final
+  (num plano reiniciado por interrupção, o `request_id` do último `started` é o do resultado; `id` nunca muda).
+
+### Protocolo de ações correlacionadas (Loop 5 R2, `docs/contracts/loop-05-round2.md`)
+
+- Cada pedido recebe `request_id` (int > 0, contador estático do processo: nunca se repete, nem após recomposição).
+  Cada passo despachado leva `args.request_id` e `args.step` (índice no plano) — chaves reservadas
+  (`ActionVocabulary.CORRELATION_ARGS`), recusadas pela validação (um provider não as forja).
+- O roteador escuta `executor.action_event(request_id, action, phase, info)` e aceita **só** eventos do pedido
+  ativo e do passo em curso (`info.step`; sem `step`, o nome da ação precisa casar). Eventos com `request_id` 0
+  (ações da própria MIKU: roteiro `living.hands`, agenda), de outro pedido/passo ou atrasados são ignorados
+  (`ignored_events`). Fases: `accepted`, `started` (marca `latency`), `progress`, e um terminal: `finished`
+  (próximo passo; commit se for o `EDIT_FILE`), `failed` (`info.reason`), `cancelled` não pedido pelo roteador
+  (= falha).
+- Timeout por passo = `executor.estimate_duration(action, args) × 2 + 3 s` (`TIMEOUT_FACTOR`, `TIMEOUT_MARGIN`),
+  medido no relógio do roteador — `LivingInteraction` alimenta `tick(dt)` com `MotionClock` (o relógio de MIKU),
+  no máximo 0,5 s por quadro. Passo vencido: `executor.cancel(request_id)` no corpo, falha registrada com motivo
+  (`timeout after Xs (estimate Ys)`, `push_warning`).
+- Falha (`failed`, `cancelled` alheio, timeout): o plano **segue**, exceto `GRAB_FILE`/`EDIT_FILE` de um plano de
+  configuração antes do commit — aí nada é aplicado e o resto vira ACKNOWLEDGE(decline), DISCARD(not applied),
+  WORK(resume) com status `commit_failed` e o motivo. Um `perform` recusado pelo corpo (`false`) falha na hora.
+- Fila: 1 plano em execução + FIFO (máx. `MAX_QUEUE` = 4 esperando; o mais antigo esperando é descartado como
+  `cancelled`). **Interrupção por ATENÇÃO** (`should_interrupt()`): um novo pedido de atenção interrompe o plano em
+  curso se ele não for de atenção, se não estiver na seção do arquivo (de `GRAB_FILE` até o commit no
+  `EDIT_FILE`: o arquivo está nas mãos dela) e se a fração do plano que falta for maior que
+  `1 − behaviour.interruption_tolerance` (0 = nunca; 0,5 = só se falta mais da metade; 1 = sempre). O plano
+  interrompido é cancelado no corpo (`executor.cancel`) e volta à fila logo depois da atenção com **novo**
+  `request_id`, recomeçando do primeiro passo (nada foi aplicado); se a mudança já tinha sido aplicada, o pedido
+  termina ali (`interrupted`, nota). Sem interrupção a atenção espera na fila FIFO (a percepção `notice_user()` já
+  aconteceu na hora).
+- `cancel()` (reset/recomposição: `LivingInteraction._exit_tree`) cancela o plano em curso no corpo e descarta a
+  fila (`cancelled`); eventos atrasados são ignorados. Trocar de executor no meio de um passo = falha
+  ("executor replaced") e o plano segue no novo. Nada espera evento externo sem timeout; `perform` nunca bloqueia.
+- Compatibilidade (**legado**): se o nó `Miku` não tiver `action_event`, o `MikuNodeExecutor` emite
+  `accepted`/`started` ele mesmo e converte o `action_finished(action)` não correlacionado em `finished` do passo
+  pendente quando o nome casa (o comportamento antigo, sujeito a consumir ações da própria MIKU) — só para um
+  corpo antigo continuar rodando. Sem `estimate_duration`, valem as durações nominais
+  `ActionVocabulary.NOMINAL_SECONDS`.
 
 ### Contrato da porta de provider
 
@@ -171,8 +211,14 @@ roteador acrescenta a sequência padrão de edição (a mudança sempre é mostr
 
 O `LivingInteraction` procura o irmão chamado `Miku` (ou o primeiro nó do grupo `living_miku`) com `perform()`.
 
-- Obrigatório: `perform(action: StringName, args := {})`, sinal `action_finished(action: StringName)` (um por
-  `perform`, com o mesmo nome — o roteador espera por ele), `notice_user()`, `target_world(id: StringName)`.
+- Obrigatório (protocolo R2): `perform(action: StringName, args := {}) -> bool` (args com `request_id`, `step`),
+  sinal `action_event(request_id: int, action: StringName, phase: StringName, info: Dictionary)` — `accepted`,
+  `started`, `progress` (opcional, `info.t`), exatamente um terminal `finished|failed|cancelled` por `perform`
+  aceito, `info.step` = `args.step`; ações da própria MIKU com `request_id = 0` —,
+  `estimate_duration(action: StringName, args: Dictionary) -> float` (segundos reais, honesto),
+  `cancel(request_id: int)` (termina as ações daquele pedido com `cancelled` e limpa mãos/fios/artefatos dele),
+  `notice_user()`, `target_world(id: StringName)`. `action_finished(action)` pode continuar existindo, mas o
+  roteador não o usa (só no caminho legado, se faltar `action_event`).
 - Opcional (chamado se existir): `apply_config(values: Dictionary)` na ligação (configuração inteira, seções →
   chave → float) e `on_config_changed(path: String, old_value, new_value)` depois de cada mudança real.
 - Ao ser recomposto (reset), o nó novo é ligado de novo; o antigo deixa de ser chamado (referência fraca).
@@ -188,13 +234,18 @@ O `LivingInteraction` procura o irmão chamado `Miku` (ou o primeiro nó do grup
   `Session.call_line_changed(open)`, envia com `Session.submit_call(text)` (fecha a linha e emite
   `call_submitted`) e fecha com `Session.close_call_line()`. Enter (`call_line`, só no `living`) chama
   `Session.open_call_line()`; `Session.CALL_MAX_CHARS` = 200.
-- Retorno diegético: `Session.interaction_reported(report)` (campos acima). Artefato de arquivo, mão segurando e
+- Reconhecimento imediato: `Session.interaction_started(report)` assim que o plano começa (antes de qualquer
+  ação terminar), com `status: &"started"`, `kind`, `route`, `target`, `path`, `plan`, `source`, `id`,
+  `request_id` — mostrar na hora "→ <assunto>" (recognized) para `source == "text"`.
+- Retorno diegético: `Session.interaction_reported(report)` (campos acima) no fim — o resultado; casar com o
+  `started` pelo `id`. Artefato de arquivo, mão segurando e
   mão editando são do corpo (animator) a partir de GRAB_FILE / EDIT_FILE / DISCARD.
 - Nada de painel/menu de configuração: a única via é falar com MIKU.
 
 ## Automação
 
-- `tools/smoke_test.sh --scenario=living`: roteiro inteiro a 8×, nove pedidos reais (2 cliques, 7 textos),
+- `tools/smoke_test.sh --scenario=living`: roteiro inteiro a 8×, nove pedidos reais (2 cliques, 7 textos)
+  esperados um a um pelo `id` com orçamento derivado das estimativas (`docs/BUILD.md`),
   `config_mutated=true`/`config_reverted=true`, seek recusado, reset recompõe. Até o animator entregar os
   módulos, use `SMOKE_ALLOW_MISSING_MODULES=1` (só nesse caso).
 - `tools/capture_evidence.sh <dir> --scenario=living`: joga em tempo real e injeta os cues como entrada real.
@@ -203,5 +254,9 @@ O `LivingInteraction` procura o irmão chamado `Miku` (ou o primeiro nó do grup
 ## Testes
 
 `tests/unit/test_agent_vocabulary.gd`, `test_agent_parser.gd`, `test_agent_config.gd` (store num diretório
-temporário de `user://`), `test_agent_router.gd` (executor nulo, executor de nó, provider de teste que passa
-pela mesma validação, porta indisponível), `tests/integration/test_living_scenario.gd`.
+temporário de `user://`), `test_agent_router.gd` (executor nulo, executor de nó legado e correlacionado, provider
+de teste que passa pela mesma validação, porta indisponível; correlação — outro request/step e `request_id` 0
+ignorados —, timeout por passo derivado da estimativa, falha crítica de `GRAB_FILE`/`EDIT_FILE`, fila FIFO,
+interrupção por tolerância, seção do arquivo, cancelamento/reset, troca de executor, `interaction_started` antes
+de qualquer `finished`), `tests/integration/test_living_scenario.gd` (`Session.interaction_started` antes do
+resultado com os mesmos `id`/`request_id`/`source`; reset cancela no corpo; orçamento derivado do smoke).
