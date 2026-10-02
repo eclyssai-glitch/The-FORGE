@@ -1,0 +1,11 @@
+[r2] start body=native view=torso seconds=42.0
+[r2] cue 6.0 living.work_order mood=focused
+[r2] cue 7.0 living.work_step mood=focused
+[r2] cue 15.0 living.work_failed mood=focused
+[r2] cue 16.0 mood mood=frustrated
+[r2] cue 22.0 living.work_failed mood=frustrated
+[r2] cue 26.0 living.work_dismantled mood=angry
+[r2] cue 31.0 living.work_recovered mood=angry
+[r2] moods calm@0.00 focused@6.03 frustrated@16.03 angry@22.00 recovering@31.00 focused@36.57
+[r2] cpu body=native tick_us mean 2226.4 p95 3398 | body(tree+motor)_us mean 481.4 p95 636 | tree_us mean 194.2 | hands 6
+[r2] done frames=1260

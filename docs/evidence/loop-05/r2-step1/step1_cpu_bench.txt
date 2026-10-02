@@ -1,0 +1,8 @@
+R2BENCH legacy hands=0 body_us=137.8 tree_us=0.0 motor_us=137.8 tick_us=497.5
+R2BENCH native hands=0 body_us=181.9 tree_us=44.9 motor_us=136.4 tick_us=557.0
+R2BENCH legacy hands=1 body_us=151.8 tree_us=0.0 motor_us=151.8 tick_us=618.6
+R2BENCH native hands=1 body_us=186.4 tree_us=44.4 motor_us=142.0 tick_us=625.7
+R2BENCH legacy hands=2 body_us=155.6 tree_us=0.0 motor_us=155.6 tick_us=682.7
+R2BENCH native hands=2 body_us=184.7 tree_us=45.9 motor_us=140.0 tick_us=676.5
+R2BENCH legacy hands=6 body_us=155.5 tree_us=0.0 motor_us=155.5 tick_us=855.4
+R2BENCH native hands=6 body_us=185.5 tree_us=48.7 motor_us=136.9 tick_us=867.9

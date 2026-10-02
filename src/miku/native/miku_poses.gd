@@ -104,7 +104,7 @@ func bone_name(key: String) -> String:
 	return skeleton.get_bone_name(map.bone(key))
 
 
-## Model-axis rotation per torso bone for posture values `v` (AXES order), breath `breath` (-1..1
+## Model-axis rotation per torso bone for posture values `v` (AXES order), breath `breath` (0..1, the curve
 ## at depth 1) and hip roll `roll` (rad) — MikuMotor._compose without gaze, turn and arms.
 static func model_rotations(v: Array, breath := 0.0, roll := 0.0) -> Dictionary:
 	var lean := float(v[0])

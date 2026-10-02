@@ -586,6 +586,85 @@ dos ossos), `LimbIK`, `FingerSet`, `ArmChannel`, `RigBones`, e o manequim de des
 Rig real (`MikuRig.build(material)`): o animator escreve só rotações; aparência por
 `MikuRig.apply_appearance` (rests) + `PoseRig.refresh_rest`; halo (torus) e brilho (`glow`) são daqui.
 
+### Migração nativa (rodada 2) — seleção de backend e STEP 1 (AnimationTree do tronco)
+
+Pesquisa: `docs/research/native-character-runtime.md`. Cada passo é comparado lado a lado (mesma sequência,
+mesma câmera) e só substitui quando NEW ≥ OLD. Nada da rodada 1 foi apagado (`PoseRig`, `LimbIK`,
+`ArmChannel`, `FingerSet` continuam e servem o backend `legacy` e as camadas ainda não migradas).
+
+**Seleção** (`MikuBody`): por camada — `torso` (STEP 1), `gaze` (2), `arms` (3), `secondary` (4); camada sem
+implementação nativa roda `legacy`. Linha de comando (user args): `--body=legacy|native` e
+`--body-<camada>=legacy|native`; testes: `MikuBody.override_backend`. Padrão: `MikuBody.DEFAULT_BACKEND`.
+`inspect_state().body` = `{backend, layers, tree_us, motor_us, tree: {state, fading_from, fade, tension,
+weight, breath_amount, axes, travels, gestures, tree_us}}`.
+
+**STEP 1 — `MikuDirector` + `MikuPoses`** (`src/miku/native/`). O diretor escreve **só parâmetros** da
+`AnimationTree` (modo `MANUAL`, `advance(dt)` com o dt do `MotionClock`, dentro de `MikuBody.step`, antes do
+motor) — nunca um osso. Poses-chave geradas em código: `rest · delta`, **só trilhas de rotação** (nenhuma de
+posição/escala: a aparência vive nos rests), com os números da rodada 1 (`MikuPoses.model_rotations` =
+`MikuMotor._compose` sem olhar/braços) convertidos para os eixos locais de cada osso pela fórmula do
+`PoseRig.write` — vale para o `MikuRig` e para o manequim. Ossos do tronco: hips, spine, chest, neck, head,
+clavicle.L/R.
+
+```
+mood (StateMachine)  calm | focused | frustrated | angry | recovering ; cada estado = BlendTree
+                     [laço a↔b da vida própria do humor → TimeScale `tempo` = MikuMind.tempo()]
+                     Start → calm AUTO ; 20 arestas com xfade e curva suave (XFADE, abaixo)
+  └ composure (Add2, sync) ← tension (BlendSpace1D 0 poise .. 1 locked; posição = rigidity)
+    └ ax_lean … ax_nod (7 × Add2, sync) ← axis_<eixo> ; amount = mola de postura da rodada 1
+      └ weight_add (Add2) ← weight (BlendSpace1D −1 direita .. 0 .. 1 esquerda; rolagem do quadril)
+        └ breath_add (Add2, amount = profundidade × lerp(1, 0,35, rigidez)) ← breath_rate (TimeScale Hz) ← breath
+          └ flinch_add (Add2) ← flinch (OneShot, filtro tronco; neutro | flinch)
+            └ exhale_add (Add2) ← exhale (OneShot, filtro tronco; neutro | exhale) → output
+```
+
+- Tempos emocionais (`MikuDirector.XFADE`): perder a compostura (→ FRUSTRATED/ANGRY) **0,25 s**; recuperar
+  (FRUSTRATED/ANGRY → RECOVERING/CALM) **1,4–1,6 s**; calma↔foco 0,9/1,2 s; ANGRY → FRUSTRATED 0,8 s. O xfade é
+  em segundos reais (o `TimeScale` do humor fica dentro de cada estado: o ritmo da mente acelera a vida do
+  humor, não a troca). Medido na sequência de comparação (traço por quadro, `r2_analyze.py`): ombro a 90 % da
+  mudança em 0,17 s na perda (legado 0,47 s), 0,70 s na recuperação (legado 0,27 s — o legado "recuperava"
+  quase tão rápido quanto perdia, contra o contrato).
+- Grau contínuo dentro do modo discreto: `tension` responde na hora à rigidez da mente, inclusive enquanto a
+  máquina ainda termina um xfade. **4.7.2:** `travel()` pedido durante um xfade espera esse xfade terminar
+  (sonda: a→b em curso, `travel(c)` aos 0,5 s → c só começa em 1,0 s; sem estalo) — por isso a tensão é a
+  camada que garante a resposta imediata.
+- Gestos `OneShot` em ramos aditivos (entrada 0 = pose neutra): `flinch` (0,85 s; antecipação = inspiração
+  curta aos 0,07 s, recuo aos 0,2 s, assenta) quando a compostura **quebra** (de CALM/FOCUSED/RECOVERING para
+  FRUSTRATED/ANGRY); frustração que endurece em raiva **não** recua — ela fica imóvel; `exhale` (2,6 s:
+  inspira, solta longo, assenta) ao entrar em RECOVERING.
+- Postura das ações/micro-comportamentos: `offset = postura pedida − MOOD_POSTURE[humor]` por eixo, pela mola
+  de postura da rodada 1 (`POSTURE_CALM`..`POSTURE_STIFF` × tempo) → `ax_<eixo>/add_amount`. Peso: mola
+  `WEIGHT` → `weight/blend_position`. Respiração: mola de profundidade → `breath_add`; frequência → `breath_rate`.
+- **Armadilha nova (achada na 1ª tomada OLD vs NEW):** `AnimationNodeAdd2.add_amount` começa em **0** — ramos
+  aditivos de peso cheio (`composure`, `weight_add`, `flinch_add`, `exhale_add`) ficam mudos até serem abertos
+  (`MikuDirector.FULL_ADDS` = 1). Teste `test_every_layer_moves_the_bones`.
+- Híbrido durante a migração: o motor da rodada 1 (`torso_native`) lê a pose que a árvore deixou no tronco
+  (`PoseRig.rel_from_skeleton`) e só soma a cadeia de olhar (STEP 2), mais giro/flutuação da raiz, braços,
+  dedos e saia (STEPs 3–5). A raiz (giro, flutuação, deriva do quadril) continua transform por mola.
+- **Resultado OLD vs NEW (STEP 1)** — evidência em `docs/evidence/loop-05/r2-step1/`
+  (`step1_torso_side_by_side.mp4`, `step1_full_side_by_side.mp4`, folhas `*_contact.jpg`, recortes da perda e
+  da recuperação, `step1_trace_analysis.txt` + `step1_trace_curves.jpg`, `step1_cpu_bench.txt`, dumps do
+  inspetor `inspect_legacy|native/`, `run_*.txt`; `take1_bug/` = 1ª tomada com os ramos mudos). Mesma
+  sequência de humores nos dois (calm 0 → focused 6,03 → frustrated 16,03 → angry 22,0 → recovering 31,0 →
+  focused 36,57 s). Paridade da postura (RMS por osso ao longo dos 42 s): quadril 0,22°, coluna 0,54°, peito
+  0,74°, pescoço 0,50°, cabeça 1,61°, clavícula 1,46° (as diferenças são as novas camadas: tensão,
+  flinch/exhale, vida do humor). Maior passo por quadro igual ao legado (cabeça 3,7°, do olhar; tronco
+  ≤ 1,4°): nenhum estalo. Vida em calma igual (peito 7,7° vs 7,1° pico a pico). Leitura visual: a perda da
+  compostura aparece antes e mais clara (aos 16,07 s os ombros já subiram e a cabeça caiu; no legado ainda não),
+  a raiva entra sem recuo, a recuperação inspira antes de soltar e solta devagar.
+- CPU (headless, mediana de 5 × 450 quadros intercalados, `r2_bench.tscn`): árvore 44–49 µs; motor 136–142 µs
+  (legado 138–156: a postura saiu dele); corpo da MIKU 182–186 µs vs 138–156 µs (+30–44 µs, o custo da árvore
+  durante o híbrido — sai quando os passos 2–5 tirarem o FK/olhar/IK manuais); tick inteiro com 0/1/2/6 mãos
+  557/626/677/868 µs vs 498/619/683/855 µs (no ruído); custo por mão inalterado (~52 vs ~60 µs). Nesta
+  máquina o legado mede 0,14 ms de corpo (o baseline de 0,09 ms foi medido noutra carga).
+- Veredito: NEW ≥ OLD (tempos do contrato cumpridos, paridade de postura, nenhum estalo, mais expressão no
+  momento certo) → `DEFAULT_BACKEND = native` para o tronco; `--body=legacy` mantém o corpo da rodada 1.
+- Comparação: `tools/research/native_character/r2_compare.tscn` (mesma sequência pelos eventos `living.*` do
+  roteiro: calma 0 s → foco 6 s → mãos/matéria 7 s → fissura 15 s → frustração 16 s → colapso/raiva 22 s →
+  desmonte 26 s → recuperação 31 s → 42 s; câmera fixa; `--trace=csv`, `--inspect`), `r2_record.sh` (Movie Maker
+  30 fps, lado a lado, folhas de contato), `r2_analyze.py` (tempos de resposta, picos, vida, paridade),
+  `r2_bench.gd` (CPU). Evidência: `docs/evidence/loop-05/r2-step1/`.
+
 ### Mãos, fios, mundo, partículas
 
 - `PuppetHand` (`HandRig.build(side, material)` ou `HandMannequin` de dev), reescalada para `HAND_LENGTH`
@@ -619,6 +698,13 @@ ignorado com `Session.call_line_open`.
 
 ### Testes
 
+`tests/unit/test_animation_living_protocol.gd` (rodada 2: fases por request/step, um terminal, estimativas
+honestas inclusive dos planos de configuração conduzidos como o roteador — reentrante —, `cancel`/`cancel_all`
+e o que dissolvem, olhar imediato ≤ 0,3 s, linhas do tempo causais em ordem),
+`tests/unit/test_animation_living_native.gd` (STEP 1: seleção de backend, configuração da árvore — manual,
+Start AUTO, xfades, Add2 sync, OneShot filtrado —, só trilhas de rotação, aparência intacta, estados seguem a
+mente, sem estalo num arco emocional, tensão imediata no meio de um xfade, paridade com a rodada 1, cada camada
+mexe os ossos, respiração, determinismo, contrato do runtime no nativo),
 `tests/unit/test_animation_living_mind.gd` (humores, compostura, reações ao usuário, parâmetros, agenda
 determinística/sem loop/ligada ao trabalho), `…_living_motion.gd` (molas, peso das mãos, ciclo do fio,
 poses, IK), `…_living_world.gd` (etapas só por trabalho, falha, reparo, desmonte com piso, ordem causal dos

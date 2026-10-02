@@ -1,0 +1,37 @@
+mood changes (t from->to): response to 90 %% of change [s] (delta deg), legacy | native
+  6.03 calm       -> focused    | clavicle.L.z: 1.40 (+2.3) | 1.40 (+2.5) | chest.x: 0.60 (+9.4) | 0.63 (+9.8) | head.x: 1.33 (+6.9) | 1.27 (+7.8)
+ 16.03 focused    -> frustrated | clavicle.L.z: 0.47 (+5.6) | 0.17 (+6.3) | chest.x: 0.27 (-2.2) | 0.20 (-2.0) | head.x: 0.63 (-4.5) | 0.20 (-4.9)
+ 22.00 frustrated -> angry      | clavicle.L.z: 0.40 (+1.8) | 0.47 (+2.4) | chest.x: 0.37 (-4.5) | 0.23 (-4.2) | head.x: 0.27 (+4.7) | 0.30 (+5.9)
+ 31.00 angry      -> recovering | clavicle.L.z: 0.27 (-9.4) | 0.70 (-10.8) | chest.x: 0.67 (-9.8) | 0.57 (-11.1) | head.x: 0.20 (-1.9) | 0.23 (-3.0)
+ 36.57 recovering -> focused    | clavicle.L.z: 0.97 (+3.2) | 1.00 (+3.2) | chest.x:  -   (-0.2) | 1.10 (+0.9) | head.x: 0.07 (-1.3) |  -   (-0.3)
+
+peak angular speed [deg/s] / peak angular acceleration [deg/s^2] in the 1.5 s after each change, legacy | native
+  6.03 -> focused    | chest  18.7/   343 vs  21.0/   315 | neck  24.8/   377 vs  22.0/   345 | head  16.7/   341 vs  16.1/   368 | clavicle.L  13.5/   405 vs  14.0/   327
+ 16.03 -> frustrated | chest  15.3/   378 vs  30.7/   791 | neck  13.7/   409 vs  21.1/   510 | head  24.9/   304 vs  41.2/   865 | clavicle.L  20.7/   400 vs  62.4/   712
+ 22.00 -> angry      | chest  22.2/   368 vs  26.8/   544 | neck  16.0/   390 vs  22.0/   351 | head  40.8/   735 vs  46.9/   527 | clavicle.L  23.3/   342 vs  22.4/   451
+ 31.00 -> recovering | chest  19.6/   375 vs  24.1/   394 | neck  15.6/   354 vs  18.7/   452 | head  48.5/  1106 vs  48.4/  1154 | clavicle.L  53.7/   918 vs  39.8/   629
+ 36.57 -> focused    | chest  13.6/   383 vs  14.2/   392 | neck  26.5/   318 vs  23.8/   319 | head  65.7/   899 vs  66.5/   847 | clavicle.L  16.6/   353 vs  14.1/   355
+
+largest per-frame step over the whole take [deg], legacy | native
+  hips        0.51 | 0.51
+  spine       0.82 | 0.83
+  chest       1.20 | 1.37
+  neck        1.19 | 1.19
+  head        3.73 | 3.70
+  clavicle.L  1.79 | 2.08
+
+life in calm (0.5-6 s): peak-to-peak [deg], legacy | native
+  chest.x       7.09 | 7.70
+  head.x        27.87 | 28.27
+  head.z        3.31 | 3.93
+  clavicle.L.z  2.00 | 1.80
+  spine.z       0.00 | 0.33
+  hips.z        0.00 | 0.00
+
+parity: RMS difference legacy-native over the take [deg] (per bone quaternion angle)
+  hips        rms 0.22  max 0.51
+  spine       rms 0.53  max 1.79
+  chest       rms 0.74  max 2.55
+  neck        rms 0.50  max 1.73
+  head        rms 1.60  max 6.72
+  clavicle.L  rms 1.41  max 7.29

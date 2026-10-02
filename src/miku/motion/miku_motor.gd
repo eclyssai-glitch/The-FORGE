@@ -290,17 +290,20 @@ func _step_breath(dt: float, k: float) -> void:
 
 
 func _step_posture(dt: float, k: float) -> void:
-	var pc := POSTURE_CALM.lerp(POSTURE_STIFF, k)
-	var f := pc.x * tempo
-	for s in _posture:
-		s.set_params(f, pc.y, pc.z)
-	_lean.step(lean, dt)
-	_lean_side.step(lean_side, dt)
-	_chest_lift.step(chest_lift, dt)
-	_sh_raise.step(shoulder_raise, dt)
-	_sh_fwd.step(shoulder_fwd, dt)
-	_tilt.step(head_tilt, dt)
-	_nod.step(head_nod, dt)
+	# Native torso: the director owns the posture springs (MikuDirector); only turn and hip drift
+	# stay here.
+	if not torso_native:
+		var pc := POSTURE_CALM.lerp(POSTURE_STIFF, k)
+		var f := pc.x * tempo
+		for s in _posture:
+			s.set_params(f, pc.y, pc.z)
+		_lean.step(lean, dt)
+		_lean_side.step(lean_side, dt)
+		_chest_lift.step(chest_lift, dt)
+		_sh_raise.step(shoulder_raise, dt)
+		_sh_fwd.step(shoulder_fwd, dt)
+		_tilt.step(head_tilt, dt)
+		_nod.step(head_nod, dt)
 	var t := TURN.lerp(TURN_STIFF, k)
 	_turn.set_params(t.x * sqrt(tempo), t.y, t.z)
 	_turn.step(body_turn, dt)

@@ -36,7 +36,7 @@ const NATIVE_LAYERS: Array[StringName] = [&"torso"]
 const LEGACY := &"legacy"
 const NATIVE := &"native"
 ## Backend when nothing is asked (the result of the STEP 1 comparison, docs/ANIMATION.md).
-const DEFAULT_BACKEND := &"legacy"
+const DEFAULT_BACKEND := &"native"
 
 ## Tests / tools: when not empty, the backend of every layer (before any command-line choice).
 static var override_backend: StringName = &""
